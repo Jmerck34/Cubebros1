@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThreeJS Mario Platformer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #5c94fc; /* Mario sky blue */
+        }
+
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Ability UI */
+        #ability-ui {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            font-family: 'Arial', sans-serif;
+            z-index: 100;
+        }
+
+        .ability-slot {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 3px solid #444;
+            border-radius: 8px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px black;
+        }
+
+        .ability-slot.ready {
+            border-color: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .ability-slot.ultimate {
+            width: 80px;
+            height: 80px;
+            border-color: #ff9900;
+        }
+
+        .ability-slot.ultimate.ready {
+            border-color: #ffdd00;
+            box-shadow: 0 0 15px #ffdd00;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .cooldown-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            transition: height 0.1s linear;
+            border-radius: 0 0 5px 5px;
+        }
+
+        .cooldown-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #ff6666;
+            font-weight: bold;
+        }
+
+        .ability-name {
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .ultimate-charge {
+            position: absolute;
+            top: -5px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .ultimate-charge-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff9900, #ffdd00);
+            transition: width 0.2s ease;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Ability UI -->
+    <div id="ability-ui">
+        <div class="ability-slot" id="ability-q">
+            <div class="cooldown-overlay" id="cooldown-q"></div>
+            <div class="cooldown-text" id="cooldown-text-q"></div>
+            <span>Q</span>
+            <div class="ability-name">Slash</div>
+        </div>
+        <div class="ability-slot" id="ability-w">
+            <div class="cooldown-overlay" id="cooldown-w"></div>
+            <div class="cooldown-text" id="cooldown-text-w"></div>
+            <span>W</span>
+            <div class="ability-name">Bash</div>
+        </div>
+        <div class="ability-slot" id="ability-e">
+            <div class="cooldown-overlay" id="cooldown-e"></div>
+            <div class="cooldown-text" id="cooldown-text-e"></div>
+            <span>E</span>
+            <div class="ability-name">Dash</div>
+        </div>
+        <div class="ability-slot ultimate" id="ability-r">
+            <div class="ultimate-charge">
+                <div class="ultimate-charge-fill" id="ultimate-charge-bar"></div>
+            </div>
+            <div class="cooldown-overlay" id="cooldown-r"></div>
+            <div class="cooldown-text" id="cooldown-text-r"></div>
+            <span>R</span>
+            <div class="ability-name">Ultimate</div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
