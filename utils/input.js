@@ -5,8 +5,9 @@
 export class InputManager {
     constructor() {
         this.keys = {};
+        this.mouseButtons = {};
 
-        // Setup event listeners
+        // Setup keyboard event listeners
         window.addEventListener('keydown', (event) => {
             this.keys[event.code] = true;
 
@@ -18,6 +19,21 @@ export class InputManager {
 
         window.addEventListener('keyup', (event) => {
             this.keys[event.code] = false;
+        });
+
+        // Setup mouse event listeners
+        window.addEventListener('mousedown', (event) => {
+            this.mouseButtons[event.button] = true;
+            event.preventDefault(); // Prevent context menu on right-click
+        });
+
+        window.addEventListener('mouseup', (event) => {
+            this.mouseButtons[event.button] = false;
+        });
+
+        // Prevent context menu
+        window.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
         });
     }
 
@@ -51,23 +67,39 @@ export class InputManager {
      * @returns {boolean}
      */
     isJumpPressed() {
-        return this.isKeyDown('Space');
+        return this.isKeyDown('Space') || this.isKeyDown('KeyW');
     }
 
     /**
-     * Check if ability 1 key is pressed (Q)
+     * Check if left mouse button is pressed
+     * @returns {boolean}
+     */
+    isLeftClickPressed() {
+        return this.mouseButtons[0] || false; // 0 = left mouse button
+    }
+
+    /**
+     * Check if right mouse button is pressed
+     * @returns {boolean}
+     */
+    isRightClickPressed() {
+        return this.mouseButtons[2] || false; // 2 = right mouse button
+    }
+
+    /**
+     * Check if ability 1 key is pressed (Left Click or Q)
      * @returns {boolean}
      */
     isAbility1Pressed() {
-        return this.isKeyDown('KeyQ');
+        return this.isLeftClickPressed() || this.isKeyDown('KeyQ');
     }
 
     /**
-     * Check if ability 2 key is pressed (W)
+     * Check if ability 2 key is pressed (Right Click)
      * @returns {boolean}
      */
     isAbility2Pressed() {
-        return this.isKeyDown('KeyW');
+        return this.isRightClickPressed();
     }
 
     /**

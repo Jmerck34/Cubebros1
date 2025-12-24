@@ -6,7 +6,11 @@ import { GameLoop } from './core/gameLoop.js';
 import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
 import { Warrior } from './player/Warrior.js';
+import { Assassin } from './player/Assassin.js';
+import { Wizard } from './player/Wizard.js';
+import { Warlock } from './player/Warlock.js';
 import { Level } from './world/Level.js';
+import { Environment } from './world/Environment.js';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
 
@@ -39,6 +43,10 @@ renderer.setPixelRatio(window.devicePixelRatio);
 // Initialize input manager
 const input = new InputManager();
 
+// Create environment (background, clouds, particles)
+const environment = new Environment(scene);
+environment.createBackground();
+
 // Create level with platforms
 const level = new Level(scene);
 level.createTestLevel(); // Adds ground + floating platforms
@@ -53,8 +61,26 @@ level.addEnemy(goomba2);
 const goomba3 = new Goomba(scene, 12, 3);
 level.addEnemy(goomba3);
 
-// Create warrior hero
+const goomba4 = new Goomba(scene, -12, 0);
+level.addEnemy(goomba4);
+
+const goomba5 = new Goomba(scene, 15, 0);
+level.addEnemy(goomba5);
+
+// CREATE YOUR HERO HERE - Choose one:
+// Uncomment the hero you want to play:
+
+// Option 1: Warrior (Sword & Shield)
 const player = new Warrior(scene, 0, 0);
+
+// Option 2: Assassin (Dual Daggers)
+// const player = new Assassin(scene, 0, 0);
+
+// Option 3: Wizard (Magic Book)
+// const player = new Wizard(scene, 0, 0);
+
+// Option 4: Warlock (Dark Staff)
+// const player = new Warlock(scene, 0, 0);
 
 // Connect player to enemy list for ability damage detection
 player.enemies = level.enemies;
@@ -96,6 +122,9 @@ const gameLoop = new GameLoop(
 
         // Update UI
         uiManager.update();
+
+        // Update environment animations
+        environment.update(deltaTime);
     },
     // Render callback
     () => {
@@ -106,7 +135,21 @@ const gameLoop = new GameLoop(
 // Start the game loop
 gameLoop.start();
 
-console.log('⚔️ WARRIOR HERO READY! ⚔️');
+console.log('🎮 HERO SELECTION READY! 🎮');
 console.log('Move: Arrow Keys/A/D | Jump: Space (double jump!)');
-console.log('Abilities: Left Click/Q = Sword Slash | W = Shield Bash | E = Dash | R = Whirlwind Ultimate');
+console.log('');
+console.log('📋 HERO ABILITIES:');
+console.log('');
+console.log('⚔️ WARRIOR:');
+console.log('  Q/Click = Sword Slash | W = Shield Bash | E = Dash | R = Whirlwind');
+console.log('');
+console.log('🗡️ ASSASSIN:');
+console.log('  Q/Click = Dagger Combo (bleed) | W = Poison Bomb | E = Shadow Walk | R = Assassinate');
+console.log('');
+console.log('🔮 WIZARD:');
+console.log('  Q/Click = Fireball | W = Wind Push | E = Bubble Shield | R = Kame Hame Ha');
+console.log('');
+console.log('💀 WARLOCK:');
+console.log('  Q/Click = Lightning Strike | W = Fear | E = Hover | R = Mind Control');
+console.log('');
 console.log('Kill enemies to charge ultimate!');

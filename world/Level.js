@@ -18,24 +18,101 @@ export class Level {
      * @param {number} y - Center Y position
      * @param {number} width - Platform width
      * @param {number} height - Platform height
+     * @param {string} type - Platform type ('ground', 'grass', 'stone')
      * @returns {Object} Platform object
      */
-    addPlatform(x, y, width, height) {
-        const geometry = new THREE.BoxGeometry(width, height, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00AA00 }); // Green platforms
-        const mesh = new THREE.Mesh(geometry, material);
+    addPlatform(x, y, width, height, type = 'grass') {
+        const platformGroup = new THREE.Group();
 
-        mesh.position.set(x, y, 0);
-        this.scene.add(mesh);
+        // Main platform body
+        const bodyGeometry = new THREE.BoxGeometry(width, height, 0.8);
+        let bodyColor, topColor, sideColor;
+
+        switch(type) {
+            case 'ground':
+                bodyColor = 0x8B4513;  // Brown dirt
+                topColor = 0x228B22;   // Forest green grass
+                sideColor = 0x654321;  // Dark brown
+                break;
+            case 'stone':
+                bodyColor = 0x808080;  // Gray stone
+                topColor = 0x696969;   // Darker gray
+                sideColor = 0x505050;  // Very dark gray
+                break;
+            case 'grass':
+            default:
+                bodyColor = 0x8B4513;  // Brown
+                topColor = 0x32CD32;   // Lime green
+                sideColor = 0x654321;  // Dark brown
+        }
+
+        const bodyMaterial = new THREE.MeshBasicMaterial({ color: bodyColor });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        platformGroup.add(body);
+
+        // Top layer (grass/stone surface)
+        const topGeometry = new THREE.BoxGeometry(width, height * 0.15, 0.85);
+        const topMaterial = new THREE.MeshBasicMaterial({ color: topColor });
+        const top = new THREE.Mesh(topGeometry, topMaterial);
+        top.position.y = height * 0.425;
+        platformGroup.add(top);
+
+        // Side highlights for depth
+        const sideGeometry = new THREE.BoxGeometry(width * 0.98, height * 0.1, 0.75);
+        const sideMaterial = new THREE.MeshBasicMaterial({ color: sideColor });
+        const side = new THREE.Mesh(sideGeometry, sideMaterial);
+        side.position.y = -height * 0.4;
+        platformGroup.add(side);
+
+        // Add detail patterns for grass platforms
+        if (type === 'grass' || type === 'ground') {
+            // Add grass tufts on top
+            const numTufts = Math.floor(width * 2);
+            for (let i = 0; i < numTufts; i++) {
+                const tuftGeometry = new THREE.BoxGeometry(0.08, 0.15, 0.05);
+                const tuftMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x228B22,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+                tuft.position.set(
+                    -width/2 + (i * width/numTufts) + Math.random() * 0.2,
+                    height * 0.5 + 0.1,
+                    Math.random() * 0.2 - 0.1
+                );
+                platformGroup.add(tuft);
+            }
+        }
+
+        // Add texture detail lines for stone platforms
+        if (type === 'stone') {
+            const numLines = Math.floor(width);
+            for (let i = 0; i < numLines; i++) {
+                const lineGeometry = new THREE.BoxGeometry(width * 0.9, 0.03, 0.82);
+                const lineMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x505050,
+                    transparent: true,
+                    opacity: 0.3
+                });
+                const line = new THREE.Mesh(lineGeometry, lineMaterial);
+                line.position.y = -height/2 + (i * height/numLines);
+                platformGroup.add(line);
+            }
+        }
+
+        platformGroup.position.set(x, y, 0);
+        this.scene.add(platformGroup);
 
         const platform = {
-            mesh,
+            mesh: platformGroup,
             bounds: {
                 left: x - width / 2,
                 right: x + width / 2,
                 top: y + height / 2,
                 bottom: y - height / 2
-            }
+            },
+            type: type
         };
 
         this.platforms.push(platform);
@@ -49,9 +126,73 @@ export class Level {
     checkCollisions(player) {
         const playerBounds = player.getBounds();
         const playerVelocity = player.velocity;
+        let onLadder = false;
+        let onWall = false;
 
+        // First pass: Check wall collisions (higher priority)
+        for (const platform of this.platforms) {
+            if (platform.type === 'wall' && checkAABBCollision(playerBounds, platform.bounds)) {
+                onWall = true;
+                // Handle wall collision normally
+                const overlapLeft = playerBounds.right - platform.bounds.left;
+                const overlapRight = platform.bounds.right - playerBounds.left;
+                const overlapTop = playerBounds.top - platform.bounds.bottom;
+                const overlapBottom = platform.bounds.top - playerBounds.bottom;
+
+                const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+                if (minOverlap === overlapBottom && playerVelocity.y < 0) {
+                    resolveCollisionY(player.position, platform.bounds, playerVelocity);
+                    player.velocity.y = 0;
+                    player.isGrounded = true;
+                    player.mesh.position.y = player.position.y;
+                } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
+                    resolveCollisionY(player.position, platform.bounds, playerVelocity);
+                    player.velocity.y = 0;
+                    player.mesh.position.y = player.position.y;
+                } else if (minOverlap === overlapLeft || minOverlap === overlapRight) {
+                    resolveCollisionX(player.position, platform.bounds, playerVelocity);
+                    player.velocity.x = 0;
+                    player.mesh.position.x = player.position.x;
+                }
+            }
+        }
+
+        // Second pass: Check ladder and other platforms (only if not on wall top)
         for (const platform of this.platforms) {
             if (checkAABBCollision(playerBounds, platform.bounds)) {
+                // Special handling for ladders - only if not standing on wall
+                if (platform.isLadder && !onWall) {
+                    onLadder = true;
+                    player.onLadder = true;
+
+                    // Ladder physics: allow climbing up/down with W/S keys
+                    if (player.input) {
+                        // Slow fall on ladder
+                        if (player.velocity.y < 0) {
+                            player.velocity.y *= 0.3; // Reduced fall speed
+                        }
+
+                        // Climb up with W/Space
+                        if (player.input.isJumpPressed()) {
+                            player.velocity.y = 5; // Climb up speed
+                            player.isGrounded = false;
+                        }
+
+                        // Climb down with S
+                        if (player.input.isKeyDown('KeyS') || player.input.isKeyDown('ArrowDown')) {
+                            player.velocity.y = -3; // Climb down speed
+                        }
+                    }
+                    continue; // Don't apply normal collision for ladder
+                }
+
+                // Skip wall collision (already handled in first pass)
+                if (platform.type === 'wall') {
+                    continue;
+                }
+
+                // Normal platform collision
                 // Determine collision direction based on velocity and overlap
                 const overlapLeft = playerBounds.right - platform.bounds.left;
                 const overlapRight = platform.bounds.right - playerBounds.left;
@@ -81,6 +222,11 @@ export class Level {
                 }
             }
         }
+
+        // Reset ladder flag if not on ladder
+        if (!onLadder) {
+            player.onLadder = false;
+        }
     }
 
     /**
@@ -104,20 +250,192 @@ export class Level {
     }
 
     /**
+     * Add a decorative wall with ladder
+     * @param {number} x - Center X position
+     * @param {number} baseY - Base Y position (ground level)
+     * @param {number} wallHeight - Total height of the wall
+     */
+    addWallWithLadder(x, baseY, wallHeight) {
+        const wallGroup = new THREE.Group();
+        const wallWidth = 1.5;
+
+        // Main wall body (stone blocks)
+        const numBlocks = Math.floor(wallHeight / 0.8);
+        for (let i = 0; i < numBlocks; i++) {
+            const blockHeight = 0.8;
+            const blockY = i * blockHeight;
+
+            // Stone block
+            const blockGeometry = new THREE.BoxGeometry(wallWidth, blockHeight, 0.8);
+            const blockMaterial = new THREE.MeshBasicMaterial({ color: 0x808080 });
+            const block = new THREE.Mesh(blockGeometry, blockMaterial);
+            block.position.y = blockY;
+            wallGroup.add(block);
+
+            // Block mortar lines (darker)
+            const mortarGeometry = new THREE.BoxGeometry(wallWidth + 0.05, 0.05, 0.82);
+            const mortarMaterial = new THREE.MeshBasicMaterial({ color: 0x404040 });
+            const mortar = new THREE.Mesh(mortarGeometry, mortarMaterial);
+            mortar.position.y = blockY + blockHeight/2;
+            wallGroup.add(mortar);
+
+            // Stone texture detail (lighter spots)
+            if (Math.random() > 0.5) {
+                const spotGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.81);
+                const spotMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x909090,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                const spot = new THREE.Mesh(spotGeometry, spotMaterial);
+                spot.position.set(
+                    (Math.random() - 0.5) * wallWidth * 0.6,
+                    blockY + (Math.random() - 0.5) * blockHeight * 0.6,
+                    0
+                );
+                wallGroup.add(spot);
+            }
+        }
+
+        // LADDER on the side
+        const ladderX = wallWidth/2 + 0.3; // Position ladder on right side of wall
+        const ladderWidth = 0.5;
+        const ladderDepth = 0.15;
+        const ladderHeight = wallHeight - 0.5; // Ladder stops 0.5 units below wall top
+
+        // Left rail - positioned in front of wall (Z > 0.4)
+        const leftRailGeometry = new THREE.BoxGeometry(0.08, ladderHeight, ladderDepth);
+        const railMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 }); // Brown wood
+        const leftRail = new THREE.Mesh(leftRailGeometry, railMaterial);
+        leftRail.position.set(ladderX - ladderWidth/2, ladderHeight/2, 0.6);
+        wallGroup.add(leftRail);
+
+        // Right rail
+        const rightRail = new THREE.Mesh(leftRailGeometry, railMaterial);
+        rightRail.position.set(ladderX + ladderWidth/2, ladderHeight/2, 0.6);
+        wallGroup.add(rightRail);
+
+        // Rungs (horizontal steps)
+        const numRungs = Math.floor(ladderHeight / 0.6);
+        for (let i = 0; i < numRungs; i++) {
+            const rungY = (i + 0.5) * (ladderHeight / numRungs);
+            const rungGeometry = new THREE.BoxGeometry(ladderWidth, 0.1, ladderDepth);
+            const rungMaterial = new THREE.MeshBasicMaterial({ color: 0x654321 }); // Darker brown
+            const rung = new THREE.Mesh(rungGeometry, rungMaterial);
+            rung.position.set(ladderX, rungY, 0.6);
+            wallGroup.add(rung);
+
+            // Add rung shadow/depth
+            const shadowGeometry = new THREE.BoxGeometry(ladderWidth, 0.05, ladderDepth);
+            const shadowMaterial = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                transparent: true,
+                opacity: 0.3
+            });
+            const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+            shadow.position.set(ladderX, rungY - 0.08, 0.58);
+            wallGroup.add(shadow);
+        }
+
+        // Decorative vines growing on the wall
+        const numVines = 3;
+        for (let i = 0; i < numVines; i++) {
+            const vineX = (Math.random() - 0.5) * wallWidth * 0.8;
+            const vineSegments = Math.floor(Math.random() * 5) + 3;
+
+            for (let j = 0; j < vineSegments; j++) {
+                const vineY = (j / vineSegments) * wallHeight + Math.random() * 0.3;
+                const vineGeometry = new THREE.BoxGeometry(0.05, 0.3, 0.05);
+                const vineMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x2F4F2F,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const vine = new THREE.Mesh(vineGeometry, vineMaterial);
+                vine.position.set(
+                    vineX + (Math.random() - 0.5) * 0.15,
+                    vineY,
+                    0.42
+                );
+                vine.rotation.z = (Math.random() - 0.5) * 0.3;
+                wallGroup.add(vine);
+
+                // Add small leaves
+                if (Math.random() > 0.6) {
+                    const leafGeometry = new THREE.BoxGeometry(0.12, 0.08, 0.02);
+                    const leafMaterial = new THREE.MeshBasicMaterial({
+                        color: 0x228B22,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    const leaf = new THREE.Mesh(leafGeometry, leafMaterial);
+                    leaf.position.set(vineX + 0.1, vineY, 0.45);
+                    wallGroup.add(leaf);
+                }
+            }
+        }
+
+        // Position the entire wall - blocks are built from 0 upward, so position at baseY
+        wallGroup.position.set(x, baseY, 0);
+        this.scene.add(wallGroup);
+
+        // Calculate actual visual top based on blocks (each 0.8 high, positioned at center)
+        const actualVisualTop = baseY + (numBlocks * 0.8);
+
+        // Add collision platform for the wall - matches actual visual top
+        const platform = {
+            mesh: wallGroup,
+            bounds: {
+                left: x - wallWidth / 2,
+                right: x + wallWidth / 2,
+                top: actualVisualTop, // Collision matches actual block positions
+                bottom: baseY
+            },
+            type: 'wall'
+        };
+
+        this.platforms.push(platform);
+
+        // Add ladder collision zone (allows climbing) - stops 0.5 units below wall top
+        const ladderPlatform = {
+            mesh: wallGroup, // Share same mesh
+            bounds: {
+                left: x + wallWidth/2 + 0.05, // Right side of wall
+                right: x + wallWidth/2 + 0.85, // Width of ladder
+                top: baseY + wallHeight - 0.5, // Ladder top stops before wall top
+                bottom: baseY
+            },
+            type: 'ladder',
+            isLadder: true // Special flag for climbing
+        };
+
+        this.platforms.push(ladderPlatform);
+        return platform;
+    }
+
+    /**
      * Create a test level with floating platforms
      */
     createTestLevel() {
-        // Main ground platform
-        this.addPlatform(0, -3, 100, 1);
+        // Main ground platform (ground type with grass)
+        this.addPlatform(0, -3, 100, 1, 'ground');
 
-        // Floating platforms (thin)
-        this.addPlatform(5, 0, 3, 0.5);
-        this.addPlatform(10, 2, 3, 0.5);
-        this.addPlatform(-5, 1, 4, 0.5);
+        // Floating grass platforms (thin)
+        this.addPlatform(5, 0, 3, 0.5, 'grass');
+        this.addPlatform(10, 2, 3, 0.5, 'grass');
+        this.addPlatform(-5, 1, 4, 0.5, 'grass');
 
-        // Taller platforms for testing side collisions
-        this.addPlatform(15, -1, 2, 3);    // Tall platform on right
-        this.addPlatform(-10, 0, 2, 4);    // Very tall platform on left
-        this.addPlatform(20, -2, 1.5, 2);  // Medium platform far right
+        // Stone platforms (taller, for walls/obstacles)
+        this.addPlatform(15, -1, 2, 3, 'stone');    // Tall stone wall on right
+        this.addPlatform(20, -2, 1.5, 2, 'stone');  // Medium stone platform
+
+        // DECORATIVE WALL WITH LADDER (left side) - starts from ground level
+        this.addWallWithLadder(-12, -3, 7);         // 7 units tall, base at ground level (-3)
+                                                     // Ladder stops 0.5 units below top for easier climbing
+
+        // More variety
+        this.addPlatform(-17, 2, 5, 0.5, 'grass');   // Far left floating (moved left to avoid wall)
+        this.addPlatform(25, 1, 3, 0.5, 'stone');    // Far right stone
+        this.addPlatform(0, 4, 4, 0.5, 'grass');     // High center platform
     }
 }

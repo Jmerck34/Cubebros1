@@ -31,6 +31,9 @@ export class Hero extends Player {
      * @param {InputManager} input - Input manager
      */
     update(deltaTime, input) {
+        // Store input reference for ladder climbing
+        this.input = input;
+
         // Call parent update for movement and physics
         super.update(deltaTime, input);
 

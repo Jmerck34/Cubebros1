@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ThreeJS Mario Platformer</title>
+    <title>ThreeJS MOBA Platformer - Hero Select</title>
     <style>
         * {
             margin: 0;
@@ -15,7 +15,8 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #5c94fc; /* Mario sky blue */
+            background-color: #5c94fc;
+            font-family: 'Arial', sans-serif;
         }
 
         #game-canvas {
@@ -24,15 +25,116 @@
             height: 100%;
         }
 
-        /* Ability UI */
+        /* Hero Selection Menu */
+        #hero-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        #hero-menu h1 {
+            color: white;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+        }
+
+        #hero-menu p {
+            color: #ccc;
+            font-size: 18px;
+            margin-bottom: 40px;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            max-width: 900px;
+        }
+
+        .hero-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 350px;
+        }
+
+        .hero-card:hover {
+            transform: scale(1.05);
+            border-color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
+        }
+
+        .hero-card.warrior:hover {
+            border-color: #0066ff;
+            box-shadow: 0 0 30px rgba(0, 102, 255, 0.6);
+        }
+
+        .hero-card.assassin:hover {
+            border-color: #4B0082;
+            box-shadow: 0 0 30px rgba(75, 0, 130, 0.6);
+        }
+
+        .hero-card.wizard:hover {
+            border-color: #0000ff;
+            box-shadow: 0 0 30px rgba(0, 0, 255, 0.6);
+        }
+
+        .hero-card.warlock:hover {
+            border-color: #9400d3;
+            box-shadow: 0 0 30px rgba(148, 0, 211, 0.6);
+        }
+
+        .hero-card h2 {
+            color: white;
+            font-size: 32px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .hero-card .hero-desc {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-style: italic;
+        }
+
+        .hero-card .abilities {
+            margin-top: 15px;
+        }
+
+        .hero-card .ability {
+            color: #ccc;
+            font-size: 13px;
+            margin: 8px 0;
+            padding-left: 10px;
+        }
+
+        .hero-card .ability strong {
+            color: white;
+        }
+
+        /* Ability UI (hidden initially) */
         #ability-ui {
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            display: flex;
+            display: none;
             gap: 15px;
-            font-family: 'Arial', sans-serif;
             z-index: 100;
         }
 
@@ -120,30 +222,117 @@
             background: linear-gradient(90deg, #ff9900, #ffdd00);
             transition: width 0.2s ease;
         }
+
+        /* Reset Button */
+        #reset-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 0, 0, 0.7);
+            color: white;
+            border: 2px solid rgba(255, 0, 0, 0.9);
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+            transition: all 0.3s ease;
+        }
+
+        #reset-button:hover {
+            background: rgba(255, 0, 0, 0.9);
+            transform: scale(1.05);
+        }
+
+        #reset-button.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
+
+    <!-- Hero Selection Menu -->
+    <div id="hero-menu">
+        <h1>🎮 SELECT YOUR HERO 🎮</h1>
+        <p>Choose your champion and battle enemies!</p>
+        <p style="font-size: 14px; color: #888; margin-top: -30px;">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities</p>
+
+        <div class="hero-grid">
+            <!-- Warrior -->
+            <div class="hero-card warrior" id="select-warrior">
+                <h2>⚔️ WARRIOR</h2>
+                <div class="hero-desc">Melee Tank - Sword & Shield</div>
+                <div class="abilities">
+                    <div class="ability"><strong>Q/Click:</strong> Sword Slash (crescent arc)</div>
+                    <div class="ability"><strong>Right Click:</strong> Shield Bash (knockback)</div>
+                    <div class="ability"><strong>E:</strong> Dash (mobility)</div>
+                    <div class="ability"><strong>R:</strong> Whirlwind (spin attack)</div>
+                </div>
+            </div>
+
+            <!-- Assassin -->
+            <div class="hero-card assassin" id="select-assassin">
+                <h2>🗡️ ASSASSIN</h2>
+                <div class="hero-desc">Burst Damage - Dual Daggers</div>
+                <div class="abilities">
+                    <div class="ability"><strong>Q/Click:</strong> Dagger Combo (bleed)</div>
+                    <div class="ability"><strong>Right Click:</strong> Poison Bomb (DoT cloud)</div>
+                    <div class="ability"><strong>E:</strong> Shadow Walk (invincible)</div>
+                    <div class="ability"><strong>R:</strong> Assassinate (teleport)</div>
+                </div>
+            </div>
+
+            <!-- Wizard -->
+            <div class="hero-card wizard" id="select-wizard">
+                <h2>🔮 WIZARD</h2>
+                <div class="hero-desc">Ranged Mage - Magic Book</div>
+                <div class="abilities">
+                    <div class="ability"><strong>Q/Click:</strong> Fireball (strong ranged)</div>
+                    <div class="ability"><strong>Right Click:</strong> Wind Push (knockback)</div>
+                    <div class="ability"><strong>E:</strong> Bubble Shield (immunity)</div>
+                    <div class="ability"><strong>R:</strong> Kame Hame Ha (beam)</div>
+                </div>
+            </div>
+
+            <!-- Warlock -->
+            <div class="hero-card warlock" id="select-warlock">
+                <h2>💀 WARLOCK</h2>
+                <div class="hero-desc">Controller - Dark Staff</div>
+                <div class="abilities">
+                    <div class="ability"><strong>Q/Click:</strong> Lightning Strike (AoE)</div>
+                    <div class="ability"><strong>Right Click:</strong> Fear (turn enemies)</div>
+                    <div class="ability"><strong>E:</strong> Hover (cloud flight)</div>
+                    <div class="ability"><strong>R:</strong> Mind Control (convert)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Button (appears during game) -->
+    <button id="reset-button">← Back to Menu</button>
 
     <!-- Ability UI -->
     <div id="ability-ui">
         <div class="ability-slot" id="ability-q">
             <div class="cooldown-overlay" id="cooldown-q"></div>
             <div class="cooldown-text" id="cooldown-text-q"></div>
-            <span>Q</span>
-            <div class="ability-name">Slash</div>
+            <span style="font-size: 16px;">🖱️L</span>
+            <div class="ability-name">Q/Click</div>
         </div>
         <div class="ability-slot" id="ability-w">
             <div class="cooldown-overlay" id="cooldown-w"></div>
             <div class="cooldown-text" id="cooldown-text-w"></div>
-            <span>W</span>
-            <div class="ability-name">Bash</div>
+            <span style="font-size: 16px;">🖱️R</span>
+            <div class="ability-name">RClick</div>
         </div>
         <div class="ability-slot" id="ability-e">
             <div class="cooldown-overlay" id="cooldown-e"></div>
             <div class="cooldown-text" id="cooldown-text-e"></div>
             <span>E</span>
-            <div class="ability-name">Dash</div>
+            <div class="ability-name">E</div>
         </div>
         <div class="ability-slot ultimate" id="ability-r">
             <div class="ultimate-charge">
@@ -156,6 +345,24 @@
         </div>
     </div>
 
-    <script type="module" src="main.js"></script>
+    <script type="module" src="main_hero_select.js"></script>
+
+    <script>
+        // Show reset button when game starts
+        window.addEventListener('load', () => {
+            const heroMenu = document.getElementById('hero-menu');
+            const resetButton = document.getElementById('reset-button');
+
+            const observer = new MutationObserver(() => {
+                if (heroMenu.style.display === 'none') {
+                    resetButton.classList.add('visible');
+                } else {
+                    resetButton.classList.remove('visible');
+                }
+            });
+
+            observer.observe(heroMenu, { attributes: true, attributeFilter: ['style'] });
+        });
+    </script>
 </body>
 </html>

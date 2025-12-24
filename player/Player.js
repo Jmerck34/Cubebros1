@@ -26,6 +26,10 @@ export class Player {
         this.isGrounded = false;
         this.isAlive = true;
 
+        // Jump state for double jump
+        this.jumpsRemaining = 2; // Allow 2 jumps (ground + air)
+        this.jumpKeyWasPressed = false; // Track key state to prevent spam
+
         // Sync mesh position
         this.syncMeshPosition();
     }
@@ -104,6 +108,7 @@ export class Player {
         this.velocity.x = 0;
         this.velocity.y = 0;
         this.isGrounded = false;
+        this.jumpsRemaining = 2;
     }
 
     /**

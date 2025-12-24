@@ -17,13 +17,32 @@ export function applyGravity(player, deltaTime) {
 }
 
 /**
- * Handle jump input for player
+ * Handle jump input for player (with double jump)
  * @param {Player} player - The player instance
  * @param {InputManager} input - The input manager
  */
 export function handleJump(player, input) {
-    if (input.isJumpPressed() && player.isGrounded) {
-        player.velocity.y = JUMP_VELOCITY;
-        player.isGrounded = false;
+    const jumpPressed = input.isJumpPressed();
+
+    // Reset jumps when grounded
+    if (player.isGrounded) {
+        player.jumpsRemaining = 2;
     }
+
+    // Handle jump with key press detection to prevent spam
+    if (jumpPressed && !player.jumpKeyWasPressed && player.jumpsRemaining > 0) {
+        player.velocity.y = JUMP_VELOCITY;
+        player.jumpsRemaining--;
+        player.isGrounded = false;
+
+        // Log which jump this is
+        if (player.jumpsRemaining === 1) {
+            console.log('First jump!');
+        } else if (player.jumpsRemaining === 0) {
+            console.log('Double jump!');
+        }
+    }
+
+    // Track key state for next frame
+    player.jumpKeyWasPressed = jumpPressed;
 }
