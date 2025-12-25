@@ -141,7 +141,7 @@ export class Level {
 
                 const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
 
-                if (minOverlap === overlapBottom && playerVelocity.y < 0) {
+                if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
                     player.isGrounded = true;
@@ -150,7 +150,9 @@ export class Level {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
                     player.mesh.position.y = player.position.y;
-                } else if (minOverlap === overlapLeft || minOverlap === overlapRight) {
+                } else if ((minOverlap === overlapLeft && playerVelocity.x > 0) ||
+                           (minOverlap === overlapRight && playerVelocity.x < 0)) {
+                    // Only resolve horizontal collision if moving TOWARD the wall
                     resolveCollisionX(player.position, platform.bounds, playerVelocity);
                     player.velocity.x = 0;
                     player.mesh.position.x = player.position.x;
@@ -202,8 +204,8 @@ export class Level {
                 // Find smallest overlap to determine collision direction
                 const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
 
-                // Resolve based on smallest overlap (most likely collision side)
-                if (minOverlap === overlapBottom && playerVelocity.y < 0) {
+                // Resolve based on smallest overlap AND velocity direction (prevents edge glitching)
+                if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
                     // Player landed on top of platform (coming from above)
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
@@ -214,8 +216,10 @@ export class Level {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
                     player.mesh.position.y = player.position.y;
-                } else if (minOverlap === overlapLeft || minOverlap === overlapRight) {
-                    // Player hit side of platform
+                } else if ((minOverlap === overlapLeft && playerVelocity.x > 0) ||
+                           (minOverlap === overlapRight && playerVelocity.x < 0)) {
+                    // Only resolve horizontal collision if moving TOWARD the wall
+                    // This prevents edge-glitching when walking off platforms
                     resolveCollisionX(player.position, platform.bounds, playerVelocity);
                     player.velocity.x = 0;
                     player.mesh.position.x = player.position.x;
@@ -429,8 +433,8 @@ export class Level {
         this.addPlatform(15, -1, 2, 3, 'stone');    // Tall stone wall on right
         this.addPlatform(20, -2, 1.5, 2, 'stone');  // Medium stone platform
 
-        // DECORATIVE WALL WITH LADDER (left side) - starts from ground level
-        this.addWallWithLadder(-12, -3, 7);         // 7 units tall, base at ground level (-3)
+        // DECORATIVE WALL WITH LADDER (left side) - raised by half a brick
+        this.addWallWithLadder(-12, -2.6, 7);       // 7 units tall, base raised 0.4 units (half brick)
                                                      // Ladder stops 0.5 units below top for easier climbing
 
         // More variety

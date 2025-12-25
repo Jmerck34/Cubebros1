@@ -104,6 +104,13 @@ export class Wizard extends Hero {
      * Update - Override to handle beam charging and facing direction
      */
     update(deltaTime, input) {
+        // Freeze movement during charging
+        if (this.isChargingBeam) {
+            this.beamChargeTime += deltaTime;
+            // Don't update position or process input while charging
+            return;
+        }
+
         // Update facing direction based on input
         if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
@@ -112,11 +119,6 @@ export class Wizard extends Hero {
         }
 
         super.update(deltaTime, input);
-
-        // Update beam charging
-        if (this.isChargingBeam) {
-            this.beamChargeTime += deltaTime;
-        }
     }
 
     /**
@@ -130,7 +132,7 @@ export class Wizard extends Hero {
     }
 
     /**
-     * Cast Fireball - Q Ability
+     * Cast Fireball - Q Ability (Fire Missile with trail)
      */
     castFireball() {
         console.log('🔥 FIREBALL!');
@@ -139,29 +141,112 @@ export class Wizard extends Hero {
         this.book.rotation.y = -0.3;
         setTimeout(() => { this.book.rotation.y = 0.3; }, 200);
 
-        // Create fireball
-        const fireballGeometry = new THREE.SphereGeometry(0.25);
-        const fireballMaterial = new THREE.MeshBasicMaterial({ color: 0xff4500 });
-        const fireball = new THREE.Mesh(fireballGeometry, fireballMaterial);
+        // Create fire missile group
+        const fireballGroup = new THREE.Group();
 
-        fireball.position.set(this.position.x + (0.5 * this.facingDirection), this.position.y, 0.2);
-        this.mesh.parent.add(fireball);
+        // Inner core (white-hot center)
+        const coreGeometry = new THREE.SphereGeometry(0.15);
+        const coreMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff99, // Yellow-white hot core
+            transparent: true,
+            opacity: 1
+        });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        fireballGroup.add(core);
+
+        // Middle layer (bright orange)
+        const midGeometry = new THREE.SphereGeometry(0.22);
+        const midMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff6600, // Bright orange
+            transparent: true,
+            opacity: 0.8
+        });
+        const midLayer = new THREE.Mesh(midGeometry, midMaterial);
+        fireballGroup.add(midLayer);
+
+        // Outer layer (red-orange glow)
+        const outerGeometry = new THREE.SphereGeometry(0.28);
+        const outerMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff3300, // Red-orange
+            transparent: true,
+            opacity: 0.5
+        });
+        const outerLayer = new THREE.Mesh(outerGeometry, outerMaterial);
+        fireballGroup.add(outerLayer);
+
+        fireballGroup.position.set(this.position.x + (0.5 * this.facingDirection), this.position.y, 0.2);
+        this.mesh.parent.add(fireballGroup);
+
+        // Trail particles array
+        const trailParticles = [];
 
         // Fire direction based on facing
         const direction = this.facingDirection;
         let fireballX = this.position.x;
+        let rotationAngle = 0;
 
         // Animate fireball
         const fireballInterval = setInterval(() => {
             fireballX += direction * 12 * 0.016;
-            fireball.position.x = fireballX;
+            fireballGroup.position.x = fireballX;
 
-            // Check collision with enemies
+            // Spin the fire missile
+            rotationAngle += 0.2;
+            fireballGroup.rotation.z = rotationAngle;
+
+            // Create trailing particles at fireball position
+            if (Math.random() > 0.3) {
+                const trailSize = 0.1 + Math.random() * 0.15;
+                const trailGeometry = new THREE.CircleGeometry(trailSize, 8);
+                const trailColor = Math.random() > 0.5 ? 0xff6600 : 0xff3300; // Mix orange and red
+                const trailMaterial = new THREE.MeshBasicMaterial({
+                    color: trailColor,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+                trail.position.set(
+                    fireballGroup.position.x + (Math.random() - 0.5) * 0.2,
+                    fireballGroup.position.y + (Math.random() - 0.5) * 0.3,
+                    0.15
+                );
+                this.mesh.parent.add(trail);
+
+                // Store particle with initial opacity
+                const particle = { mesh: trail, opacity: 0.8, life: 0 };
+                trailParticles.push(particle);
+
+                // Quick fade out trail
+                const fadeInterval = setInterval(() => {
+                    particle.life += 0.016; // Track lifetime
+                    particle.opacity -= 0.15; // Faster fade
+                    particle.mesh.material.opacity = Math.max(0, particle.opacity);
+                    particle.mesh.scale.set(
+                        Math.max(0.1, 1 - particle.life * 2),
+                        Math.max(0.1, 1 - particle.life * 2),
+                        1
+                    );
+
+                    if (particle.opacity <= 0 || particle.life > 0.5) {
+                        clearInterval(fadeInterval);
+                        if (particle.mesh.parent) {
+                            this.mesh.parent.remove(particle.mesh);
+                        }
+                        // Remove from array
+                        const index = trailParticles.indexOf(particle);
+                        if (index > -1) {
+                            trailParticles.splice(index, 1);
+                        }
+                    }
+                }, 16); // Run every frame
+            }
+
+            // Check collision with enemies (use fireball's actual position)
             const fireballBounds = {
-                left: fireballX - 0.25,
-                right: fireballX + 0.25,
-                top: this.position.y + 0.25,
-                bottom: this.position.y - 0.25
+                left: fireballGroup.position.x - 0.28,
+                right: fireballGroup.position.x + 0.28,
+                top: fireballGroup.position.y + 0.28,
+                bottom: fireballGroup.position.y - 0.28
             };
 
             let hit = false;
@@ -182,37 +267,98 @@ export class Wizard extends Hero {
             // Remove if hit or off screen
             if (hit || Math.abs(fireballX - this.position.x) > 15) {
                 clearInterval(fireballInterval);
-                this.mesh.parent.remove(fireball);
+                this.mesh.parent.remove(fireballGroup);
+
+                // Clean up any remaining trail particles
+                trailParticles.forEach(particle => {
+                    if (particle.mesh.parent) {
+                        this.mesh.parent.remove(particle.mesh);
+                    }
+                });
 
                 if (hit) {
-                    this.createExplosion(fireballX, this.position.y, 0xff4500);
+                    this.createExplosion(fireballGroup.position.x, fireballGroup.position.y, 0xff4500);
                 }
             }
         }, 16);
     }
 
     /**
-     * Cast Wind Push - W Ability
+     * Cast Wind Push - W Ability (Wind Wave with Swirls)
      */
     castWindPush() {
-        console.log('💨 WIND PUSH!');
+        console.log('💨 WIND WAVE!');
 
         // Animate book
         this.book.scale.set(1.3, 1.3, 1.3);
         setTimeout(() => { this.book.scale.set(1, 1, 1); }, 300);
 
-        // Create wind effect based on facing direction
         const direction = this.facingDirection;
-        const windGeometry = new THREE.ConeGeometry(1, 2, 8);
-        const windMaterial = new THREE.MeshBasicMaterial({
-            color: 0xccffff,
-            transparent: true,
-            opacity: 0.6
-        });
-        const wind = new THREE.Mesh(windGeometry, windMaterial);
-        wind.position.set(this.position.x + direction * 1.5, this.position.y, 0.2);
-        wind.rotation.z = direction > 0 ? -Math.PI / 2 : Math.PI / 2;
-        this.mesh.parent.add(wind);
+        const windParticles = [];
+
+        // Create swirling particles (more particles, no background layers)
+        for (let i = 0; i < 25; i++) {
+            const particleSize = 0.08 + Math.random() * 0.12;
+            const particleGeometry = new THREE.CircleGeometry(particleSize, 6);
+            const particleColor = Math.random() > 0.5 ? 0xccffff : 0xffffff;
+            const particleMaterial = new THREE.MeshBasicMaterial({
+                color: particleColor,
+                transparent: true,
+                opacity: 0.6
+            });
+            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+
+            // Random starting position in wind wave
+            const startX = this.position.x + direction * (0.5 + Math.random() * 0.5);
+            const startY = this.position.y + (Math.random() - 0.5) * 2;
+            particle.position.set(startX, startY, 0.15);
+            this.mesh.parent.add(particle);
+
+            // Store particle with swirl data
+            windParticles.push({
+                mesh: particle,
+                angle: Math.random() * Math.PI * 2,
+                radius: 0.3 + Math.random() * 0.5,
+                speed: 0.8 + Math.random() * 0.4,
+                opacity: 0.6,
+                life: 0
+            });
+        }
+
+        // Animate swirling particles
+        let waveTime = 0;
+        const waveInterval = setInterval(() => {
+            waveTime += 0.016;
+
+            // Animate swirling particles
+            windParticles.forEach((particle) => {
+                particle.life += 0.016;
+                particle.angle += particle.speed * 0.1;
+
+                // Swirl outward in spiral
+                const currentRadius = particle.radius * (1 + particle.life * 2);
+                const spiralX = Math.cos(particle.angle) * currentRadius;
+                const spiralY = Math.sin(particle.angle) * currentRadius * 0.5;
+
+                particle.mesh.position.x += direction * particle.speed * 0.1;
+                particle.mesh.position.y = this.position.y + spiralY;
+
+                // Fade out
+                particle.opacity -= 0.02;
+                particle.mesh.material.opacity = Math.max(0, particle.opacity);
+                particle.mesh.scale.set(1 - particle.life * 0.5, 1 - particle.life * 0.5, 1);
+            });
+
+            // Clean up after 500ms
+            if (waveTime > 0.5) {
+                clearInterval(waveInterval);
+                windParticles.forEach(particle => {
+                    if (particle.mesh.parent) {
+                        this.mesh.parent.remove(particle.mesh);
+                    }
+                });
+            }
+        }, 16);
 
         // Damage and knockback enemies
         const windBounds = {
@@ -231,41 +377,130 @@ export class Wizard extends Hero {
                 // Knockback
                 enemy.position.x += direction * 3;
                 this.addUltimateCharge(this.ultimateChargePerKill);
-                console.log('💨 Wind pushed enemy!');
+                console.log('💨 Wind wave hit enemy!');
             }
         }
-
-        // Fade out wind
-        setTimeout(() => {
-            this.mesh.parent.remove(wind);
-        }, 300);
     }
 
     /**
-     * Cast Bubble Shield - E Ability
+     * Cast Bubble Shield - E Ability (Burst animation with protective bubble)
      */
     castBubbleShield() {
-        console.log('🛡️ BUBBLE SHIELD!');
+        console.log('🛡️ BUBBLE SHIELD BURST!');
 
-        // Create bubble shield
-        const bubbleGeometry = new THREE.SphereGeometry(2, 16, 16);
-        const bubbleMaterial = new THREE.MeshBasicMaterial({
+        // Animate book
+        this.book.scale.set(1.2, 1.2, 1.2);
+        setTimeout(() => { this.book.scale.set(1, 1, 1); }, 200);
+
+        // Create burst particles
+        const burstParticles = [];
+        for (let i = 0; i < 20; i++) {
+            const angle = (i / 20) * Math.PI * 2;
+            const particleGeometry = new THREE.CircleGeometry(0.15, 8);
+            const particleMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.8
+            });
+            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+            particle.position.set(this.position.x, this.position.y, 0.2);
+            this.mesh.parent.add(particle);
+
+            burstParticles.push({
+                mesh: particle,
+                angle: angle,
+                speed: 9 + Math.random() * 3, // 3x speed (was 3-4, now 9-12)
+                life: 0
+            });
+        }
+
+        // Animate burst expansion
+        const burstInterval = setInterval(() => {
+            let allDead = true;
+            burstParticles.forEach(particle => {
+                particle.life += 0.016;
+                const distance = particle.speed * particle.life;
+
+                particle.mesh.position.x = this.position.x + Math.cos(particle.angle) * distance;
+                particle.mesh.position.y = this.position.y + Math.sin(particle.angle) * distance;
+                particle.mesh.material.opacity = Math.max(0, 0.8 - particle.life * 2);
+                particle.mesh.scale.set(1 - particle.life, 1 - particle.life, 1);
+
+                if (particle.life < 0.4) allDead = false;
+            });
+
+            if (allDead) {
+                clearInterval(burstInterval);
+                burstParticles.forEach(p => {
+                    if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+                });
+            }
+        }, 16);
+
+        // Apply protective bubble to self
+        this.applyProtectiveBubble();
+    }
+
+    /**
+     * Apply protective bubble visual and invincibility
+     */
+    applyProtectiveBubble() {
+        // Create pulsing border around hero
+        const borderGeometry = new THREE.RingGeometry(0.7, 0.85, 32);
+        const borderMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ffff,
             transparent: true,
-            opacity: 0.3,
-            wireframe: true
+            opacity: 0.6,
+            side: THREE.DoubleSide
         });
-        this.bubbleShield = new THREE.Mesh(bubbleGeometry, bubbleMaterial);
-        this.bubbleShield.position.set(this.position.x, this.position.y, 0);
-        this.mesh.parent.add(this.bubbleShield);
+        this.bubbleBorder = new THREE.Mesh(borderGeometry, borderMaterial);
+        this.bubbleBorder.position.set(0, 0, 0.3); // Position relative to hero
+        this.mesh.add(this.bubbleBorder); // Attach to hero mesh
 
-        // Shield lasts 4 seconds
-        setTimeout(() => {
-            if (this.bubbleShield) {
-                this.mesh.parent.remove(this.bubbleShield);
-                this.bubbleShield = null;
+        // Set invincibility flag
+        this.bubbleShield = true;
+        this.bubbleShieldTime = 0;
+
+        // Pulse animation
+        let pulseScale = 1;
+        let pulseDirection = 1;
+        this.bubblePulseInterval = setInterval(() => {
+            if (!this.bubbleBorder) {
+                clearInterval(this.bubblePulseInterval);
+                return;
             }
-        }, 4000);
+
+            pulseScale += pulseDirection * 0.05;
+            if (pulseScale > 1.2) pulseDirection = -1;
+            if (pulseScale < 0.9) pulseDirection = 1;
+
+            this.bubbleBorder.scale.set(pulseScale, pulseScale, 1);
+
+            // Flash opacity
+            const opacity = 0.4 + Math.sin(Date.now() * 0.01) * 0.2;
+            this.bubbleBorder.material.opacity = opacity;
+        }, 50);
+
+        // Remove after 2 seconds
+        setTimeout(() => {
+            this.removeProtectiveBubble();
+        }, 2000);
+    }
+
+    /**
+     * Remove protective bubble
+     */
+    removeProtectiveBubble() {
+        if (this.bubbleBorder) {
+            this.mesh.remove(this.bubbleBorder);
+            this.bubbleBorder = null;
+        }
+        if (this.bubblePulseInterval) {
+            clearInterval(this.bubblePulseInterval);
+            this.bubblePulseInterval = null;
+        }
+        this.bubbleShield = false;
+        console.log('Bubble shield expired');
     }
 
     /**
@@ -290,7 +525,7 @@ export class Wizard extends Hero {
 
         console.log('⚡ KAME HAME HA!!! ⚡');
 
-        // Start charging
+        // Start charging (freezes character)
         this.isChargingBeam = true;
         this.beamChargeTime = 0;
 
@@ -299,34 +534,119 @@ export class Wizard extends Hero {
             this.fireKameHameHa();
         }, 2000);
 
-        // Charging visual
-        const chargeGeometry = new THREE.SphereGeometry(0.5);
-        const chargeMaterial = new THREE.MeshBasicMaterial({
+        // Create energy ball group with multiple layers
+        const energyBall = new THREE.Group();
+
+        // Inner core (bright white)
+        const coreGeometry = new THREE.SphereGeometry(0.08);
+        const coreMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 1
+        });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        energyBall.add(core);
+
+        // Middle layer (bright cyan)
+        const midGeometry = new THREE.SphereGeometry(0.15);
+        const midMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ffff,
             transparent: true,
-            opacity: 0.7
+            opacity: 0.8
         });
-        const chargeOrb = new THREE.Mesh(chargeGeometry, chargeMaterial);
-        chargeOrb.position.set(this.position.x + 0.5, this.position.y, 0.2);
-        this.mesh.parent.add(chargeOrb);
+        const midLayer = new THREE.Mesh(midGeometry, midMaterial);
+        energyBall.add(midLayer);
 
-        // Pulse charging orb
-        let pulseSize = 0.5;
-        let growing = true;
-        const pulseInterval = setInterval(() => {
-            if (growing) {
-                pulseSize += 0.05;
-                if (pulseSize >= 0.8) growing = false;
-            } else {
-                pulseSize -= 0.05;
-                if (pulseSize <= 0.5) growing = true;
+        // Outer layer (cyan glow)
+        const outerGeometry = new THREE.SphereGeometry(0.22);
+        const outerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ccff,
+            transparent: true,
+            opacity: 0.5
+        });
+        const outerLayer = new THREE.Mesh(outerGeometry, outerMaterial);
+        energyBall.add(outerLayer);
+
+        // Outer glow (very light cyan)
+        const glowGeometry = new THREE.SphereGeometry(0.3);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x88ffff,
+            transparent: true,
+            opacity: 0.3
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        energyBall.add(glow);
+
+        // Position in front of wizard (based on facing direction)
+        energyBall.position.set(
+            this.position.x + (0.7 * this.facingDirection),
+            this.position.y,
+            0.2
+        );
+        this.mesh.parent.add(energyBall);
+
+        // Growing energy particles around the ball
+        const chargeParticles = [];
+        for (let i = 0; i < 15; i++) {
+            const particleGeometry = new THREE.CircleGeometry(0.05, 6);
+            const particleMaterial = new THREE.MeshBasicMaterial({
+                color: Math.random() > 0.5 ? 0x00ffff : 0xffffff,
+                transparent: true,
+                opacity: 0.7
+            });
+            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+
+            const angle = (i / 15) * Math.PI * 2;
+            const radius = 0.6 + Math.random() * 0.2;
+            particle.position.set(
+                energyBall.position.x + Math.cos(angle) * radius,
+                energyBall.position.y + Math.sin(angle) * radius,
+                0.15
+            );
+            this.mesh.parent.add(particle);
+
+            chargeParticles.push({
+                mesh: particle,
+                angle: angle,
+                radius: radius,
+                speed: 0.8 + Math.random() * 0.4
+            });
+        }
+
+        // Animate growing energy ball
+        let growthTime = 0;
+        const growthInterval = setInterval(() => {
+            growthTime += 0.016;
+
+            // Grow from 0.2 to 1.0 scale over 2 seconds
+            const growthScale = 0.2 + (growthTime / 2) * 0.8;
+            energyBall.scale.set(growthScale, growthScale, growthScale);
+
+            // Update energy ball position to follow wizard
+            energyBall.position.x = this.position.x + (0.7 * this.facingDirection);
+            energyBall.position.y = this.position.y;
+
+            // Animate particles spiraling inward
+            chargeParticles.forEach(p => {
+                p.angle += p.speed * 0.05;
+                p.radius -= 0.008; // Spiral inward
+
+                p.mesh.position.x = energyBall.position.x + Math.cos(p.angle) * p.radius;
+                p.mesh.position.y = energyBall.position.y + Math.sin(p.angle) * p.radius;
+            });
+
+            if (growthTime >= 2) {
+                clearInterval(growthInterval);
             }
-            chargeOrb.scale.set(pulseSize / 0.5, pulseSize / 0.5, pulseSize / 0.5);
-        }, 50);
+        }, 16);
 
+        // Clean up charging effects
         setTimeout(() => {
-            clearInterval(pulseInterval);
-            this.mesh.parent.remove(chargeOrb);
+            clearInterval(growthInterval);
+            this.mesh.parent.remove(energyBall);
+            chargeParticles.forEach(p => {
+                if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+            });
         }, 2000);
     }
 
@@ -339,23 +659,102 @@ export class Wizard extends Hero {
         const direction = this.facingDirection;
         const damage = Math.floor(this.beamChargeTime * 2); // More charge = more damage
 
-        // Create beam
-        const beamGeometry = new THREE.BoxGeometry(10, 1, 0.2);
-        const beamMaterial = new THREE.MeshBasicMaterial({
+        // Create beam group with multiple layers
+        const beamGroup = new THREE.Group();
+
+        // Inner core (bright white)
+        const coreGeometry = new THREE.BoxGeometry(10, 0.4, 0.2);
+        const coreMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 1
+        });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        beamGroup.add(core);
+
+        // Middle layer (bright cyan)
+        const midGeometry = new THREE.BoxGeometry(10, 0.7, 0.2);
+        const midMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ffff,
             transparent: true,
             opacity: 0.8
         });
-        const beam = new THREE.Mesh(beamGeometry, beamMaterial);
-        beam.position.set(this.position.x + direction * 5, this.position.y, 0.2);
-        this.mesh.parent.add(beam);
+        const midLayer = new THREE.Mesh(midGeometry, midMaterial);
+        beamGroup.add(midLayer);
+
+        // Outer layer (cyan glow)
+        const outerGeometry = new THREE.BoxGeometry(10, 1.0, 0.2);
+        const outerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ccff,
+            transparent: true,
+            opacity: 0.5
+        });
+        const outerLayer = new THREE.Mesh(outerGeometry, outerMaterial);
+        beamGroup.add(outerLayer);
+
+        // Outer glow (very light cyan)
+        const glowGeometry = new THREE.BoxGeometry(10, 1.4, 0.2);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x88ffff,
+            transparent: true,
+            opacity: 0.3
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        beamGroup.add(glow);
+
+        beamGroup.position.set(this.position.x + direction * 5, this.position.y, 0.2);
+        this.mesh.parent.add(beamGroup);
+
+        // Create energy particles flowing along the beam
+        const beamParticles = [];
+        for (let i = 0; i < 30; i++) {
+            const particleGeometry = new THREE.CircleGeometry(0.08 + Math.random() * 0.1, 6);
+            const particleColor = Math.random() > 0.5 ? 0x00ffff : 0xffffff;
+            const particleMaterial = new THREE.MeshBasicMaterial({
+                color: particleColor,
+                transparent: true,
+                opacity: 0.7
+            });
+            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+
+            const offsetX = (Math.random() - 0.5) * 10;
+            const offsetY = (Math.random() - 0.5) * 1.2;
+            particle.position.set(
+                this.position.x + direction * (5 + offsetX),
+                this.position.y + offsetY,
+                0.15
+            );
+            this.mesh.parent.add(particle);
+
+            beamParticles.push({
+                mesh: particle,
+                offsetX: offsetX,
+                offsetY: offsetY,
+                speed: 8 + Math.random() * 4,
+                life: 0
+            });
+        }
+
+        // Animate flowing particles
+        const particleInterval = setInterval(() => {
+            beamParticles.forEach(p => {
+                p.life += 0.016;
+                p.offsetX += direction * p.speed * 0.016;
+
+                p.mesh.position.x = this.position.x + direction * (5 + p.offsetX);
+                p.mesh.position.y = this.position.y + p.offsetY;
+
+                // Fade out particles as they travel
+                p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
+            });
+        }, 16);
 
         // Beam damage area
         const beamBounds = {
             left: this.position.x + (direction > 0 ? 0 : -10),
             right: this.position.x + (direction > 0 ? 10 : 0),
-            top: this.position.y + 0.5,
-            bottom: this.position.y - 0.5
+            top: this.position.y + 0.7,
+            bottom: this.position.y - 0.7
         };
 
         // Damage all enemies in beam
@@ -375,7 +774,11 @@ export class Wizard extends Hero {
 
         // Remove beam after 1 second
         setTimeout(() => {
-            this.mesh.parent.remove(beam);
+            clearInterval(particleInterval);
+            this.mesh.parent.remove(beamGroup);
+            beamParticles.forEach(p => {
+                if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+            });
         }, 1000);
 
         // Consume ultimate charge
