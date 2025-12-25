@@ -10,13 +10,16 @@ export class Hero extends Player {
     constructor(scene, startX = 0, startY = 0) {
         super(scene, startX, startY);
 
-        // Ability system
+        // Ability system (object for named access)
         this.abilities = {
             q: null, // Ability 1
             w: null, // Ability 2
             e: null, // Ability 3
             r: null  // Ultimate
         };
+
+        // Ability array for debug menu iteration
+        this.abilitiesList = [];
 
         // Ultimate charge system
         this.ultimateCharge = 0;
@@ -118,6 +121,25 @@ export class Hero extends Player {
     }
 
     /**
+     * Apply ability damage with debug multiplier support
+     * @param {Ability} ability - Ability instance (optional)
+     * @param {Enemy} enemy - Enemy to damage
+     * @param {number} baseHits - Base hit count for this ability
+     */
+    applyAbilityDamage(ability, enemy, baseHits = 1) {
+        if (ability && typeof ability.damageEnemy === 'function') {
+            ability.damageEnemy(enemy, baseHits);
+            return;
+        }
+
+        // Fallback: no ability reference, use base hit count
+        const hits = Math.max(1, Math.round(baseHits));
+        for (let i = 0; i < hits; i++) {
+            enemy.takeDamage();
+        }
+    }
+
+    /**
      * Override checkEnemyCollisions to add ultimate charge on kill
      * @param {Array} enemies - Array of enemy instances
      */
@@ -162,5 +184,8 @@ export class Hero extends Player {
         this.abilities.w = w;
         this.abilities.e = e;
         this.abilities.r = r;
+
+        // Also create an array for easy iteration (used by debug menu)
+        this.abilitiesList = [q, w, e, r];
     }
 }

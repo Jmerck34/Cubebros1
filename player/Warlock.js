@@ -281,7 +281,7 @@ export class Warlock extends Hero {
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(lightningBounds, enemyBounds)) {
-                    enemy.takeDamage();
+                    this.applyAbilityDamage(this.abilities.q, enemy, 1);
                     this.addUltimateCharge(this.ultimateChargePerKill);
                     console.log('⚡ Lightning struck enemy!');
                 }

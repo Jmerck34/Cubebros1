@@ -222,33 +222,6 @@
             background: linear-gradient(90deg, #ff9900, #ffdd00);
             transition: width 0.2s ease;
         }
-
-        /* Reset Button */
-        #reset-button {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 0, 0, 0.7);
-            color: white;
-            border: 2px solid rgba(255, 0, 0, 0.9);
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 100;
-            display: none;
-            transition: all 0.3s ease;
-        }
-
-        #reset-button:hover {
-            background: rgba(255, 0, 0, 0.9);
-            transform: scale(1.05);
-        }
-
-        #reset-button.visible {
-            display: block;
-        }
     </style>
 </head>
 <body>
@@ -311,9 +284,6 @@
         </div>
     </div>
 
-    <!-- Reset Button (appears during game) -->
-    <button id="reset-button">← Back to Menu</button>
-
     <!-- Ability UI -->
     <div id="ability-ui">
         <div class="ability-slot" id="ability-q">
@@ -346,23 +316,5 @@
     </div>
 
     <script type="module" src="main_hero_select.js"></script>
-
-    <script>
-        // Show reset button when game starts
-        window.addEventListener('load', () => {
-            const heroMenu = document.getElementById('hero-menu');
-            const resetButton = document.getElementById('reset-button');
-
-            const observer = new MutationObserver(() => {
-                if (heroMenu.style.display === 'none') {
-                    resetButton.classList.add('visible');
-                } else {
-                    resetButton.classList.remove('visible');
-                }
-            });
-
-            observer.observe(heroMenu, { attributes: true, attributeFilter: ['style'] });
-        });
-    </script>
 </body>
 </html>

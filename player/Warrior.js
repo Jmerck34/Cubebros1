@@ -238,7 +238,7 @@ export class Warrior extends Hero {
                 top: this.position.y + slashHeight,
                 bottom: this.position.y - slashHeight
             };
-            this.damageEnemiesInArea(slashBounds);
+            this.damageEnemiesInArea(slashBounds, this.abilities.q);
         }
 
         // Animate - fade out and scale up (faster fade)
@@ -295,7 +295,7 @@ export class Warrior extends Hero {
                 top: this.position.y + 1,
                 bottom: this.position.y - 1
             };
-            this.damageEnemiesInArea(bashBounds);
+            this.damageEnemiesInArea(bashBounds, this.abilities.w);
         }, 100);
 
         setTimeout(() => {
@@ -380,7 +380,7 @@ export class Warrior extends Hero {
                 top: this.position.y + whirlwindRange,
                 bottom: this.position.y - whirlwindRange
             };
-            this.damageEnemiesInArea(whirlwindBounds);
+            this.damageEnemiesInArea(whirlwindBounds, this.abilities.r);
 
             if (spinCount >= 16) { // 2 full rotations
                 clearInterval(spinInterval);
@@ -497,14 +497,15 @@ export class Warrior extends Hero {
     /**
      * Damage all enemies within a given area
      * @param {Object} bounds - AABB bounds to check {left, right, top, bottom}
+     * @param {Ability} ability - Ability to scale damage with debug multipliers
      */
-    damageEnemiesInArea(bounds) {
+    damageEnemiesInArea(bounds, ability = null) {
         for (const enemy of this.enemies) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
-                enemy.takeDamage();
+                this.applyAbilityDamage(ability, enemy, 1);
                 this.addUltimateCharge(this.ultimateChargePerKill);
                 console.log('💥 Ability hit enemy!');
             }

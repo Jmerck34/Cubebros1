@@ -42,6 +42,9 @@ export class Player {
         this.currentHealth = 100;
         this.healthBar = new HealthBar(scene, this, this.maxHealth);
 
+        // Debug physics multipliers (set by DebugMenu)
+        this.debugPhysics = null;
+
         // Sync mesh position
         this.syncMeshPosition();
     }
@@ -131,11 +134,14 @@ export class Player {
         // Horizontal movement
         this.velocity.x = 0; // Reset horizontal velocity
 
+        // Apply debug speed multiplier if available
+        const speedMultiplier = this.debugPhysics ? this.debugPhysics.moveSpeedMultiplier : 1.0;
+
         if (input.isLeftPressed()) {
-            this.velocity.x = -PLAYER_SPEED;
+            this.velocity.x = -PLAYER_SPEED * speedMultiplier;
         }
         if (input.isRightPressed()) {
-            this.velocity.x = PLAYER_SPEED;
+            this.velocity.x = PLAYER_SPEED * speedMultiplier;
         }
 
         // Apply horizontal velocity

@@ -3,12 +3,17 @@
  * @class Ability
  */
 export class Ability {
-    constructor(name, cooldown, isUltimate = false) {
+    constructor(name, cooldown, isUltimate = false, baseDamage = 1) {
         this.name = name;
         this.cooldown = cooldown; // Cooldown in seconds
         this.currentCooldown = 0;
         this.isUltimate = isUltimate;
         this.isReady = true;
+        this.baseDamage = baseDamage; // Base damage for this ability
+
+        // Debug multipliers (set by DebugMenu)
+        this.damageMultiplier = 1.0;
+        this.cooldownMultiplier = 1.0;
     }
 
     /**
@@ -17,7 +22,10 @@ export class Ability {
      */
     update(deltaTime) {
         if (this.currentCooldown > 0) {
-            this.currentCooldown -= deltaTime;
+            // Apply cooldown multiplier (higher = faster cooldown recovery)
+            const cooldownSpeed = this.cooldownMultiplier || 1.0;
+            this.currentCooldown -= deltaTime * cooldownSpeed;
+
             if (this.currentCooldown <= 0) {
                 this.currentCooldown = 0;
                 this.isReady = true;
@@ -50,5 +58,36 @@ export class Ability {
      */
     getCooldownPercent() {
         return this.currentCooldown / this.cooldown;
+    }
+
+    /**
+     * Apply damage multiplier to a base damage value
+     * @param {number} baseDamage - The base damage amount (optional, uses this.baseDamage if not provided)
+     * @returns {number} - The damage after applying multiplier
+     */
+    getAdjustedDamage(baseDamage = null) {
+        const damage = baseDamage !== null ? baseDamage : this.baseDamage;
+        const adjustedDamage = damage * (this.damageMultiplier || 1.0);
+
+        // Log if multiplier is not 1.0
+        if (this.damageMultiplier !== 1.0) {
+            console.log(`${this.name} damage: ${damage} × ${this.damageMultiplier.toFixed(2)} = ${adjustedDamage.toFixed(1)}`);
+        }
+
+        return adjustedDamage;
+    }
+
+    /**
+     * Helper to deal damage to an enemy with multiplier applied
+     * @param {Enemy} enemy - The enemy to damage
+     * @param {number} baseDamageHits - Number of base damage hits (default 1)
+     */
+    damageEnemy(enemy, baseDamageHits = 1) {
+        const adjustedDamage = this.getAdjustedDamage(baseDamageHits);
+        const hits = Math.max(1, Math.round(adjustedDamage));
+
+        for (let i = 0; i < hits; i++) {
+            enemy.takeDamage();
+        }
     }
 }

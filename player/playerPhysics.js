@@ -6,8 +6,11 @@ import { GRAVITY, JUMP_VELOCITY } from '../core/constants.js';
  * @param {number} deltaTime - Time since last frame in seconds
  */
 export function applyGravity(player, deltaTime) {
+    // Apply debug gravity multiplier if available
+    const gravityMultiplier = player.debugPhysics ? player.debugPhysics.gravityMultiplier : 1.0;
+
     // Apply gravity to vertical velocity
-    player.velocity.y += GRAVITY * deltaTime;
+    player.velocity.y += GRAVITY * gravityMultiplier * deltaTime;
 
     // Apply velocity to position
     player.position.y += player.velocity.y * deltaTime;
@@ -29,9 +32,12 @@ export function handleJump(player, input) {
         player.jumpsRemaining = 2;
     }
 
+    // Apply debug jump force multiplier if available
+    const jumpMultiplier = player.debugPhysics ? player.debugPhysics.jumpForceMultiplier : 1.0;
+
     // Handle jump with key press detection to prevent spam
     if (jumpPressed && !player.jumpKeyWasPressed && player.jumpsRemaining > 0) {
-        player.velocity.y = JUMP_VELOCITY;
+        player.velocity.y = JUMP_VELOCITY * jumpMultiplier;
         player.jumpsRemaining--;
         player.isGrounded = false;
 

@@ -255,8 +255,7 @@ export class Wizard extends Hero {
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(fireballBounds, enemyBounds)) {
-                    enemy.takeDamage();
-                    enemy.takeDamage(); // Strong damage
+                    this.applyAbilityDamage(this.abilities.q, enemy, 2);
                     this.addUltimateCharge(this.ultimateChargePerKill);
                     console.log('🔥 Fireball hit!');
                     hit = true;
@@ -373,7 +372,7 @@ export class Wizard extends Hero {
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(windBounds, enemyBounds)) {
-                enemy.takeDamage();
+                this.applyAbilityDamage(this.abilities.w, enemy, 1);
                 // Knockback
                 enemy.position.x += direction * 3;
                 this.addUltimateCharge(this.ultimateChargePerKill);
@@ -764,9 +763,7 @@ export class Wizard extends Hero {
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(beamBounds, enemyBounds)) {
                 // Massive damage based on charge time
-                for (let i = 0; i < damage; i++) {
-                    enemy.takeDamage();
-                }
+                this.applyAbilityDamage(this.abilities.r, enemy, damage);
                 this.addUltimateCharge(this.ultimateChargePerKill);
                 console.log(`⚡ KAME HAME HA hit for ${damage} damage!`);
             }

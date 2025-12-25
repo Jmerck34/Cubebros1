@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Slider Test</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial;
+            padding: 50px;
+        }
+        .test-container {
+            background: rgba(0,0,0,0.2);
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        input[type="range"] {
+            width: 300px;
+            height: 25px;
+        }
+        .value-display {
+            display: inline-block;
+            min-width: 80px;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 10px;
+            margin-left: 15px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Slider Functionality Test</h1>
+    <p>If these sliders work, the problem is elsewhere in the game code.</p>
+
+    <div class="test-container">
+        <h3>Test 1: Basic Slider</h3>
+        <input type="range" id="slider1" min="0" max="100" value="50" step="1">
+        <span class="value-display" id="value1">50</span>
+    </div>
+
+    <div class="test-container">
+        <h3>Test 2: Physics Multiplier (like in game)</h3>
+        <label>Move Speed</label><br>
+        <input type="range" id="slider2" min="0" max="15" value="5" step="0.5">
+        <span class="value-display" id="value2">5</span>
+    </div>
+
+    <div class="test-container">
+        <h3>Console Output:</h3>
+        <div id="console-output" style="background: black; padding: 10px; border-radius: 3px; font-family: monospace; font-size: 12px;"></div>
+    </div>
+
+    <script>
+        const consoleDiv = document.getElementById('console-output');
+
+        function log(message) {
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(line);
+            console.log(message);
+        }
+
+        // Test 1
+        const slider1 = document.getElementById('slider1');
+        const value1 = document.getElementById('value1');
+
+        slider1.oninput = function() {
+            value1.textContent = this.value;
+            log(`Slider 1 changed to ${this.value}`);
+        };
+
+        // Test 2
+        const slider2 = document.getElementById('slider2');
+        const value2 = document.getElementById('value2');
+
+        slider2.oninput = function() {
+            const multiplier = parseFloat(this.value) / 5;
+            value2.textContent = this.value;
+            log(`Slider 2: value=${this.value}, multiplier=${multiplier.toFixed(2)}x`);
+        };
+
+        log('Test page loaded - try moving the sliders!');
+    </script>
+</body>
+</html>

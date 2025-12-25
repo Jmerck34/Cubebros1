@@ -13,10 +13,12 @@ import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
+import { PauseMenu } from './ui/PauseMenu.js';
+import { DebugMenu } from './ui/DebugMenu.js';
 
 // Game state
 let gameStarted = false;
-let scene, camera, renderer, input, level, environment, player, uiManager, cameraFollow, gameLoop;
+let scene, camera, renderer, input, level, environment, player, uiManager, cameraFollow, gameLoop, pauseMenu, debugMenu;
 
 // Hero selection
 let selectedHeroClass = null;
@@ -105,9 +107,35 @@ function startGame(HeroClass) {
     cameraFollow = new CameraFollow(camera, player);
     cameraFollow.setSmoothing(0.1);
 
+    // Create pause menu
+    pauseMenu = new PauseMenu(
+        () => {
+            // Back to Menu callback
+            resetGame();
+        },
+        () => {
+            // Resume callback (optional - menu handles resume itself)
+        }
+    );
+
+    // Create debug menu (or update player if it exists)
+    if (!debugMenu) {
+        debugMenu = new DebugMenu(player);
+    } else {
+        debugMenu.setPlayer(player);
+    }
+
+    // Apply debug menu physics multipliers to player
+    player.debugPhysics = debugMenu.getPhysicsMultipliers();
+
     // Game Loop
     gameLoop = new GameLoop(
         (deltaTime) => {
+            // Skip game updates if paused or debug menu is open
+            if ((pauseMenu && pauseMenu.isPaused()) || (debugMenu && debugMenu.isPaused())) {
+                return;
+            }
+
             player.update(deltaTime, input);
             level.updateEnemies(deltaTime);
             level.checkCollisions(player);
@@ -145,6 +173,12 @@ function resetGame() {
         gameLoop.stop();
     }
 
+    // Destroy pause menu
+    if (pauseMenu) {
+        pauseMenu.destroy();
+        pauseMenu = null;
+    }
+
     // Clear scene
     if (scene && player) {
         scene.remove(player.mesh);
@@ -178,11 +212,6 @@ window.addEventListener('load', () => {
 
     document.getElementById('select-warlock').addEventListener('click', () => {
         startGame(Warlock);
-    });
-
-    // Setup reset button
-    document.getElementById('reset-button').addEventListener('click', () => {
-        resetGame();
     });
 
     // Render empty scene while in menu

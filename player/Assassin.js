@@ -197,7 +197,7 @@ export class Assassin extends Hero {
                     top: this.position.y + 1.2,
                     bottom: this.position.y - 1.2
                 };
-                this.damageEnemiesInArea(leftSlashBounds, true);
+                this.damageEnemiesInArea(leftSlashBounds, this.abilities.q, true);
 
                 // Deal damage on RIGHT side
                 const rightSlashBounds = {
@@ -206,7 +206,7 @@ export class Assassin extends Hero {
                     top: this.position.y + 1.2,
                     bottom: this.position.y - 1.2
                 };
-                this.damageEnemiesInArea(rightSlashBounds, true);
+                this.damageEnemiesInArea(rightSlashBounds, this.abilities.q, true);
             }, i * 150);
         }
     }
@@ -364,7 +364,7 @@ export class Assassin extends Hero {
                 top: y + 1.5,
                 bottom: y - 1.5
             };
-            this.damageEnemiesInArea(cloudBounds);
+            this.damageEnemiesInArea(cloudBounds, this.abilities.w);
 
             if (cloudDuration <= 0) {
                 clearInterval(damageInterval);
@@ -479,9 +479,7 @@ export class Assassin extends Hero {
             this.position.y = closestEnemy.position.y;
 
             // Deal massive damage
-            closestEnemy.takeDamage();
-            closestEnemy.takeDamage(); // Double damage
-            closestEnemy.takeDamage(); // Triple damage!
+            this.applyAbilityDamage(this.abilities.r, closestEnemy, 3);
 
             this.addUltimateCharge(this.ultimateChargePerKill);
 
@@ -526,19 +524,19 @@ export class Assassin extends Hero {
     /**
      * Damage enemies in area with optional bleed effect
      */
-    damageEnemiesInArea(bounds, applyBleed = false) {
+    damageEnemiesInArea(bounds, ability = null, applyBleed = false) {
         for (const enemy of this.enemies) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
-                enemy.takeDamage();
+                this.applyAbilityDamage(ability, enemy, 1);
                 this.addUltimateCharge(this.ultimateChargePerKill);
                 console.log('💥 Assassin hit enemy!');
 
                 // Apply bleed (additional damage over time)
                 if (applyBleed) {
-                    this.applyBleed(enemy);
+                    this.applyBleed(enemy, ability);
                 }
             }
         }
@@ -547,11 +545,11 @@ export class Assassin extends Hero {
     /**
      * Apply bleed damage over time
      */
-    applyBleed(enemy) {
+    applyBleed(enemy, ability = null) {
         let bleedTicks = 3;
         const bleedInterval = setInterval(() => {
             if (enemy.isAlive && bleedTicks > 0) {
-                enemy.takeDamage();
+                this.applyAbilityDamage(ability, enemy, 1);
                 console.log('🩸 Bleed damage!');
                 bleedTicks--;
             } else {
