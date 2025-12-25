@@ -9,6 +9,7 @@ import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
+import { Archer } from './player/Archer.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
 import { CameraFollow } from './camera/CameraFollow.js';
@@ -82,6 +83,9 @@ const player = new Warrior(scene, 0, 0);
 // Option 4: Warlock (Dark Staff)
 // const player = new Warlock(scene, 0, 0);
 
+// Option 5: Archer (Bow & Arrow)
+// const player = new Archer(scene, 0, 0);
+
 // Connect player to enemy list for ability damage detection
 player.enemies = level.enemies;
 
@@ -148,6 +152,9 @@ console.log('  Q/Click = Dagger Combo (bleed) | W = Poison Bomb | E = Shadow Wal
 console.log('');
 console.log('🤖 CYBORG:');
 console.log('  Q/Click = Fireball | W = Wind Push | E = Bubble Shield | R = Kame Hame Ha');
+console.log('');
+console.log('🏹 ARCHER:');
+console.log('  Q/Click = Shoot Arrow | W = Healing Potion | E = Teleport Arrow | R = Machine Bow');
 console.log('');
 console.log('💀 WARLOCK:');
 console.log('  Q/Click = Lightning Strike | W = Fear | E = Hover | R = Mind Control');

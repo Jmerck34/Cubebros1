@@ -202,7 +202,8 @@ export class DebugMenu {
             'Cyborg': ['Fireball', 'Wind Push', 'Bubble Shield', 'Kame Hame Ha'],
             'Warlock': ['Lightning Strike', 'Fear', 'Hover', 'Mind Control'],
             'Warrior': ['Sword Slash', 'Shield Bash', 'Dash', 'Whirlwind'],
-            'Assassin': ['Dagger Combo', 'Poison Bomb', 'Shadow Walk', 'Assassinate']
+            'Assassin': ['Dagger Combo', 'Poison Bomb', 'Shadow Walk', 'Assassinate'],
+            'Archer': ['Shoot Arrow', 'Healing Potion', 'Teleport Arrow', 'Machine Bow']
         };
 
         return abilityMap[heroName] || ['A1', 'A2', 'A3', 'Ultimate'];

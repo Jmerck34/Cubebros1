@@ -9,6 +9,7 @@ import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
+import { Archer } from './player/Archer.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
 import { CameraFollow } from './camera/CameraFollow.js';
@@ -159,6 +160,7 @@ function startGame(HeroClass) {
         [Warrior.name]: '⚔️ WARRIOR',
         [Assassin.name]: '🗡️ ASSASSIN',
         [Cyborg.name]: '🤖 CYBORG',
+        [Archer.name]: '🏹 ARCHER',
         [Warlock.name]: '💀 WARLOCK'
     };
 
@@ -213,6 +215,10 @@ window.addEventListener('load', () => {
 
     document.getElementById('select-warlock').addEventListener('click', () => {
         startGame(Warlock);
+    });
+
+    document.getElementById('select-archer').addEventListener('click', () => {
+        startGame(Archer);
     });
 
     // Render empty scene while in menu

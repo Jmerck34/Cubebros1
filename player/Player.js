@@ -54,6 +54,7 @@ export class Player {
         this.visualScaleY = 1;
         this.visualScaleZ = 1;
         this.visualTiltZ = 0;
+        this.moveSpeedMultiplier = 1;
 
         // Sync mesh position
         this.syncMeshPosition();
@@ -206,7 +207,8 @@ export class Player {
         this.velocity.x = 0; // Reset horizontal velocity
 
         // Apply debug speed multiplier if available
-        const speedMultiplier = this.debugPhysics ? this.debugPhysics.moveSpeedMultiplier : 1.0;
+        const debugMultiplier = this.debugPhysics ? this.debugPhysics.moveSpeedMultiplier : 1.0;
+        const speedMultiplier = debugMultiplier * (this.moveSpeedMultiplier || 1);
 
         if (input.isLeftPressed()) {
             this.velocity.x = -PLAYER_SPEED * speedMultiplier;

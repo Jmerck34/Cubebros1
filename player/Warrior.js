@@ -518,11 +518,15 @@ export class Warrior extends Hero {
      */
     syncMeshPosition() {
         this.mesh.position.x = this.position.x;
-        this.mesh.position.y = this.position.y;
+        this.mesh.position.y = this.position.y + (this.visualBob || 0);
         this.mesh.position.z = this.position.z;
 
-        // Keep sword and shield at correct relative positions
-        // (They're attached to mesh, so they move automatically)
+        // Preserve facing on X, animate Y/Z and tilt
+        const facing = this.mesh.scale.x >= 0 ? 1 : -1;
+        this.mesh.scale.x = Math.abs(this.mesh.scale.x) * facing;
+        this.mesh.scale.y = this.visualScaleY || 1;
+        this.mesh.scale.z = this.visualScaleZ || 1;
+        this.mesh.rotation.z = this.visualTiltZ || 0;
     }
 
     /**

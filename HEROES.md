@@ -18,6 +18,9 @@ const player = new Warrior(scene, 0, 0);
 
 // Option 4: Warlock (Dark Staff)
 // const player = new Warlock(scene, 0, 0);
+
+// Option 5: Archer (Bow & Arrow)
+// const player = new Archer(scene, 0, 0);
 ```
 
 ---
@@ -123,6 +126,32 @@ const player = new Warrior(scene, 0, 0);
 
 ---
 
+## 🏹 Archer - Bow & Arrow Marksman
+
+**Theme:** Ranged marksman with charge shots and mobility
+**Color:** Forest Green
+**Weapon:** Bow & Arrow
+
+### Abilities:
+- **Q / Left Click - Shoot Arrow** (charge)
+  - Hold to increase damage and range
+  - Bow pullback animation on charge
+
+- **W - Healing Potion** (8s cooldown)
+  - Heal over time
+  - Slight movement speed boost
+
+- **E - Teleport Arrow** (6s cooldown)
+  - Next arrow teleports you to its landing point
+
+- **R - Machine Bow Ultimate** (Charge required)
+  - Rapid max-power arrows
+  - Pierces all enemies
+
+**Playstyle:** Precision/Utility - Charge shots for range, potion sustain, teleport repositioning, ultimate for burst
+
+---
+
 ## 💀 Warlock - Dark Magic Manipulator
 
 **Theme:** Dark magic with crowd control and mobility
@@ -181,6 +210,7 @@ const player = new Warrior(scene, 0, 0);
 | Assassin | Hard | Melee | Very High | Medium | High |
 | Cyborg | Medium | Ranged | High | Medium | Low |
 | Warlock | Medium | Medium | Medium | Low | High |
+| Archer | Medium | Long | High | Low | High |
 
 ---
 
@@ -209,6 +239,11 @@ const player = new Warrior(scene, 0, 0);
 - Hover over pits and hazards
 - Control enemies, don't face-tank them
 
+### Archer
+- Charge shots for range and damage
+- Use Teleport Arrow to reposition aggressively
+- Potion is best before risky jumps or fights
+
 ---
 
 ## Files
@@ -217,6 +252,7 @@ const player = new Warrior(scene, 0, 0);
 - `player/Assassin.js` - Assassin class implementation
 - `player/Cyborg.js` - Cyborg class implementation
 - `player/Warlock.js` - Warlock class implementation
+- `player/Archer.js` - Archer class implementation
 - `main_all_heroes.js` - Main game file with hero selection
 - `index_all_heroes.html` - HTML page to test all heroes
 

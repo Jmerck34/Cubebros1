@@ -80,6 +80,12 @@ This control scheme is more intuitive for MOBA-style gameplay:
 - **E:** Hover (cloud flight)
 - **R:** Mind Control (convert enemies)
 
+### Archer
+- **Q / Left Click:** Shoot Arrow (charge for range)
+- **Right Click:** Healing Potion (HoT + speed)
+- **E:** Teleport Arrow (blink)
+- **R:** Machine Bow (rapid fire)
+
 ---
 
 ## 🔧 Technical Implementation
