@@ -234,7 +234,7 @@ All directional abilities now:
 New visual polish includes:
 - **Warrior:** Blue dash trail
 - **Assassin:** Purple teleport trail
-- **Wizard:** Explosion particles, beam effects
+- **Cyborg:** Explosion particles, beam effects
 - **Warlock:** Lightning bolts, purple waves
 
 ### Equipment Behavior:

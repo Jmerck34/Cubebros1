@@ -4,18 +4,19 @@ import { Ability } from './Ability.js';
 import { checkAABBCollision } from '../utils/collision.js';
 
 /**
- * Wizard Hero - Ranged caster with elemental magic
- * @class Wizard
+ * Cyborg Hero - Tech caster with built-in emitters
+ * @class Cyborg
  */
-export class Wizard extends Hero {
+export class Cyborg extends Hero {
     constructor(scene, startX = 0, startY = 0) {
         super(scene, startX, startY);
 
-        // Change body color to blue (wizard theme)
-        this.mesh.material.color.set(0x0000ff);
+        // Change body color to steel-blue (cyborg theme)
+        this.setBodyColor(0x2b3f5a);
 
-        // Add magic book
-        this.createEquipment(scene);
+        // Add cyborg gear
+        this.createCyborgGear(scene);
+        this.addCyborgCore();
 
         // Enemy reference (set by main.js)
         this.enemies = [];
@@ -30,40 +31,96 @@ export class Wizard extends Hero {
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
 
-        // Set wizard abilities
+        // Set cyborg abilities
         this.initializeAbilities();
     }
 
     /**
-     * Create magic book visual
+     * Create cyborg gear (arm cannon, backpack, visor, antenna)
      * @param {THREE.Scene} scene - The scene
      */
-    createEquipment(scene) {
-        // Create BOOK
-        this.bookGroup = new THREE.Group();
+    createCyborgGear(scene) {
+        this.cyborgRig = new THREE.Group();
 
-        // Book cover
-        const bookGeometry = new THREE.BoxGeometry(0.3, 0.4, 0.1);
-        const bookMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
-        const book = new THREE.Mesh(bookGeometry, bookMaterial);
-        this.bookGroup.add(book);
+        // Arm cannon (right side)
+        const cannonBase = new THREE.Mesh(
+            new THREE.BoxGeometry(0.22, 0.22, 0.5),
+            new THREE.MeshBasicMaterial({ color: 0x4c5f75 })
+        );
+        cannonBase.position.set(0.62, 0.05, 0);
+        this.cyborgRig.add(cannonBase);
 
-        // Book pages (white)
-        const pagesGeometry = new THREE.BoxGeometry(0.28, 0.38, 0.08);
-        const pagesMaterial = new THREE.MeshBasicMaterial({ color: 0xffffcc });
-        const pages = new THREE.Mesh(pagesGeometry, pagesMaterial);
-        pages.position.set(0.01, 0, 0);
-        this.bookGroup.add(pages);
+        const cannonCore = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.06, 0.35, 12),
+            new THREE.MeshBasicMaterial({ color: 0x66ffff })
+        );
+        cannonCore.rotation.x = Math.PI / 2;
+        cannonCore.position.set(0.7, 0.05, 0);
+        this.cyborgRig.add(cannonCore);
 
-        // Position book floating in front
-        this.bookGroup.position.set(0.5, 0.2, 0.1);
-        this.bookGroup.rotation.y = 0.3;
-        this.mesh.add(this.bookGroup);
-        this.book = this.bookGroup;
+        // Backpack module
+        const pack = new THREE.Mesh(
+            new THREE.BoxGeometry(0.4, 0.5, 0.18),
+            new THREE.MeshBasicMaterial({ color: 0x1b2736 })
+        );
+        pack.position.set(0, 0.05, -0.58);
+        this.cyborgRig.add(pack);
+
+        // Energy cell
+        const cell = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.3, 0.12),
+            new THREE.MeshBasicMaterial({ color: 0x00d2ff })
+        );
+        cell.position.set(0.18, 0.05, -0.65);
+        this.cyborgRig.add(cell);
+
+        // Visor band
+        const visor = new THREE.Mesh(
+            new THREE.BoxGeometry(0.7, 0.12, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0x0a0f18 })
+        );
+        visor.position.set(0, 0.18, 0.56);
+        this.cyborgRig.add(visor);
+
+        // Antenna
+        const antenna = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.02, 0.02, 0.35, 8),
+            new THREE.MeshBasicMaterial({ color: 0x9fb4c8 })
+        );
+        antenna.position.set(-0.25, 0.68, -0.05);
+        this.cyborgRig.add(antenna);
+
+        const antennaTip = new THREE.Mesh(
+            new THREE.SphereGeometry(0.05, 10, 10),
+            new THREE.MeshBasicMaterial({ color: 0x66ffff })
+        );
+        antennaTip.position.set(-0.25, 0.88, -0.05);
+        this.cyborgRig.add(antennaTip);
+
+        this.mesh.add(this.cyborgRig);
     }
 
     /**
-     * Initialize wizard abilities
+     * Add a glowing core disc to the chest
+     */
+    addCyborgCore() {
+        const core = new THREE.Mesh(
+            new THREE.CircleGeometry(0.18, 20),
+            new THREE.MeshBasicMaterial({ color: 0x66ffff, transparent: true, opacity: 0.9 })
+        );
+        core.position.set(0, 0.05, 0.57);
+        this.mesh.add(core);
+
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.08, 0.12, 16),
+            new THREE.MeshBasicMaterial({ color: 0x1a2f5f })
+        );
+        ring.position.set(0, 0.05, 0.58);
+        this.mesh.add(ring);
+    }
+
+    /**
+     * Initialize cyborg abilities
      */
     initializeAbilities() {
         // Q - Fireball
@@ -127,7 +184,7 @@ export class Wizard extends Hero {
     setFacingDirection(direction) {
         if (this.facingDirection !== direction) {
             this.facingDirection = direction;
-            this.mesh.scale.x = direction; // Flip entire mesh with book
+            this.mesh.scale.x = direction; // Flip entire mesh with gear
         }
     }
 
@@ -137,9 +194,9 @@ export class Wizard extends Hero {
     castFireball() {
         console.log('🔥 FIREBALL!');
 
-        // Animate book
-        this.book.rotation.y = -0.3;
-        setTimeout(() => { this.book.rotation.y = 0.3; }, 200);
+        // Animate gear
+        this.cyborgRig.rotation.y = -0.3;
+        setTimeout(() => { this.cyborgRig.rotation.y = 0.3; }, 200);
 
         // Create fire missile group
         const fireballGroup = new THREE.Group();
@@ -288,9 +345,9 @@ export class Wizard extends Hero {
     castWindPush() {
         console.log('💨 WIND WAVE!');
 
-        // Animate book
-        this.book.scale.set(1.3, 1.3, 1.3);
-        setTimeout(() => { this.book.scale.set(1, 1, 1); }, 300);
+        // Animate gear
+        this.cyborgRig.scale.set(1.3, 1.3, 1.3);
+        setTimeout(() => { this.cyborgRig.scale.set(1, 1, 1); }, 300);
 
         const direction = this.facingDirection;
         const windParticles = [];
@@ -387,9 +444,9 @@ export class Wizard extends Hero {
     castBubbleShield() {
         console.log('🛡️ BUBBLE SHIELD BURST!');
 
-        // Animate book
-        this.book.scale.set(1.2, 1.2, 1.2);
-        setTimeout(() => { this.book.scale.set(1, 1, 1); }, 200);
+        // Animate gear
+        this.cyborgRig.scale.set(1.2, 1.2, 1.2);
+        setTimeout(() => { this.cyborgRig.scale.set(1, 1, 1); }, 200);
 
         // Create burst particles
         const burstParticles = [];
@@ -576,7 +633,7 @@ export class Wizard extends Hero {
         const glow = new THREE.Mesh(glowGeometry, glowMaterial);
         energyBall.add(glow);
 
-        // Position in front of wizard (based on facing direction)
+        // Position in front of cyborg (based on facing direction)
         energyBall.position.set(
             this.position.x + (0.7 * this.facingDirection),
             this.position.y,
@@ -621,7 +678,7 @@ export class Wizard extends Hero {
             const growthScale = 0.2 + (growthTime / 2) * 0.8;
             energyBall.scale.set(growthScale, growthScale, growthScale);
 
-            // Update energy ball position to follow wizard
+            // Update energy ball position to follow cyborg
             energyBall.position.x = this.position.x + (0.7 * this.facingDirection);
             energyBall.position.y = this.position.y;
 

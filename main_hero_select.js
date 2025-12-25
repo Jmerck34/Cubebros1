@@ -7,7 +7,7 @@ import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
 import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
-import { Wizard } from './player/Wizard.js';
+import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
@@ -158,7 +158,7 @@ function startGame(HeroClass) {
     const heroNames = {
         [Warrior.name]: '⚔️ WARRIOR',
         [Assassin.name]: '🗡️ ASSASSIN',
-        [Wizard.name]: '🔮 WIZARD',
+        [Cyborg.name]: '🤖 CYBORG',
         [Warlock.name]: '💀 WARLOCK'
     };
 
@@ -180,10 +180,11 @@ function resetGame() {
     }
 
     // Clear scene
-    if (scene && player) {
-        scene.remove(player.mesh);
-        level.platforms.forEach(p => scene.remove(p.mesh));
-        level.enemies.forEach(e => scene.remove(e.mesh));
+    if (scene) {
+        if (player && typeof player.destroy === 'function') {
+            player.destroy();
+        }
+        scene.clear();
     }
 
     // Show menu again
@@ -206,8 +207,8 @@ window.addEventListener('load', () => {
         startGame(Assassin);
     });
 
-    document.getElementById('select-wizard').addEventListener('click', () => {
-        startGame(Wizard);
+    document.getElementById('select-cyborg').addEventListener('click', () => {
+        startGame(Cyborg);
     });
 
     document.getElementById('select-warlock').addEventListener('click', () => {

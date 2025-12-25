@@ -136,9 +136,9 @@ A 2D side-scrolling platformer built with Three.js, inspired by New Super Mario 
 
 ---
 
-### 3. **Wizard** (`player/Wizard.js`)
+### 3. **Cyborg** (`player/Cyborg.js`)
 **Color:** Purple (0x9932cc)
-**Equipment:** Magic book
+**Equipment:** Arm Cannon
 **Playstyle:** Ranged caster with zone control
 
 **Abilities:**
@@ -174,7 +174,7 @@ A 2D side-scrolling platformer built with Three.js, inspired by New Super Mario 
 
 **Technical Details:**
 - Facing direction flips entire mesh (scale.x)
-- Book positioned at (-0.3, 0.3, 0.2) relative to wizard
+- Gear positioned relative to cyborg mesh
 - Beam width: 1 unit, length: 10 units
 
 ---
@@ -410,7 +410,7 @@ for (const platform of level.platforms) {
 │   ├── Hero.js                  # Base hero class
 │   ├── Warrior.js               # Warrior implementation
 │   ├── Assassin.js              # Assassin implementation
-│   ├── Wizard.js                # Wizard implementation
+│   ├── Cyborg.js                # Cyborg implementation
 │   ├── Warlock.js               # Warlock implementation
 │   └── playerPhysics.js         # Shared physics functions
 │
@@ -539,7 +539,7 @@ this.mesh.scale.x = this.facingDirection;
 - [ ] Ground slam from air
 - [ ] Shield reflection for projectiles
 
-### Wizard
+### Cyborg
 - [ ] Fireball explosion on impact
 - [ ] Multi-target fireball split
 - [ ] Ice variant spells
@@ -564,13 +564,13 @@ this.mesh.scale.x = this.facingDirection;
 |------|----------|-------|-------|---------|---------|
 | Warrior | Medium | Melee | Medium | High | Medium |
 | Assassin | High | Melee | Very High | Low | High |
-| Wizard | Low | Long | Medium | Medium | Medium |
+| Cyborg | Low | Long | Medium | Medium | Medium |
 | Warlock | Medium | Medium | Low | High | Very High |
 
 **Cooldown Comparison:**
 - Warrior Q: 1s (fastest)
 - Assassin Q: ~2s
-- Wizard Q: ~2s
+- Cyborg Q: ~2s
 - Warrior E: 4s
 - All ultimates: Charge-based (no cooldown)
 

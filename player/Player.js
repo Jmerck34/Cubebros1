@@ -13,13 +13,16 @@ export class Player {
         // Store scene reference for health bar
         this.scene = scene;
 
-        // Create player mesh (green cube)
+        // Create player mesh (neutral base cube)
         const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Green
+        const material = new THREE.MeshBasicMaterial({ color: 0x4a4f57 }); // Neutral slate
         this.mesh = new THREE.Mesh(geometry, material);
 
         // Add to scene
         scene.add(this.mesh);
+
+        // Add stylized cube details (armor plates, vents, outline)
+        this.createCubeDetails();
 
         // Add eyes to character
         this.createEyes();
@@ -45,8 +48,74 @@ export class Player {
         // Debug physics multipliers (set by DebugMenu)
         this.debugPhysics = null;
 
+        // Simple visual animation state for cube heroes
+        this.animTime = 0;
+        this.visualBob = 0;
+        this.visualScaleY = 1;
+        this.visualScaleZ = 1;
+        this.visualTiltZ = 0;
+
         // Sync mesh position
         this.syncMeshPosition();
+    }
+
+    /**
+     * Add extra geometry to make the cube hero feel more crafted
+     */
+    createCubeDetails() {
+        const frameMaterial = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+        const panelMaterial = new THREE.MeshBasicMaterial({ color: 0x0d0d0d });
+        const accentMaterial = new THREE.MeshBasicMaterial({ color: 0xdddddd });
+        const coreMaterial = new THREE.MeshBasicMaterial({ color: 0x66ffff });
+
+        // Edge outline
+        const edges = new THREE.EdgesGeometry(this.mesh.geometry);
+        const edgeLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x111111 }));
+        this.mesh.add(edgeLines);
+
+        // Front face panel
+        const frontPanel = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 0.06), panelMaterial);
+        frontPanel.position.set(0, 0, 0.53);
+        this.mesh.add(frontPanel);
+        this.frontPanel = frontPanel;
+
+        // Side vents
+        const ventGeometry = new THREE.BoxGeometry(0.06, 0.4, 0.6);
+        const leftVent = new THREE.Mesh(ventGeometry, frameMaterial);
+        leftVent.position.set(-0.53, -0.05, 0);
+        this.mesh.add(leftVent);
+        const rightVent = new THREE.Mesh(ventGeometry, frameMaterial);
+        rightVent.position.set(0.53, -0.05, 0);
+        this.mesh.add(rightVent);
+
+        // Top plate
+        const topPlate = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.6), accentMaterial);
+        topPlate.position.set(0, 0.52, 0);
+        this.mesh.add(topPlate);
+
+        // Belt band
+        const belt = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.16, 1.02), frameMaterial);
+        belt.position.set(0, -0.05, 0);
+        this.mesh.add(belt);
+
+        // Core gem
+        const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), coreMaterial);
+        core.position.set(0, 0.05, 0.54);
+        this.mesh.add(core);
+
+        // Slight tint on the front panel to match hero color
+        this.bodyCore = core;
+    }
+
+    /**
+     * Set body color and synced accent elements
+     * @param {number} hexColor - Hex color for the body
+     */
+    setBodyColor(hexColor) {
+        this.mesh.material.color.set(hexColor);
+        if (this.frontPanel) {
+            this.frontPanel.material.color.set(hexColor);
+        }
     }
 
     /**
@@ -131,6 +200,8 @@ export class Player {
      * @param {InputManager} input - Input manager instance
      */
     update(deltaTime, input) {
+        const wasGrounded = this.isGrounded;
+
         // Horizontal movement
         this.velocity.x = 0; // Reset horizontal velocity
 
@@ -160,6 +231,9 @@ export class Player {
 
         // Update facial animations
         this.updateFaceAnimations(deltaTime);
+
+        // Update simple cube animation (bob + air stretch)
+        this.updateCubeAnimation(deltaTime, wasGrounded);
 
         // Update health bar
         this.healthBar.update(deltaTime);
@@ -241,8 +315,50 @@ export class Player {
      */
     syncMeshPosition() {
         this.mesh.position.x = this.position.x;
-        this.mesh.position.y = this.position.y;
+        this.mesh.position.y = this.position.y + this.visualBob;
         this.mesh.position.z = this.position.z;
+
+        // Preserve facing on X, animate Y/Z only
+        const facing = this.mesh.scale.x >= 0 ? 1 : -1;
+        this.mesh.scale.x = Math.abs(this.mesh.scale.x) * facing;
+        this.mesh.scale.y = this.visualScaleY;
+        this.mesh.scale.z = this.visualScaleZ;
+        this.mesh.rotation.z = this.visualTiltZ;
+    }
+
+    /**
+     * Subtle animation to make cube heroes feel alive
+     * @param {number} deltaTime - Time since last frame
+     * @param {boolean} wasGrounded - Grounded state from previous frame
+     */
+    updateCubeAnimation(deltaTime, wasGrounded) {
+        this.animTime += deltaTime;
+
+        const moveAmount = Math.min(Math.abs(this.velocity.x) / PLAYER_SPEED, 1);
+        const isGroundMove = wasGrounded && moveAmount > 0.05;
+
+        if (isGroundMove) {
+            const stride = this.animTime * 12;
+            const hop = Math.abs(Math.sin(stride));
+            const stretch = Math.sin(stride) * 0.08 * moveAmount;
+            this.visualBob = hop * 0.08 * moveAmount;
+            this.visualScaleY = 1 + stretch;
+            this.visualScaleZ = 1 - stretch * 0.6;
+            this.visualTiltZ = -0.12 * Math.sign(this.velocity.x || 1) * moveAmount;
+        } else if (!wasGrounded) {
+            const fallStretch = Math.min(Math.abs(this.velocity.y) * 0.02, 0.12);
+            this.visualScaleY = 1 + fallStretch;
+            this.visualScaleZ = 1 - fallStretch * 0.5;
+            this.visualBob = 0;
+            this.visualTiltZ = -0.06 * Math.sign(this.velocity.x || 1) * moveAmount;
+        } else {
+            // Gentle idle squash to avoid dead-still pose
+            const breathe = Math.sin(this.animTime * 2) * 0.02;
+            this.visualScaleY = 1 + breathe;
+            this.visualScaleZ = 1 - breathe * 0.5;
+            this.visualBob = 0;
+            this.visualTiltZ = 0;
+        }
     }
 
     /**
@@ -359,6 +475,18 @@ export class Player {
                     console.log('Hit by enemy! Health:', this.currentHealth);
                 }
             }
+        }
+    }
+
+    /**
+     * Clean up player visuals/UI
+     */
+    destroy() {
+        if (this.healthBar) {
+            this.healthBar.destroy();
+        }
+        if (this.scene && this.mesh) {
+            this.scene.remove(this.mesh);
         }
     }
 }

@@ -68,7 +68,7 @@ This control scheme is more intuitive for MOBA-style gameplay:
 - **E:** Shadow Walk (invincible stealth)
 - **R:** Assassinate (teleport kill)
 
-### Wizard
+### Cyborg
 - **Q / Left Click:** Fireball (ranged projectile)
 - **Right Click:** Wind Push (knockback wave)
 - **E:** Bubble Shield (immunity)

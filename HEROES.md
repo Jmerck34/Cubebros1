@@ -13,8 +13,8 @@ const player = new Warrior(scene, 0, 0);
 // Option 2: Assassin (Dual Daggers)
 // const player = new Assassin(scene, 0, 0);
 
-// Option 3: Wizard (Magic Book)
-// const player = new Wizard(scene, 0, 0);
+// Option 3: Cyborg (Tech Caster)
+// const player = new Cyborg(scene, 0, 0);
 
 // Option 4: Warlock (Dark Staff)
 // const player = new Warlock(scene, 0, 0);
@@ -87,11 +87,11 @@ const player = new Warrior(scene, 0, 0);
 
 ---
 
-## 🔮 Wizard - Elemental Magic Caster
+## 🤖 Cyborg - Tech Caster
 
-**Theme:** Ranged spellcaster with powerful magic
-**Color:** Blue
-**Weapon:** Magic Book
+**Theme:** Ranged tech caster with built-in emitters
+**Color:** Steel Blue
+**Weapon:** Arm Cannon
 
 ### Abilities:
 - **Q / Left Click - Fireball** (2s cooldown)
@@ -119,7 +119,7 @@ const player = new Warrior(scene, 0, 0);
   - Hits all enemies in beam path
   - Can one-shot enemies when fully charged
 
-**Playstyle:** Ranged Mage - Stay at distance, blast with fireballs, use Wind Push for space, shield when in danger, finish with Kame Hame Ha
+**Playstyle:** Ranged Tech - Stay at distance, blast with fireballs, use Wind Push for space, shield when in danger, finish with Kame Hame Ha
 
 ---
 
@@ -179,7 +179,7 @@ const player = new Warrior(scene, 0, 0);
 |------|-----------|-------|---------|---------------|----------|
 | Warrior | Easy | Melee | Medium | High | Medium |
 | Assassin | Hard | Melee | Very High | Medium | High |
-| Wizard | Medium | Ranged | High | Medium | Low |
+| Cyborg | Medium | Ranged | High | Medium | Low |
 | Warlock | Medium | Medium | Medium | Low | High |
 
 ---
@@ -197,7 +197,7 @@ const player = new Warrior(scene, 0, 0);
 - Assassinate only works within 15 units - get closer first
 - Poison Bomb is great for area denial
 
-### Wizard
+### Cyborg
 - Keep your distance - you're squishy
 - Bubble Shield is your panic button
 - Charge Kame Hame Ha fully for maximum damage
@@ -215,7 +215,7 @@ const player = new Warrior(scene, 0, 0);
 
 - `player/Warrior.js` - Warrior class implementation
 - `player/Assassin.js` - Assassin class implementation
-- `player/Wizard.js` - Wizard class implementation
+- `player/Cyborg.js` - Cyborg class implementation
 - `player/Warlock.js` - Warlock class implementation
 - `main_all_heroes.js` - Main game file with hero selection
 - `index_all_heroes.html` - HTML page to test all heroes

@@ -12,10 +12,11 @@ export class Assassin extends Hero {
         super(scene, startX, startY);
 
         // Change body color to dark purple (assassin theme)
-        this.mesh.material.color.set(0x4B0082);
+        this.setBodyColor(0x3b0a5a);
 
         // Add dual daggers
         this.createEquipment(scene);
+        this.addAssassinHood();
 
         // Enemy reference (set by main.js)
         this.enemies = [];
@@ -73,6 +74,20 @@ export class Assassin extends Hero {
         this.rightDaggerGroup.rotation.z = -Math.PI / 2; // Rotate -90 degrees to point horizontally right
         this.mesh.add(this.rightDaggerGroup);
         this.rightDagger = this.rightDaggerGroup;
+    }
+
+    /**
+     * Add a stealth hood collar silhouette
+     */
+    addAssassinHood() {
+        const hoodMaterial = new THREE.MeshBasicMaterial({ color: 0x1b0d2a });
+        const hood = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.18, 1.06), hoodMaterial);
+        hood.position.set(0, 0.46, 0);
+        this.mesh.add(hood);
+
+        const mask = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.14, 0.05), hoodMaterial);
+        mask.position.set(0, 0.08, 0.57);
+        this.mesh.add(mask);
     }
 
     /**

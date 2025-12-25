@@ -7,7 +7,7 @@ import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
 import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
-import { Wizard } from './player/Wizard.js';
+import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
@@ -76,8 +76,8 @@ const player = new Warrior(scene, 0, 0);
 // Option 2: Assassin (Dual Daggers)
 // const player = new Assassin(scene, 0, 0);
 
-// Option 3: Wizard (Magic Book)
-// const player = new Wizard(scene, 0, 0);
+// Option 3: Cyborg (Tech Caster)
+// const player = new Cyborg(scene, 0, 0);
 
 // Option 4: Warlock (Dark Staff)
 // const player = new Warlock(scene, 0, 0);
@@ -146,7 +146,7 @@ console.log('');
 console.log('🗡️ ASSASSIN:');
 console.log('  Q/Click = Dagger Combo (bleed) | W = Poison Bomb | E = Shadow Walk | R = Assassinate');
 console.log('');
-console.log('🔮 WIZARD:');
+console.log('🤖 CYBORG:');
 console.log('  Q/Click = Fireball | W = Wind Push | E = Bubble Shield | R = Kame Hame Ha');
 console.log('');
 console.log('💀 WARLOCK:');

@@ -12,10 +12,11 @@ export class Warlock extends Hero {
         super(scene, startX, startY);
 
         // Change body color to dark purple/black (warlock theme)
-        this.mesh.material.color.set(0x2d0052);
+        this.setBodyColor(0x35113d);
 
         // Add staff
         this.createEquipment(scene);
+        this.addWarlockHorns();
 
         // Enemy reference (set by main.js)
         this.enemies = [];
@@ -72,6 +73,23 @@ export class Warlock extends Hero {
         this.staffGroup.rotation.z = 0.2;
         this.mesh.add(this.staffGroup);
         this.staff = this.staffGroup;
+    }
+
+    /**
+     * Add dark horns to the top corners
+     */
+    addWarlockHorns() {
+        const hornMaterial = new THREE.MeshBasicMaterial({ color: 0x120914 });
+
+        const leftHorn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 6), hornMaterial);
+        leftHorn.position.set(-0.25, 0.65, 0);
+        leftHorn.rotation.z = -0.3;
+        this.mesh.add(leftHorn);
+
+        const rightHorn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 6), hornMaterial);
+        rightHorn.position.set(0.25, 0.65, 0);
+        rightHorn.rotation.z = 0.3;
+        this.mesh.add(rightHorn);
     }
 
     /**

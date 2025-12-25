@@ -107,10 +107,8 @@ export class PauseMenu {
 
         // Back to Menu button
         this.backToMenuButton = this.createButton('🏠 Back to Menu', () => {
-            if (confirm('Are you sure you want to return to the main menu?')) {
-                this.close();
-                if (this.onBackToMenu) this.onBackToMenu();
-            }
+            this.close();
+            if (this.onBackToMenu) this.onBackToMenu();
         });
         this.backToMenuButton.style.marginTop = '15px';
 

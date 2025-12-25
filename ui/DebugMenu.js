@@ -199,7 +199,7 @@ export class DebugMenu {
         const heroName = this.player.constructor.name;
 
         const abilityMap = {
-            'Wizard': ['Fireball', 'Wind Push', 'Bubble Shield', 'Kame Hame Ha'],
+            'Cyborg': ['Fireball', 'Wind Push', 'Bubble Shield', 'Kame Hame Ha'],
             'Warlock': ['Lightning Strike', 'Fear', 'Hover', 'Mind Control'],
             'Warrior': ['Sword Slash', 'Shield Bash', 'Dash', 'Whirlwind'],
             'Assassin': ['Dagger Combo', 'Poison Bomb', 'Shadow Walk', 'Assassinate']

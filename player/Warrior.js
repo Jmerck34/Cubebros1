@@ -12,10 +12,11 @@ export class Warrior extends Hero {
         super(scene, startX, startY);
 
         // Change body color to blue (warrior theme)
-        this.mesh.material.color.set(0x0066ff);
+        this.setBodyColor(0x2f6cb0);
 
         // Add sword and shield
         this.createEquipment(scene);
+        this.addWarriorCrest();
 
         // Enemy reference (set by main.js)
         this.enemies = [];
@@ -103,6 +104,36 @@ export class Warrior extends Hero {
         this.shieldGroup.position.set(-0.6, 0, 0.1);
         this.mesh.add(this.shieldGroup);
         this.shield = this.shieldGroup; // Keep reference
+    }
+
+    /**
+     * Add a shield crest to the chest
+     */
+    addWarriorCrest() {
+        const crestGroup = new THREE.Group();
+
+        const crestBase = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 0.34, 0.05),
+            new THREE.MeshBasicMaterial({ color: 0x1e2a44 })
+        );
+        crestBase.position.set(0, 0.05, 0.56);
+        crestGroup.add(crestBase);
+
+        const crossVertical = new THREE.Mesh(
+            new THREE.BoxGeometry(0.06, 0.24, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0xffd700 })
+        );
+        crossVertical.position.set(0, 0.05, 0.58);
+        crestGroup.add(crossVertical);
+
+        const crossHorizontal = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 0.06, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0xffd700 })
+        );
+        crossHorizontal.position.set(0, 0.05, 0.58);
+        crestGroup.add(crossHorizontal);
+
+        this.mesh.add(crestGroup);
     }
 
     /**
