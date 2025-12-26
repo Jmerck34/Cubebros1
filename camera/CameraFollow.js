@@ -6,6 +6,7 @@ export class CameraFollow {
     constructor(camera, target) {
         this.camera = camera;
         this.target = target;
+        this.targets = Array.isArray(target) ? target : [target];
         this.offset = { x: 0, y: 0, z: 10 };
         this.smoothing = 0; // 0 = instant follow, 0.1 = smooth
     }
@@ -19,12 +20,36 @@ export class CameraFollow {
     }
 
     /**
+     * Update camera targets (single target or array)
+     * @param {Object|Object[]} target
+     */
+    setTargets(target) {
+        this.target = target;
+        this.targets = Array.isArray(target) ? target : [target];
+    }
+
+    /**
      * Update camera position to follow target
      */
     update() {
-        // Get target position
-        const targetPos = this.target.getPosition();
-        const targetX = targetPos.x + this.offset.x;
+        const activeTargets = this.targets || [];
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let count = 0;
+
+        for (const target of activeTargets) {
+            if (!target || typeof target.getPosition !== 'function') continue;
+            const targetPos = target.getPosition();
+            minX = Math.min(minX, targetPos.x);
+            maxX = Math.max(maxX, targetPos.x);
+            count += 1;
+        }
+
+        if (count === 0) {
+            return;
+        }
+
+        const targetX = ((minX + maxX) * 0.5) + this.offset.x;
 
         if (this.smoothing > 0) {
             // Smooth follow (lerp)

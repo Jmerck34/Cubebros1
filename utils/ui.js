@@ -3,34 +3,36 @@
  * @class UIManager
  */
 export class UIManager {
-    constructor(hero) {
+    constructor(hero, options = {}) {
         this.hero = hero;
+        const suffix = options.suffix ? `-${options.suffix}` : '';
+        const getId = (base) => `${base}${suffix}`;
 
         // Get DOM elements
         this.elements = {
             q: {
-                slot: document.getElementById('ability-q'),
-                overlay: document.getElementById('cooldown-q'),
-                text: document.getElementById('cooldown-text-q')
+                slot: document.getElementById(getId('ability-q')),
+                overlay: document.getElementById(getId('cooldown-q')),
+                text: document.getElementById(getId('cooldown-text-q'))
             },
             w: {
-                slot: document.getElementById('ability-w'),
-                overlay: document.getElementById('cooldown-w'),
-                text: document.getElementById('cooldown-text-w')
+                slot: document.getElementById(getId('ability-w')),
+                overlay: document.getElementById(getId('cooldown-w')),
+                text: document.getElementById(getId('cooldown-text-w'))
             },
             e: {
-                slot: document.getElementById('ability-e'),
-                overlay: document.getElementById('cooldown-e'),
-                text: document.getElementById('cooldown-text-e')
+                slot: document.getElementById(getId('ability-e')),
+                overlay: document.getElementById(getId('cooldown-e')),
+                text: document.getElementById(getId('cooldown-text-e'))
             },
             r: {
-                slot: document.getElementById('ability-r'),
-                overlay: document.getElementById('cooldown-r'),
-                text: document.getElementById('cooldown-text-r')
+                slot: document.getElementById(getId('ability-r')),
+                overlay: document.getElementById(getId('cooldown-r')),
+                text: document.getElementById(getId('cooldown-text-r'))
             }
         };
 
-        this.ultimateBar = document.getElementById('ultimate-charge-bar');
+        this.ultimateBar = document.getElementById(getId('ultimate-charge-bar'));
     }
 
     /**
@@ -56,6 +58,9 @@ export class UIManager {
         if (!ability) return;
 
         const elements = this.elements[key];
+        if (!elements || !elements.slot || !elements.overlay || !elements.text) {
+            return;
+        }
 
         if (ability.isReady) {
             // Ability is ready
@@ -81,13 +86,18 @@ export class UIManager {
      */
     updateUltimateCharge() {
         const chargePercent = this.hero.ultimateCharge / this.hero.ultimateChargeMax;
-        this.ultimateBar.style.width = `${chargePercent * 100}%`;
+        if (this.ultimateBar) {
+            this.ultimateBar.style.width = `${chargePercent * 100}%`;
+        }
 
         // Update ready state
-        if (this.hero.ultimateCharge >= this.hero.ultimateChargeMax) {
-            this.elements.r.slot.classList.add('ready');
-        } else {
-            this.elements.r.slot.classList.remove('ready');
+        const ultimateSlot = this.elements.r ? this.elements.r.slot : null;
+        if (ultimateSlot) {
+            if (this.hero.ultimateCharge >= this.hero.ultimateChargeMax) {
+                ultimateSlot.classList.add('ready');
+            } else {
+                ultimateSlot.classList.remove('ready');
+            }
         }
     }
 }

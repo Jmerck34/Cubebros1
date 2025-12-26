@@ -3,10 +3,10 @@
  * @class InputManager
  */
 export class InputManager {
-    constructor() {
+    constructor(options = {}) {
         this.keys = {};
         this.mouseButtons = {};
-        this.bindings = {
+        const defaultBindings = {
             left: ['ArrowLeft', 'KeyA'],
             right: ['ArrowRight', 'KeyD'],
             jump: ['Space', 'KeyW'],
@@ -15,7 +15,18 @@ export class InputManager {
             ability3: ['KeyE'],
             ultimate: ['KeyR']
         };
-        this.gamepadBindings = {
+        this.bindings = {};
+        Object.keys(defaultBindings).forEach((action) => {
+            this.bindings[action] = [...defaultBindings[action]];
+        });
+
+        if (options.bindings) {
+            Object.keys(options.bindings).forEach((action) => {
+                this.bindings[action] = [...options.bindings[action]];
+            });
+        }
+
+        const defaultGamepadBindings = {
             left: ['Axis0-', 'DPadLeft'],
             right: ['Axis0+', 'DPadRight'],
             jump: ['Button0'],
@@ -24,14 +35,27 @@ export class InputManager {
             ability3: ['Button3'],
             ultimate: ['Button5', 'Button7']
         };
+        this.gamepadBindings = {};
+        Object.keys(defaultGamepadBindings).forEach((action) => {
+            this.gamepadBindings[action] = [...defaultGamepadBindings[action]];
+        });
+
+        if (options.gamepadBindings) {
+            Object.keys(options.gamepadBindings).forEach((action) => {
+                this.gamepadBindings[action] = [...options.gamepadBindings[action]];
+            });
+        }
+
         this.gamepadAliases = {
             DPadUp: 'Button12',
             DPadDown: 'Button13',
             DPadLeft: 'Button14',
             DPadRight: 'Button15'
         };
-        this.gamepadDeadzone = 0.25;
-        this.gamepadIndex = null;
+        this.gamepadEnabled = options.gamepadEnabled !== false;
+        this.gamepadDeadzone = typeof options.gamepadDeadzone === 'number' ? options.gamepadDeadzone : 0.25;
+        this.gamepadIndex = Number.isInteger(options.gamepadIndex) ? options.gamepadIndex : null;
+        this.gamepadIndexLocked = options.gamepadIndex !== undefined && options.gamepadIndex !== null;
         this.gamepad = null;
 
         // Setup keyboard event listeners
@@ -65,16 +89,24 @@ export class InputManager {
 
         // Setup gamepad connection listeners
         window.addEventListener('gamepadconnected', (event) => {
-            if (this.gamepadIndex === null) {
+            if (!this.gamepadEnabled) {
+                return;
+            }
+            if (this.gamepadIndex === null && !this.gamepadIndexLocked) {
                 this.gamepadIndex = event.gamepad.index;
             }
             console.log(`Gamepad connected: ${event.gamepad.id}`);
         });
 
         window.addEventListener('gamepaddisconnected', (event) => {
+            if (!this.gamepadEnabled) {
+                return;
+            }
             if (this.gamepadIndex === event.gamepad.index) {
-                this.gamepadIndex = null;
                 this.gamepad = null;
+                if (!this.gamepadIndexLocked) {
+                    this.gamepadIndex = null;
+                }
             }
             console.log(`Gamepad disconnected: ${event.gamepad.id}`);
         });
@@ -84,6 +116,11 @@ export class InputManager {
      * Poll gamepad state (call once per frame)
      */
     update() {
+        if (!this.gamepadEnabled) {
+            this.gamepad = null;
+            return;
+        }
+
         if (!navigator.getGamepads) {
             this.gamepad = null;
             this.gamepadIndex = null;
@@ -91,13 +128,21 @@ export class InputManager {
         }
 
         const pads = navigator.getGamepads();
-        if (this.gamepadIndex !== null && pads[this.gamepadIndex] && pads[this.gamepadIndex].connected) {
-            this.gamepad = pads[this.gamepadIndex];
-            return;
+        if (this.gamepadIndex !== null) {
+            const pad = pads[this.gamepadIndex];
+            if (pad && pad.connected) {
+                this.gamepad = pad;
+                return;
+            }
+
+            this.gamepad = null;
+            if (this.gamepadIndexLocked) {
+                return;
+            }
+            this.gamepadIndex = null;
         }
 
         this.gamepad = null;
-        this.gamepadIndex = null;
         for (const pad of pads) {
             if (pad && pad.connected) {
                 this.gamepad = pad;

@@ -132,15 +132,70 @@
             color: white;
         }
 
+        .coop-toggle {
+            margin: 12px 0 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #coop-toggle {
+            padding: 8px 18px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #coop-toggle:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        #coop-toggle.active {
+            border-color: #33cc66;
+            box-shadow: 0 0 12px rgba(51, 204, 102, 0.6);
+        }
+
+        #coop-hint {
+            color: #9ad2ff;
+            font-size: 12px;
+            display: none;
+        }
+
         /* Ability UI (hidden initially) */
-        #ability-ui {
+        .ability-ui {
             position: fixed;
             bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
             display: none;
             gap: 15px;
             z-index: 100;
+            align-items: center;
+        }
+
+        #ability-ui {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #ability-ui-p2 {
+            right: 20px;
+        }
+
+        .ability-ui-label {
+            position: absolute;
+            top: -18px;
+            left: 0;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
         .ability-slot {
@@ -234,9 +289,13 @@
 
     <!-- Hero Selection Menu -->
     <div id="hero-menu">
-        <h1>🎮 SELECT YOUR HERO 🎮</h1>
-        <p>Choose your champion and battle enemies!</p>
-        <p style="font-size: 14px; color: #888; margin-top: -30px;">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities</p>
+        <h1 id="hero-menu-title">🎮 SELECT YOUR HERO 🎮</h1>
+        <p id="hero-menu-subtitle">Choose your champion and battle enemies!</p>
+        <p id="hero-menu-controls" style="font-size: 14px; color: #888; margin-top: -30px;">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities</p>
+        <div class="coop-toggle">
+            <button id="coop-toggle" type="button">Local Co-op: Off</button>
+            <div id="coop-hint">P2: Controller 1 preferred or arrows/J-L move, Up/I jump, U/O/K/P abilities</div>
+        </div>
 
         <div class="hero-grid">
             <!-- Warrior -->
@@ -302,7 +361,7 @@
     </div>
 
     <!-- Ability UI -->
-    <div id="ability-ui">
+    <div id="ability-ui" class="ability-ui">
         <div class="ability-slot" id="ability-q">
             <div class="cooldown-overlay" id="cooldown-q"></div>
             <div class="cooldown-text" id="cooldown-text-q"></div>
@@ -329,6 +388,37 @@
             <div class="cooldown-text" id="cooldown-text-r"></div>
             <span>R</span>
             <div class="ability-name">Ultimate</div>
+        </div>
+    </div>
+
+    <div id="ability-ui-p2" class="ability-ui">
+        <div class="ability-ui-label">P2</div>
+        <div class="ability-slot" id="ability-q-p2">
+            <div class="cooldown-overlay" id="cooldown-q-p2"></div>
+            <div class="cooldown-text" id="cooldown-text-q-p2"></div>
+            <span>U</span>
+            <div class="ability-name">U</div>
+        </div>
+        <div class="ability-slot" id="ability-w-p2">
+            <div class="cooldown-overlay" id="cooldown-w-p2"></div>
+            <div class="cooldown-text" id="cooldown-text-w-p2"></div>
+            <span>O</span>
+            <div class="ability-name">O</div>
+        </div>
+        <div class="ability-slot" id="ability-e-p2">
+            <div class="cooldown-overlay" id="cooldown-e-p2"></div>
+            <div class="cooldown-text" id="cooldown-text-e-p2"></div>
+            <span>K</span>
+            <div class="ability-name">K</div>
+        </div>
+        <div class="ability-slot ultimate" id="ability-r-p2">
+            <div class="ultimate-charge">
+                <div class="ultimate-charge-fill" id="ultimate-charge-bar-p2"></div>
+            </div>
+            <div class="cooldown-overlay" id="cooldown-r-p2"></div>
+            <div class="cooldown-text" id="cooldown-text-r-p2"></div>
+            <span>P</span>
+            <div class="ability-name">P</div>
         </div>
     </div>
 
