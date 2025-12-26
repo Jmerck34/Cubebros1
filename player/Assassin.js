@@ -27,6 +27,7 @@ export class Assassin extends Hero {
 
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
+        this.isTornadoSpinning = false;
 
         // Set assassin abilities
         this.initializeAbilities();
@@ -190,6 +191,10 @@ export class Assassin extends Hero {
             this.deactivateShadowWalk();
         }
 
+        // Tornado spin during combo
+        this.playTornadoSpin(500);
+        this.playFlipOnce(280);
+
         // Create visual slash arc effect on BOTH sides
         this.createDualCrescentSlashEffect();
 
@@ -223,6 +228,67 @@ export class Assassin extends Hero {
                 };
                 this.damageEnemiesInArea(rightSlashBounds, this.abilities.q, true);
             }, i * 150);
+        }
+    }
+
+    /**
+     * Spin the assassin like a tornado
+     * @param {number} durationMs
+     */
+    playTornadoSpin(durationMs = 500) {
+        this.isTornadoSpinning = true;
+        const startTime = performance.now();
+        const spinInterval = setInterval(() => {
+            const elapsed = performance.now() - startTime;
+            if (elapsed >= durationMs) {
+                clearInterval(spinInterval);
+                this.mesh.rotation.z = 0;
+                this.isTornadoSpinning = false;
+                return;
+            }
+            this.mesh.rotation.y += Math.PI / 4;
+            this.mesh.rotation.x += Math.PI / 10;
+        }, 30);
+    }
+
+    /**
+     * Single flip on basic combo start
+     * @param {number} durationMs
+     */
+    playFlipOnce(durationMs = 280) {
+        const startTime = performance.now();
+        const flipInterval = setInterval(() => {
+            const t = (performance.now() - startTime) / durationMs;
+            if (t >= 1) {
+                clearInterval(flipInterval);
+                if (!this.isTornadoSpinning) {
+                    this.mesh.rotation.x = 0;
+                }
+                return;
+            }
+            this.mesh.rotation.x = t * Math.PI;
+        }, 16);
+    }
+
+    /**
+     * Override syncMeshPosition to preserve tornado spin
+     */
+    syncMeshPosition() {
+        this.mesh.position.x = this.position.x;
+        this.mesh.position.y = this.position.y + (this.visualBob || 0);
+        this.mesh.position.z = this.position.z;
+
+        const facing = this.mesh.scale.x >= 0 ? 1 : -1;
+        this.mesh.scale.x = Math.abs(this.mesh.scale.x) * facing;
+        this.mesh.scale.y = this.visualScaleY || 1;
+        this.mesh.scale.z = this.visualScaleZ || 1;
+
+        if (this.isTornadoSpinning) {
+            this.mesh.rotation.z = 0;
+        } else {
+            this.mesh.rotation.x = 0;
+            this.mesh.rotation.y = 0;
+            this.mesh.rotation.z = this.visualTiltZ || 0;
         }
     }
 
@@ -297,14 +363,28 @@ export class Assassin extends Hero {
             this.deactivateShadowWalk();
         }
 
-        // Create poison bomb projectile
-        const bombGeometry = new THREE.SphereGeometry(0.15);
-        const bombMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        // Create poison bomb projectile (body + cap + fuse)
+        const bombGroup = new THREE.Group();
+        const bombGeometry = new THREE.SphereGeometry(0.16, 16, 16);
+        const bombMaterial = new THREE.MeshBasicMaterial({ color: 0x2d2d2d });
         const bomb = new THREE.Mesh(bombGeometry, bombMaterial);
+        bombGroup.add(bomb);
+
+        const capGeometry = new THREE.CylinderGeometry(0.05, 0.07, 0.06, 12);
+        const capMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
+        const cap = new THREE.Mesh(capGeometry, capMaterial);
+        cap.position.set(0, 0.16, 0);
+        bombGroup.add(cap);
+
+        const fuseGeometry = new THREE.BoxGeometry(0.02, 0.08, 0.02);
+        const fuseMaterial = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
+        const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
+        fuse.position.set(0.04, 0.22, 0);
+        bombGroup.add(fuse);
 
         // Starting position
-        bomb.position.set(this.position.x + (0.5 * this.facingDirection), this.position.y, 0.2);
-        this.mesh.parent.add(bomb);
+        bombGroup.position.set(this.position.x + (0.5 * this.facingDirection), this.position.y, 0.2);
+        this.mesh.parent.add(bombGroup);
 
         // Throw direction based on facing
         const throwDirection = this.facingDirection;
@@ -321,8 +401,9 @@ export class Assassin extends Hero {
             velocityY -= 20 * 0.016; // Gravity
             bombY += velocityY * 0.016;
 
-            bomb.position.x = bombX;
-            bomb.position.y = bombY;
+            bombGroup.position.x = bombX;
+            bombGroup.position.y = bombY;
+            bombGroup.rotation.z += 0.2;
 
             // Create bomb bounds for collision detection
             const bombBounds = {
@@ -346,7 +427,7 @@ export class Assassin extends Hero {
             // Check if hit ground, platform, or went off screen
             if (hitPlatform || bombY < -2 || Math.abs(bombX - this.position.x) > 10) {
                 clearInterval(bombInterval);
-                this.mesh.parent.remove(bomb);
+                this.mesh.parent.remove(bombGroup);
 
                 // Create poison cloud at impact location
                 this.createPoisonCloud(bombX, bombY);
@@ -358,15 +439,25 @@ export class Assassin extends Hero {
      * Create poison cloud effect
      */
     createPoisonCloud(x, y) {
-        const cloudGeometry = new THREE.CircleGeometry(1.5, 16);
-        const cloudMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.5
-        });
-        const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial);
-        cloud.position.set(x, y, 0.1);
-        this.mesh.parent.add(cloud);
+        const cloudGroup = new THREE.Group();
+        const puffCount = 8;
+        for (let i = 0; i < puffCount; i++) {
+            const puffSize = 0.6 + Math.random() * 0.7;
+            const puffGeometry = new THREE.CircleGeometry(puffSize, 16);
+            const puffMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00aa55,
+                transparent: true,
+                opacity: 0.45
+            });
+            const puff = new THREE.Mesh(puffGeometry, puffMaterial);
+            puff.position.set(
+                x + (Math.random() - 0.5) * 1.2,
+                y + (Math.random() - 0.5) * 0.6,
+                0.1
+            );
+            cloudGroup.add(puff);
+        }
+        this.mesh.parent.add(cloudGroup);
 
         // Damage enemies in cloud over time
         let cloudDuration = 3; // 3 seconds
@@ -374,16 +465,29 @@ export class Assassin extends Hero {
             cloudDuration -= 0.5;
 
             const cloudBounds = {
-                left: x - 1.5,
-                right: x + 1.5,
-                top: y + 1.5,
-                bottom: y - 1.5
+                left: x - 1.6,
+                right: x + 1.6,
+                top: y + 1.2,
+                bottom: y - 1.2
             };
-            this.damageEnemiesInArea(cloudBounds, this.abilities.w);
+            this.damageEnemiesInArea(cloudBounds, this.abilities.w, false, true);
 
             if (cloudDuration <= 0) {
                 clearInterval(damageInterval);
-                this.mesh.parent.remove(cloud);
+                // Dissipate
+                let fade = 0.45;
+                const dissipate = setInterval(() => {
+                    fade -= 0.07;
+                    cloudGroup.children.forEach((puff) => {
+                        puff.material.opacity = Math.max(0, fade);
+                        puff.scale.set(1 + (0.45 - fade), 1 + (0.45 - fade), 1);
+                        puff.position.y += 0.02;
+                    });
+                    if (fade <= 0) {
+                        clearInterval(dissipate);
+                        this.mesh.parent.remove(cloudGroup);
+                    }
+                }, 40);
             }
         }, 500);
     }
@@ -513,25 +617,62 @@ export class Assassin extends Hero {
      * Create assassinate visual effect
      */
     createAssassinateEffect(x, y) {
-        const slashGeometry = new THREE.BoxGeometry(2, 2, 0.1);
-        const slashMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.8
-        });
-        const slash = new THREE.Mesh(slashGeometry, slashMaterial);
-        slash.position.set(x, y, 0.3);
-        this.mesh.parent.add(slash);
+        const group = new THREE.Group();
 
-        // Fade out
-        let opacity = 0.8;
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.3, 1.1, 24),
+            new THREE.MeshBasicMaterial({
+                color: 0xb000ff,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            })
+        );
+        ring.rotation.x = Math.PI / 2;
+        group.add(ring);
+
+        const crossGeometry = new THREE.PlaneGeometry(2.2, 0.12);
+        const crossMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff66ff,
+            transparent: true,
+            opacity: 0.85,
+            side: THREE.DoubleSide
+        });
+        const slash1 = new THREE.Mesh(crossGeometry, crossMaterial);
+        slash1.rotation.z = Math.PI / 4;
+        group.add(slash1);
+        const slash2 = new THREE.Mesh(crossGeometry, crossMaterial.clone());
+        slash2.rotation.z = -Math.PI / 4;
+        group.add(slash2);
+
+        const core = new THREE.Mesh(
+            new THREE.CircleGeometry(0.2, 16),
+            new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.9
+            })
+        );
+        core.position.z = 0.01;
+        group.add(core);
+
+        group.position.set(x, y, 0.3);
+        this.mesh.parent.add(group);
+
+        let opacity = 0.9;
+        let scale = 1;
         const fadeInterval = setInterval(() => {
-            opacity -= 0.1;
-            slash.material.opacity = opacity;
+            opacity -= 0.08;
+            scale += 0.25;
+            group.scale.set(scale, scale, 1);
+            ring.material.opacity = opacity * 0.6;
+            slash1.material.opacity = opacity;
+            slash2.material.opacity = opacity;
+            core.material.opacity = opacity;
 
             if (opacity <= 0) {
                 clearInterval(fadeInterval);
-                this.mesh.parent.remove(slash);
+                this.mesh.parent.remove(group);
             }
         }, 30);
     }
@@ -539,7 +680,7 @@ export class Assassin extends Hero {
     /**
      * Damage enemies in area with optional bleed effect
      */
-    damageEnemiesInArea(bounds, ability = null, applyBleed = false) {
+    damageEnemiesInArea(bounds, ability = null, applyBleed = false, applyPoison = false) {
         for (const enemy of this.enemies) {
             if (!enemy.isAlive) continue;
 
@@ -553,6 +694,10 @@ export class Assassin extends Hero {
                 if (applyBleed) {
                     this.applyBleed(enemy, ability);
                 }
+
+                if (applyPoison && typeof enemy.setPoisoned === 'function') {
+                    enemy.setPoisoned(0.7);
+                }
             }
         }
     }
@@ -565,6 +710,9 @@ export class Assassin extends Hero {
         const bleedInterval = setInterval(() => {
             if (enemy.isAlive && bleedTicks > 0) {
                 this.applyAbilityDamage(ability, enemy, 1);
+                if (typeof enemy.flashBleed === 'function') {
+                    enemy.flashBleed();
+                }
                 console.log('🩸 Bleed damage!');
                 bleedTicks--;
             } else {
@@ -577,24 +725,44 @@ export class Assassin extends Hero {
      * Create teleport trail effect
      */
     createTeleportTrail() {
-        const trailGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.1);
-        const trailMaterial = new THREE.MeshBasicMaterial({
-            color: 0x4B0082, // Purple assassin color
-            transparent: true,
-            opacity: 0.7
-        });
-        const trail = new THREE.Mesh(trailGeometry, trailMaterial);
-        trail.position.set(this.position.x, this.position.y, -0.1);
-        this.mesh.parent.add(trail);
+        const group = new THREE.Group();
+        const streakCount = 6;
 
-        // Fade animation
+        for (let i = 0; i < streakCount; i++) {
+            const streak = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.9, 0.12),
+                new THREE.MeshBasicMaterial({
+                    color: 0x8b00ff,
+                    transparent: true,
+                    opacity: 0.7,
+                    side: THREE.DoubleSide
+                })
+            );
+            streak.position.set(
+                this.position.x + (Math.random() - 0.5) * 0.6,
+                this.position.y + (Math.random() - 0.5) * 0.6,
+                -0.1
+            );
+            streak.rotation.z = Math.random() * Math.PI;
+            group.add(streak);
+        }
+
+        this.mesh.parent.add(group);
+
         let opacity = 0.7;
+        let scale = 1;
         const fadeInterval = setInterval(() => {
-            opacity -= 0.1;
-            trail.material.opacity = opacity;
+            opacity -= 0.08;
+            scale += 0.18;
+            group.scale.set(scale, scale, 1);
+            group.children.forEach((streak, idx) => {
+                streak.material.opacity = opacity;
+                streak.position.x += (idx % 2 === 0 ? 1 : -1) * 0.05;
+                streak.position.y += 0.03;
+            });
             if (opacity <= 0) {
                 clearInterval(fadeInterval);
-                this.mesh.parent.remove(trail);
+                this.mesh.parent.remove(group);
             }
         }, 30);
     }

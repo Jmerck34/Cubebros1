@@ -6,6 +6,15 @@ export class InputManager {
     constructor() {
         this.keys = {};
         this.mouseButtons = {};
+        this.bindings = {
+            left: ['ArrowLeft', 'KeyA'],
+            right: ['ArrowRight', 'KeyD'],
+            jump: ['Space', 'KeyW'],
+            ability1: ['Mouse0', 'KeyQ'],
+            ability2: ['Mouse2'],
+            ability3: ['KeyE'],
+            ultimate: ['KeyR']
+        };
 
         // Setup keyboard event listeners
         window.addEventListener('keydown', (event) => {
@@ -51,7 +60,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isLeftPressed() {
-        return this.isKeyDown('ArrowLeft') || this.isKeyDown('KeyA');
+        return this.isActionPressed('left');
     }
 
     /**
@@ -59,7 +68,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isRightPressed() {
-        return this.isKeyDown('ArrowRight') || this.isKeyDown('KeyD');
+        return this.isActionPressed('right');
     }
 
     /**
@@ -67,7 +76,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isJumpPressed() {
-        return this.isKeyDown('Space') || this.isKeyDown('KeyW');
+        return this.isActionPressed('jump');
     }
 
     /**
@@ -91,7 +100,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isAbility1Pressed() {
-        return this.isLeftClickPressed() || this.isKeyDown('KeyQ');
+        return this.isActionPressed('ability1');
     }
 
     /**
@@ -99,7 +108,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isAbility2Pressed() {
-        return this.isRightClickPressed();
+        return this.isActionPressed('ability2');
     }
 
     /**
@@ -107,7 +116,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isAbility3Pressed() {
-        return this.isKeyDown('KeyE');
+        return this.isActionPressed('ability3');
     }
 
     /**
@@ -115,7 +124,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isUltimatePressed() {
-        return this.isKeyDown('KeyR');
+        return this.isActionPressed('ultimate');
     }
 
     /**
@@ -124,11 +133,77 @@ export class InputManager {
      * @returns {boolean}
      */
     isGameKey(keyCode) {
-        const gameKeys = [
-            'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
-            'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyS',
-            'KeyQ', 'KeyE', 'KeyR' // Ability keys
-        ];
-        return gameKeys.includes(keyCode);
+        const boundKeys = new Set();
+        Object.values(this.bindings).forEach((codes) => {
+            codes.forEach((code) => {
+                if (!code.startsWith('Mouse')) {
+                    boundKeys.add(code);
+                }
+            });
+        });
+        return boundKeys.has(keyCode);
+    }
+
+    /**
+     * Check if a bound action is pressed
+     * @param {string} action
+     * @returns {boolean}
+     */
+    isActionPressed(action) {
+        const codes = this.bindings[action] || [];
+        for (const code of codes) {
+            if (code.startsWith('Mouse')) {
+                const button = parseInt(code.replace('Mouse', ''), 10);
+                if (this.mouseButtons[button]) {
+                    return true;
+                }
+            } else if (this.isKeyDown(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get bindings for an action
+     * @param {string} action
+     * @returns {string[]}
+     */
+    getBindings(action) {
+        return [...(this.bindings[action] || [])];
+    }
+
+    /**
+     * Set a binding for an action
+     * @param {string} action
+     * @param {string} code
+     * @param {number} slot
+     */
+    setBinding(action, code, slot = 0) {
+        // Remove this code from all actions first
+        Object.keys(this.bindings).forEach((key) => {
+            this.bindings[key] = this.bindings[key].filter((existing) => existing !== code);
+        });
+
+        if (!this.bindings[action]) {
+            this.bindings[action] = [];
+        }
+
+        if (this.bindings[action].length < slot + 1) {
+            this.bindings[action].length = slot + 1;
+        }
+
+        this.bindings[action][slot] = code;
+        this.bindings[action] = this.bindings[action].filter(Boolean);
+    }
+
+    /**
+     * Clear a binding slot
+     * @param {string} action
+     * @param {number} slot
+     */
+    clearBinding(action, slot = 0) {
+        if (!this.bindings[action]) return;
+        this.bindings[action].splice(slot, 1);
     }
 }

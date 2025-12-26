@@ -154,7 +154,7 @@ Facing Left (direction = -1):
 - ✅ Explosion effect on hit
 - ✅ Collision detection accurate
 
-#### **W - Wind Push**
+#### **W - Freeze Blast**
 - ✅ Wind cone points in facing direction
 - ✅ Cone rotates correctly (right = -90°, left = 90°)
 - ✅ Knockback pushes enemies away

@@ -3,10 +3,12 @@
  * @class PauseMenu
  */
 export class PauseMenu {
-    constructor(onBackToMenu, onResume) {
+    constructor(onBackToMenu, onResume, input) {
         this.onBackToMenu = onBackToMenu;
         this.onResume = onResume;
+        this.input = input;
         this.isOpen = false;
+        this.bindingButtons = new Map();
 
         // Create menu button (top right)
         this.createMenuButton();
@@ -129,6 +131,8 @@ export class PauseMenu {
         this.menuContainer.appendChild(title);
         this.menuContainer.appendChild(this.resumeButton);
         this.menuContainer.appendChild(this.backToMenuButton);
+        this.menuContainer.appendChild(this.createKeybindToggle());
+        this.menuContainer.appendChild(this.createKeybindSection());
         this.menuContainer.appendChild(this.quitButton);
         this.overlay.appendChild(this.menuContainer);
         document.body.appendChild(this.overlay);
@@ -197,6 +201,7 @@ export class PauseMenu {
         this.isOpen = true;
         this.overlay.style.display = 'flex';
         this.menuButton.style.display = 'none';
+        this.refreshKeybindLabels();
     }
 
     /**
@@ -238,5 +243,204 @@ export class PauseMenu {
         if (this.overlay && this.overlay.parentNode) {
             this.overlay.parentNode.removeChild(this.overlay);
         }
+    }
+
+    /**
+     * Create keybinds section
+     * @returns {HTMLDivElement}
+     */
+    createKeybindSection() {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 2px solid rgba(255, 255, 255, 0.2);
+            text-align: left;
+            display: none;
+        `;
+        this.keybindSection = container;
+
+        const title = document.createElement('h2');
+        title.textContent = 'Keybinds';
+        title.style.cssText = `
+            color: #ffffff;
+            font-size: 22px;
+            margin: 0 0 15px 0;
+            font-family: Arial, sans-serif;
+        `;
+        container.appendChild(title);
+
+        const actions = [
+            { key: 'left', label: 'Move Left' },
+            { key: 'right', label: 'Move Right' },
+            { key: 'jump', label: 'Jump' },
+            { key: 'ability1', label: 'Ability 1' },
+            { key: 'ability2', label: 'Ability 2' },
+            { key: 'ability3', label: 'Ability 3' },
+            { key: 'ultimate', label: 'Ultimate' }
+        ];
+
+        actions.forEach((action) => {
+            const row = document.createElement('div');
+            row.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                margin: 8px 0;
+            `;
+
+            const label = document.createElement('div');
+            label.textContent = action.label;
+            label.style.cssText = `
+                color: #ccc;
+                font-size: 16px;
+                min-width: 120px;
+                font-family: Arial, sans-serif;
+            `;
+
+            const bindButton = this.createBindButton(action.key, 0);
+            const altButton = this.createBindButton(action.key, 1);
+            const clearButton = this.createSmallButton('Clear', () => {
+                if (!this.input) return;
+                this.input.clearBinding(action.key, 0);
+                this.input.clearBinding(action.key, 1);
+                this.refreshKeybindLabels();
+            });
+
+            row.appendChild(label);
+            row.appendChild(bindButton);
+            row.appendChild(altButton);
+            row.appendChild(clearButton);
+            container.appendChild(row);
+        });
+
+        return container;
+    }
+
+    /**
+     * Create a toggle button for keybinds
+     */
+    createKeybindToggle() {
+        this.keybindToggle = this.createButton('⌨️ Keybinds', () => {
+            if (!this.keybindSection) return;
+            const isOpen = this.keybindSection.style.display !== 'none';
+            this.keybindSection.style.display = isOpen ? 'none' : 'block';
+            if (!isOpen) {
+                this.refreshKeybindLabels();
+            }
+        });
+        this.keybindToggle.style.marginTop = '15px';
+        this.keybindToggle.style.background = 'linear-gradient(135deg, #3a6ea5 0%, #2b5a88 100%)';
+        return this.keybindToggle;
+    }
+
+    /**
+     * Create a keybind button
+     */
+    createBindButton(action, slot) {
+        const button = this.createSmallButton('Unbound', () => {
+            this.beginBinding(action, slot, button);
+        });
+        this.bindingButtons.set(`${action}:${slot}`, button);
+        return button;
+    }
+
+    /**
+     * Create a small UI button
+     */
+    createSmallButton(text, onClick) {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = `
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: Arial, sans-serif;
+        `;
+
+        button.addEventListener('mouseenter', () => {
+            button.style.transform = 'scale(1.05)';
+        });
+
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+
+        button.addEventListener('click', onClick);
+        return button;
+    }
+
+    /**
+     * Begin listening for a new binding
+     */
+    beginBinding(action, slot, button) {
+        if (!this.input) return;
+
+        button.textContent = 'Press key...';
+
+        const onKey = (event) => {
+            event.preventDefault();
+            if (event.code === 'Escape') {
+                this.refreshKeybindLabels();
+                cleanup();
+                return;
+            }
+            this.input.setBinding(action, event.code, slot);
+            this.refreshKeybindLabels();
+            cleanup();
+        };
+
+        const onMouse = (event) => {
+            event.preventDefault();
+            const code = `Mouse${event.button}`;
+            this.input.setBinding(action, code, slot);
+            this.refreshKeybindLabels();
+            cleanup();
+        };
+
+        const cleanup = () => {
+            window.removeEventListener('keydown', onKey, true);
+            window.removeEventListener('mousedown', onMouse, true);
+        };
+
+        window.addEventListener('keydown', onKey, true);
+        window.addEventListener('mousedown', onMouse, true);
+    }
+
+    /**
+     * Refresh keybind labels from current bindings
+     */
+    refreshKeybindLabels() {
+        if (!this.input) return;
+        for (const [key, button] of this.bindingButtons.entries()) {
+            const [action, slotStr] = key.split(':');
+            const slot = Number(slotStr);
+            const bindings = this.input.getBindings(action);
+            const code = bindings[slot] || 'Unbound';
+            button.textContent = this.formatBinding(code);
+        }
+    }
+
+    /**
+     * Format binding code for display
+     */
+    formatBinding(code) {
+        if (!code || code === 'Unbound') return 'Unbound';
+        if (code.startsWith('Mouse')) {
+            const btn = code.replace('Mouse', '');
+            if (btn === '0') return 'Mouse L';
+            if (btn === '1') return 'Mouse M';
+            if (btn === '2') return 'Mouse R';
+            return `Mouse ${btn}`;
+        }
+        if (code.startsWith('Key')) return code.replace('Key', '');
+        if (code.startsWith('Arrow')) return code.replace('Arrow', '');
+        return code;
     }
 }

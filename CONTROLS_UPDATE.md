@@ -70,7 +70,7 @@ This control scheme is more intuitive for MOBA-style gameplay:
 
 ### Cyborg
 - **Q / Left Click:** Fireball (ranged projectile)
-- **Right Click:** Wind Push (knockback wave)
+- **Right Click:** Freeze Blast (knockback wave)
 - **E:** Bubble Shield (immunity)
 - **R:** Kame Hame Ha (charged beam)
 

@@ -34,6 +34,8 @@ export class Archer extends Hero {
         // Potion effect state
         this.healOverTimeRemaining = 0;
         this.speedBoostRemaining = 0;
+        this.potionEffect = null;
+        this.potionEffectTime = 0;
 
         // Machine bow ultimate state
         this.machineBowActive = false;
@@ -103,7 +105,7 @@ export class Archer extends Hero {
         const teleportArrow = new Ability('Teleport Arrow', 6);
         teleportArrow.use = (hero) => {
             if (!Ability.prototype.use.call(teleportArrow, hero)) return false;
-            hero.teleportArrowQueued = true;
+            hero.fireTeleportArrow();
             return true;
         };
 
@@ -194,9 +196,7 @@ export class Archer extends Hero {
 
                 if (ability && ability.isReady) {
                     ability.use(this);
-                    const shouldTeleport = this.teleportArrowQueued;
-                    this.teleportArrowQueued = false;
-                    this.fireArrow(chargeRatio, shouldTeleport, false, ability);
+                this.fireArrow(chargeRatio, false, false, ability);
                 }
 
                 this.isCharging = false;
@@ -208,58 +208,55 @@ export class Archer extends Hero {
     /**
      * Fire an arrow
      */
-    fireArrow(chargeRatio, teleportOnHit, piercing, ability) {
+    fireArrow(chargeRatio, teleportOnHit, piercing, ability, colorOverride = null) {
         const arrowGroup = new THREE.Group();
 
         const shaft = new THREE.Mesh(
-            new THREE.BoxGeometry(0.5, 0.04, 0.04),
-            new THREE.MeshBasicMaterial({ color: 0x8b5a2b })
+            new THREE.BoxGeometry(0.7, 0.06, 0.06),
+            new THREE.MeshBasicMaterial({ color: colorOverride || 0x8b5a2b })
         );
-        shaft.position.set(0.2, 0, 0);
+        shaft.position.set(0.3, 0, 0);
         arrowGroup.add(shaft);
 
         const tip = new THREE.Mesh(
-            new THREE.ConeGeometry(0.05, 0.12, 8),
-            new THREE.MeshBasicMaterial({ color: 0xc0c0c0 })
+            new THREE.ConeGeometry(0.07, 0.16, 8),
+            new THREE.MeshBasicMaterial({ color: colorOverride || 0xc0c0c0 })
         );
         tip.rotation.z = Math.PI / 2;
-        tip.position.set(0.45, 0, 0);
+        tip.position.set(0.62, 0, 0);
         arrowGroup.add(tip);
 
         const fletch = new THREE.Mesh(
-            new THREE.BoxGeometry(0.12, 0.08, 0.02),
-            new THREE.MeshBasicMaterial({ color: 0x333333 })
+            new THREE.BoxGeometry(0.18, 0.12, 0.03),
+            new THREE.MeshBasicMaterial({ color: colorOverride || 0x333333 })
         );
-        fletch.position.set(-0.05, 0, 0);
+        fletch.position.set(-0.08, 0, 0);
         arrowGroup.add(fletch);
 
         const direction = this.facingDirection;
-        arrowGroup.scale.x = direction;
+        arrowGroup.scale.x = 1;
         arrowGroup.position.set(this.position.x + direction * 0.6, this.position.y + 0.1, 0.2);
         this.mesh.parent.add(arrowGroup);
 
-        const speed = 10 + chargeRatio * 6;
-        const maxDistance = 10 + chargeRatio * 6;
+        const baseSpeed = 10;
+        const speed = baseSpeed + chargeRatio * 8;
         const startX = arrowGroup.position.x;
         const startY = arrowGroup.position.y;
         const hitEnemies = new Set();
+        const level = this.level || { platforms: [] };
 
         const damageHits = 1 + Math.round(chargeRatio * 2);
 
-        let velocityY = 2.5 + chargeRatio * 2;
-        const gravity = -12;
+        let velocityY = 3.5 + chargeRatio * 2.2;
+        const gravity = -20;
+        const velocityX = direction * speed;
 
         const arrowInterval = setInterval(() => {
-            arrowGroup.position.x += direction * speed * 0.016;
+            arrowGroup.position.x += velocityX * 0.016;
             velocityY += gravity * 0.016;
             arrowGroup.position.y += velocityY * 0.016;
-            const targetRotation = Math.atan2(velocityY, direction * speed);
-            if (arrowGroup.userData.rotationZ === undefined) {
-                arrowGroup.userData.rotationZ = targetRotation;
-            }
-            // Smooth rotation to reduce jitter
-            arrowGroup.userData.rotationZ += (targetRotation - arrowGroup.userData.rotationZ) * 0.2;
-            arrowGroup.rotation.z = arrowGroup.userData.rotationZ;
+            const targetRotation = Math.atan2(velocityY, velocityX);
+            arrowGroup.rotation.z = targetRotation;
 
             const arrowBounds = {
                 left: arrowGroup.position.x - 0.25,
@@ -289,16 +286,43 @@ export class Archer extends Hero {
                 }
             }
 
-            const traveled = Math.abs(arrowGroup.position.x - startX);
-            const fellOut = arrowGroup.position.y < startY - 2;
-            if (traveled > maxDistance || fellOut) {
+            // Check collision with platforms
+            let hitPlatform = false;
+            if (level.platforms) {
+                for (const platform of level.platforms) {
+                    if (checkAABBCollision(arrowBounds, platform.bounds)) {
+                        hitPlatform = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hitPlatform) {
                 if (teleportOnHit) {
                     this.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
                 }
                 clearInterval(arrowInterval);
-                this.mesh.parent.remove(arrowGroup);
+                if (hitPlatform) {
+                    // Stick arrow briefly into platform
+                    const stickTime = 600;
+                    const stuck = arrowGroup;
+                    stuck.rotation.z = Math.atan2(velocityY, velocityX);
+                    setTimeout(() => {
+                        if (stuck.parent) {
+                            stuck.parent.remove(stuck);
+                        }
+                    }, stickTime);
+                }
             }
         }, 16);
+    }
+
+    /**
+     * Fire a teleporting arrow immediately (E ability)
+     */
+    fireTeleportArrow() {
+        const teleportColor = 0x111111;
+        this.fireArrow(0.6, true, false, this.abilities.e, teleportColor);
     }
 
     /**
@@ -317,6 +341,7 @@ export class Archer extends Hero {
     activateHealingPotion() {
         this.healOverTimeRemaining = 3;
         this.speedBoostRemaining = 3;
+        this.startPotionEffect();
     }
 
     /**
@@ -335,6 +360,40 @@ export class Archer extends Hero {
         } else {
             this.moveSpeedMultiplier = 1;
         }
+
+        if (this.potionEffect) {
+            this.potionEffectTime += deltaTime;
+            const pulse = 0.2 + Math.sin(this.potionEffectTime * 6) * 0.15;
+            this.potionEffect.scale.set(1 + pulse, 1 + pulse, 1);
+            this.potionEffect.material.opacity = 0.4 + pulse * 0.4;
+            this.potionEffect.position.set(this.position.x, this.position.y - 0.1, 0.2);
+
+            if (this.healOverTimeRemaining <= 0) {
+                this.mesh.parent.remove(this.potionEffect);
+                this.potionEffect = null;
+            }
+        }
+    }
+
+    /**
+     * Create a healing potion visual effect
+     */
+    startPotionEffect() {
+        if (this.potionEffect) {
+            this.potionEffectTime = 0;
+            return;
+        }
+        const ringGeometry = new THREE.RingGeometry(0.5, 0.65, 24);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0x55ff88,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide
+        });
+        this.potionEffect = new THREE.Mesh(ringGeometry, ringMaterial);
+        this.potionEffect.position.set(this.position.x, this.position.y - 0.1, 0.2);
+        this.potionEffectTime = 0;
+        this.mesh.parent.add(this.potionEffect);
     }
 
     /**

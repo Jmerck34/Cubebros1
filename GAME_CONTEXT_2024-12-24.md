@@ -148,7 +148,7 @@ A 2D side-scrolling platformer built with Three.js, inspired by New Super Mario 
   - Orange/red color (0xff4500)
   - Book flip animation
 
-- **Right Click - Wind Push**
+- **Right Click - Freeze Blast**
   - Cone-shaped knockback wave
   - Cyan color (0xccffff)
   - Book scale animation

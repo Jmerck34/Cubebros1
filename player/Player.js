@@ -55,6 +55,9 @@ export class Player {
         this.visualScaleZ = 1;
         this.visualTiltZ = 0;
         this.moveSpeedMultiplier = 1;
+        this.hitboxScale = { x: 1, y: 1 };
+        this.debugHitboxVisible = false;
+        this.debugHitbox = null;
 
         // Sync mesh position
         this.syncMeshPosition();
@@ -242,6 +245,11 @@ export class Player {
 
         // Sync mesh with internal position
         this.syncMeshPosition();
+
+        // Update debug hitbox
+        if (this.debugHitboxVisible) {
+            this.updateDebugHitbox();
+        }
     }
 
     /**
@@ -376,11 +384,13 @@ export class Player {
      * @returns {{left: number, right: number, top: number, bottom: number}}
      */
     getBounds() {
+        const halfW = 0.5 * (this.hitboxScale?.x || 1);
+        const halfH = 0.5 * (this.hitboxScale?.y || 1);
         return {
-            left: this.position.x - 0.5,
-            right: this.position.x + 0.5,
-            top: this.position.y + 0.5,
-            bottom: this.position.y - 0.5
+            left: this.position.x - halfW,
+            right: this.position.x + halfW,
+            top: this.position.y + halfH,
+            bottom: this.position.y - halfH
         };
     }
 
@@ -487,8 +497,39 @@ export class Player {
         if (this.healthBar) {
             this.healthBar.destroy();
         }
+        this.setDebugHitboxVisible(false);
         if (this.scene && this.mesh) {
             this.scene.remove(this.mesh);
         }
+    }
+
+    /**
+     * Toggle debug hitbox visibility
+     * @param {boolean} visible
+     */
+    setDebugHitboxVisible(visible) {
+        this.debugHitboxVisible = visible;
+        if (!this.scene) return;
+
+        if (visible && !this.debugHitbox) {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.LineBasicMaterial({ color: 0xff00ff });
+            this.debugHitbox = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), material);
+            this.scene.add(this.debugHitbox);
+        } else if (!visible && this.debugHitbox) {
+            this.scene.remove(this.debugHitbox);
+            this.debugHitbox = null;
+        }
+    }
+
+    /**
+     * Update debug hitbox size/position
+     */
+    updateDebugHitbox() {
+        if (!this.debugHitbox) return;
+        const width = this.getBounds().right - this.getBounds().left;
+        const height = this.getBounds().top - this.getBounds().bottom;
+        this.debugHitbox.position.set(this.position.x, this.position.y, this.position.z + 0.3);
+        this.debugHitbox.scale.set(width, height, 1);
     }
 }

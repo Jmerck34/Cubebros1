@@ -116,7 +116,8 @@ function startGame(HeroClass) {
         },
         () => {
             // Resume callback (optional - menu handles resume itself)
-        }
+        },
+        input
     );
 
     // Create debug menu (or update player if it exists)

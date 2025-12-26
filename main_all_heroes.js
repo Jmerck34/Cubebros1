@@ -151,7 +151,7 @@ console.log('🗡️ ASSASSIN:');
 console.log('  Q/Click = Dagger Combo (bleed) | W = Poison Bomb | E = Shadow Walk | R = Assassinate');
 console.log('');
 console.log('🤖 CYBORG:');
-console.log('  Q/Click = Fireball | W = Wind Push | E = Bubble Shield | R = Kame Hame Ha');
+console.log('  Q/Click = Fireball | W = Freeze Blast | E = Bubble Shield | R = Kame Hame Ha');
 console.log('');
 console.log('🏹 ARCHER:');
 console.log('  Q/Click = Shoot Arrow | W = Healing Potion | E = Teleport Arrow | R = Machine Bow');

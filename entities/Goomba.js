@@ -7,7 +7,7 @@ import { checkAABBCollision } from '../utils/collision.js';
  */
 export class Goomba extends EnemyBase {
     constructor(scene, x, y) {
-        super(scene, x, y, 0x8B4513); // Brown color
+        super(scene, x, y, 0x5b8a4a); // Zombie green
         this.speed = 2;
         this.type = 'goomba';
     }

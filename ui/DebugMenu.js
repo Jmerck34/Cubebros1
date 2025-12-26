@@ -15,6 +15,13 @@ export class DebugMenu {
             gravityMultiplier: 1.0,
             jumpForceMultiplier: 1.0
         };
+        this.globalHitbox = {
+            enabled: false,
+            playerScaleX: 1.0,
+            playerScaleY: 1.0,
+            enemyScaleX: 1.0,
+            enemyScaleY: 1.0
+        };
 
         this.createDebugMenuOverlay();
         this.setupKeyboardListener();
@@ -174,6 +181,29 @@ export class DebugMenu {
             console.log(`[Debug] Jump Force multiplier: ${this.globalPhysics.jumpForceMultiplier.toFixed(2)}x`);
         }, 'x');
 
+        // Hitbox Section
+        this.addSection('📦 Hitboxes');
+        this.addToggle('Show Hitboxes', this.globalHitbox.enabled, (checked) => {
+            this.globalHitbox.enabled = checked;
+            this.applyHitboxSettings();
+        });
+        this.addNumberControl('Player Hitbox Width', this.globalHitbox.playerScaleX, 0.5, 2.5, 0.05, (value) => {
+            this.globalHitbox.playerScaleX = value;
+            this.applyHitboxSettings();
+        }, 'x');
+        this.addNumberControl('Player Hitbox Height', this.globalHitbox.playerScaleY, 0.5, 2.5, 0.05, (value) => {
+            this.globalHitbox.playerScaleY = value;
+            this.applyHitboxSettings();
+        }, 'x');
+        this.addNumberControl('Enemy Hitbox Width', this.globalHitbox.enemyScaleX, 0.5, 2.5, 0.05, (value) => {
+            this.globalHitbox.enemyScaleX = value;
+            this.applyHitboxSettings();
+        }, 'x');
+        this.addNumberControl('Enemy Hitbox Height', this.globalHitbox.enemyScaleY, 0.5, 2.5, 0.05, (value) => {
+            this.globalHitbox.enemyScaleY = value;
+            this.applyHitboxSettings();
+        }, 'x');
+
         // Abilities Section (only if player has abilities)
         if (this.player.abilitiesList && this.player.abilitiesList.length > 0) {
             this.addSection('✨ Abilities');
@@ -199,7 +229,7 @@ export class DebugMenu {
         const heroName = this.player.constructor.name;
 
         const abilityMap = {
-            'Cyborg': ['Fireball', 'Wind Push', 'Bubble Shield', 'Kame Hame Ha'],
+            'Cyborg': ['Fireball', 'Freeze Blast', 'Bubble Shield', 'Kame Hame Ha'],
             'Warlock': ['Lightning Strike', 'Fear', 'Hover', 'Mind Control'],
             'Warrior': ['Sword Slash', 'Shield Bash', 'Dash', 'Whirlwind'],
             'Assassin': ['Dagger Combo', 'Poison Bomb', 'Shadow Walk', 'Assassinate'],
@@ -298,6 +328,45 @@ export class DebugMenu {
             section.style.paddingTop = '0';
         }
         this.contentContainer.appendChild(section);
+    }
+
+    /**
+     * Add a toggle control
+     */
+    addToggle(label, initialValue, onChange) {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            margin: 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        `;
+
+        const labelElement = document.createElement('label');
+        labelElement.style.cssText = `
+            color: #ccc;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            flex: 1;
+        `;
+        labelElement.textContent = label;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = initialValue;
+        checkbox.style.cssText = `
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        `;
+
+        checkbox.addEventListener('change', () => {
+            onChange(checkbox.checked);
+        });
+
+        container.appendChild(labelElement);
+        container.appendChild(checkbox);
+        this.contentContainer.appendChild(container);
     }
 
     /**
@@ -516,6 +585,34 @@ export class DebugMenu {
         this.player = player;
         // Ensure physics reference is connected
         this.player.debugPhysics = this.globalPhysics;
+        this.applyHitboxSettings();
+    }
+
+    /**
+     * Apply hitbox settings to player and enemies
+     */
+    applyHitboxSettings() {
+        if (!this.player) return;
+
+        this.player.hitboxScale = {
+            x: this.globalHitbox.playerScaleX,
+            y: this.globalHitbox.playerScaleY
+        };
+        if (typeof this.player.setDebugHitboxVisible === 'function') {
+            this.player.setDebugHitboxVisible(this.globalHitbox.enabled);
+        }
+
+        if (this.player.enemies) {
+            this.player.enemies.forEach((enemy) => {
+                enemy.hitboxScale = {
+                    x: this.globalHitbox.enemyScaleX,
+                    y: this.globalHitbox.enemyScaleY
+                };
+                if (typeof enemy.setDebugHitboxVisible === 'function') {
+                    enemy.setDebugHitboxVisible(this.globalHitbox.enabled);
+                }
+            });
+        }
     }
 
     /**

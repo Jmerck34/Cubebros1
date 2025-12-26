@@ -103,7 +103,7 @@ const player = new Warrior(scene, 0, 0);
   - Explodes on impact
   - Long range
 
-- **W - Wind Push** (4s cooldown)
+- **W - Freeze Blast** (4s cooldown)
   - Cone-shaped wind blast
   - Damages enemies
   - Knocks enemies back significantly
@@ -122,7 +122,7 @@ const player = new Warrior(scene, 0, 0);
   - Hits all enemies in beam path
   - Can one-shot enemies when fully charged
 
-**Playstyle:** Ranged Tech - Stay at distance, blast with fireballs, use Wind Push for space, shield when in danger, finish with Kame Hame Ha
+**Playstyle:** Ranged Tech - Stay at distance, blast with fireballs, use Freeze Blast for space, shield when in danger, finish with Kame Hame Ha
 
 ---
 
@@ -231,7 +231,7 @@ const player = new Warrior(scene, 0, 0);
 - Keep your distance - you're squishy
 - Bubble Shield is your panic button
 - Charge Kame Hame Ha fully for maximum damage
-- Wind Push creates space when enemies get close
+- Freeze Blast creates space when enemies get close
 
 ### Warlock
 - Mind Control turns fights around instantly

@@ -131,11 +131,11 @@ export class Cyborg extends Hero {
             return true;
         };
 
-        // W - Wind Push
-        const windPush = new Ability('Wind Push', 4);
-        windPush.use = (hero) => {
-            if (!Ability.prototype.use.call(windPush, hero)) return false;
-            hero.castWindPush();
+        // W - Freeze Blast
+        const freezeBlast = new Ability('Freeze Blast', 4);
+        freezeBlast.use = (hero) => {
+            if (!Ability.prototype.use.call(freezeBlast, hero)) return false;
+            hero.castFreezeBlast();
             return true;
         };
 
@@ -154,7 +154,7 @@ export class Cyborg extends Hero {
             return true;
         };
 
-        this.setAbilities(fireball, windPush, bubbleShield, kameHameHa);
+        this.setAbilities(fireball, freezeBlast, bubbleShield, kameHameHa);
     }
 
     /**
@@ -340,10 +340,10 @@ export class Cyborg extends Hero {
     }
 
     /**
-     * Cast Wind Push - W Ability (Wind Wave with Swirls)
+     * Cast Freeze Blast - W Ability (ice wave)
      */
-    castWindPush() {
-        console.log('💨 WIND WAVE!');
+    castFreezeBlast() {
+        console.log('🧊 FREEZE BLAST!');
 
         // Animate gear
         this.cyborgRig.scale.set(1.3, 1.3, 1.3);
@@ -352,15 +352,15 @@ export class Cyborg extends Hero {
         const direction = this.facingDirection;
         const windParticles = [];
 
-        // Create swirling particles (more particles, no background layers)
-        for (let i = 0; i < 25; i++) {
-            const particleSize = 0.08 + Math.random() * 0.12;
-            const particleGeometry = new THREE.CircleGeometry(particleSize, 6);
-            const particleColor = Math.random() > 0.5 ? 0xccffff : 0xffffff;
+        // Create icy shards
+        for (let i = 0; i < 22; i++) {
+            const particleSize = 0.08 + Math.random() * 0.14;
+            const particleGeometry = new THREE.BoxGeometry(particleSize, particleSize * 1.6, 0.02);
+            const particleColor = Math.random() > 0.5 ? 0xa6e3ff : 0x66ccff;
             const particleMaterial = new THREE.MeshBasicMaterial({
                 color: particleColor,
                 transparent: true,
-                opacity: 0.6
+                opacity: 0.7
             });
             const particle = new THREE.Mesh(particleGeometry, particleMaterial);
 
@@ -374,9 +374,9 @@ export class Cyborg extends Hero {
             windParticles.push({
                 mesh: particle,
                 angle: Math.random() * Math.PI * 2,
-                radius: 0.3 + Math.random() * 0.5,
-                speed: 0.8 + Math.random() * 0.4,
-                opacity: 0.6,
+                radius: 0.2 + Math.random() * 0.4,
+                speed: 0.9 + Math.random() * 0.5,
+                opacity: 0.7,
                 life: 0
             });
         }
@@ -386,21 +386,22 @@ export class Cyborg extends Hero {
         const waveInterval = setInterval(() => {
             waveTime += 0.016;
 
-            // Animate swirling particles
+            // Animate icy shards
             windParticles.forEach((particle) => {
                 particle.life += 0.016;
                 particle.angle += particle.speed * 0.1;
 
                 // Swirl outward in spiral
-                const currentRadius = particle.radius * (1 + particle.life * 2);
+                const currentRadius = particle.radius * (1 + particle.life * 1.6);
                 const spiralX = Math.cos(particle.angle) * currentRadius;
                 const spiralY = Math.sin(particle.angle) * currentRadius * 0.5;
 
                 particle.mesh.position.x += direction * particle.speed * 0.1;
                 particle.mesh.position.y = this.position.y + spiralY;
+                particle.mesh.rotation.z += 0.2;
 
                 // Fade out
-                particle.opacity -= 0.02;
+                particle.opacity -= 0.025;
                 particle.mesh.material.opacity = Math.max(0, particle.opacity);
                 particle.mesh.scale.set(1 - particle.life * 0.5, 1 - particle.life * 0.5, 1);
             });
@@ -416,7 +417,7 @@ export class Cyborg extends Hero {
             }
         }, 16);
 
-        // Damage and knockback enemies
+        // Freeze enemies in cone
         const windBounds = {
             left: this.position.x + (direction > 0 ? 0 : -3),
             right: this.position.x + (direction > 0 ? 3 : 0),
@@ -430,10 +431,9 @@ export class Cyborg extends Hero {
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(windBounds, enemyBounds)) {
                 this.applyAbilityDamage(this.abilities.w, enemy, 1);
-                // Knockback
-                enemy.position.x += direction * 3;
+                enemy.frozenTimer = 1.5;
                 this.addUltimateCharge(this.ultimateChargePerKill);
-                console.log('💨 Wind wave hit enemy!');
+                console.log('🧊 Enemy frozen!');
             }
         }
     }

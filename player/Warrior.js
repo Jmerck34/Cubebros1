@@ -2,6 +2,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { Hero } from './Hero.js';
 import { Ability } from './Ability.js';
 import { checkAABBCollision } from '../utils/collision.js';
+import { JUMP_VELOCITY } from '../core/constants.js';
 
 /**
  * Warrior Hero - Melee fighter with sword and shield
@@ -23,6 +24,9 @@ export class Warrior extends Hero {
 
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
+        this.dashResetCount = 0;
+        this.shieldBashInvuln = 0;
+        this.isSpinningUltimate = false;
 
         // Set warrior abilities
         this.initializeAbilities();
@@ -104,6 +108,7 @@ export class Warrior extends Hero {
         this.shieldGroup.position.set(-0.6, 0, 0.1);
         this.mesh.add(this.shieldGroup);
         this.shield = this.shieldGroup; // Keep reference
+        this.shieldBase = { x: -0.6, y: 0, z: 0.1, rotZ: 0 };
     }
 
     /**
@@ -167,6 +172,7 @@ export class Warrior extends Hero {
 
             // Dash forward
             hero.dashForward();
+            hero.dashResetCount = 0;
             return true;
         };
 
@@ -186,33 +192,38 @@ export class Warrior extends Hero {
      * Sword Slash Attack - Q Ability
      */
     swordSlashAttack() {
-        console.log('⚔️ SWORD SLASH!');
+        console.log('⚔️ SWORD SLASH COMBO!');
 
-        // Save original rotation
         const originalRot = -0.87; // ~50 degrees clockwise
+        const swings = [
+            { start: -0.6, end: -2.0, delay: 0, offsetY: 0.0, tint: 0xbfe3ff },   // Heavy downward slash
+            { start: -1.9, end: -0.1, delay: 190, offsetY: 0.15, tint: 0x99ccff }, // Wide horizontal-ish slash
+            { start: -0.3, end: -2.5, delay: 380, offsetY: -0.1, tint: 0xddeeff }  // Finisher
+        ];
 
-        // Wind up - pull sword back (rotate counterclockwise)
-        this.sword.rotation.z = -0.2; // Pull back slightly
+        swings.forEach((swing, index) => {
+            setTimeout(() => {
+                // Wind up
+                this.sword.rotation.z = swing.start;
+
+                setTimeout(() => {
+                    // Slash
+                    this.sword.rotation.z = swing.end;
+                    this.createCrescentSlash(true, swing.start, swing.end, index, swing.offsetY, swing.tint);
+                }, 80);
+            }, swing.delay);
+        });
 
         setTimeout(() => {
-            // Slash forward in arc - swing all the way down (rotate clockwise)
-            this.sword.rotation.z = -2.2; // Swing down almost to ground
-
-            // Create crescent moon slash effect that damages
-            this.createCrescentSlash(true);
-        }, 100);
-
-        setTimeout(() => {
-            // Return to original position
             this.sword.rotation.z = originalRot;
-        }, 250);
+        }, 600);
     }
 
     /**
      * Create crescent moon slash effect that traces the sword tip path
      * @param {boolean} dealDamage - Whether this slash should damage enemies
      */
-    createCrescentSlash(dealDamage = false) {
+    createCrescentSlash(dealDamage = false, startAngleOverride = null, endAngleOverride = null, comboIndex = 0, offsetY = 0, tint = 0xbfe3ff) {
         // Create crescent slash tracing the sword tip's arc
         const slashGroup = new THREE.Group();
 
@@ -222,8 +233,8 @@ export class Warrior extends Hero {
 
         // The sword swings from about -0.87 radians (starting position) to -2.2 radians (end position)
         // This is approximately a 76-degree arc
-        const startAngle = -0.87; // Starting rotation (sword at rest)
-        const endAngle = -2.2;    // Ending rotation (sword fully swung)
+        const startAngle = startAngleOverride !== null ? startAngleOverride : -0.87;
+        const endAngle = endAngleOverride !== null ? endAngleOverride : -2.2;
         const angleRange = endAngle - startAngle;
 
         for (let i = 0; i < numSegments; i++) {
@@ -238,22 +249,24 @@ export class Warrior extends Hero {
             const tipX = swordBaseX + Math.sin(-angle) * swordLength;
             const tipY = swordBaseY + Math.cos(-angle) * swordLength;
 
-            const segmentGeometry = new THREE.BoxGeometry(0.25, 0.4, 0.05);
+            const sizeScale = comboIndex === 2 ? 1.2 : comboIndex === 1 ? 0.9 : 1.0;
+            const segmentGeometry = new THREE.PlaneGeometry(0.35 * sizeScale, 0.22 * sizeScale);
             const segmentMaterial = new THREE.MeshBasicMaterial({
-                color: 0xccddff,
+                color: tint,
                 transparent: true,
-                opacity: 0.5 // Reduced from 0.8 to make it dimmer
+                opacity: 0.6,
+                side: THREE.DoubleSide
             });
             const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
 
             segment.position.set(tipX, tipY, 0);
-            segment.rotation.z = angle; // Align with sword direction
+            segment.rotation.z = angle - Math.PI / 2; // Align tangent to arc
 
             slashGroup.add(segment);
         }
 
         // Position at player location and flip for facing direction
-        slashGroup.position.set(this.position.x, this.position.y, 0.2);
+        slashGroup.position.set(this.position.x, this.position.y + offsetY, 0.2);
         slashGroup.scale.x = this.facingDirection;
 
         // Add to scene
@@ -300,8 +313,9 @@ export class Warrior extends Hero {
         console.log('🛡️ SHIELD BASH!');
 
         // Save original position
-        const originalX = -0.6;
-        const originalY = 0;
+        const originalX = this.shieldBase.x;
+        const originalY = this.shieldBase.y;
+        const originalRot = this.shieldBase.rotZ;
 
         // Wind up (pull shield back and up)
         this.shield.position.x = -0.4;
@@ -310,31 +324,27 @@ export class Warrior extends Hero {
 
         setTimeout(() => {
             // Bash forward with force
-            this.shield.position.x = -1.0;
-            this.shield.position.y = -0.1;
-            this.shield.rotation.z = 0.3;
-            this.shield.scale.set(1.2, 1.2, 1.2); // Grow slightly for impact
+            this.animateShieldTo(-1.0, -0.1, 0.3, 1.2, 120);
+            this.shieldBashInvuln = 0.25;
+            this.createShieldBashWind();
 
             // Small forward push to player
             this.velocity.x += (this.velocity.x >= 0 ? 3 : -3);
 
             // Damage and knockback enemies
-            const bashRange = 1.2;
+            const bashRange = 2.3;
             const bashBounds = {
                 left: this.position.x - bashRange,
                 right: this.position.x + bashRange,
                 top: this.position.y + 1,
                 bottom: this.position.y - 1
             };
-            this.damageEnemiesInArea(bashBounds, this.abilities.w);
+            this.shieldBashKnockback(bashBounds);
         }, 100);
 
         setTimeout(() => {
             // Return to original position
-            this.shield.position.x = originalX;
-            this.shield.position.y = originalY;
-            this.shield.rotation.z = 0;
-            this.shield.scale.set(1, 1, 1);
+            this.animateShieldTo(originalX, originalY, originalRot, 1, 140);
         }, 350);
     }
 
@@ -400,6 +410,7 @@ export class Warrior extends Hero {
 
         // Spin animation
         let spinCount = 0;
+        this.isSpinningUltimate = true;
         const spinInterval = setInterval(() => {
             this.mesh.rotation.z += Math.PI / 4;
             spinCount++;
@@ -416,6 +427,7 @@ export class Warrior extends Hero {
             if (spinCount >= 16) { // 2 full rotations
                 clearInterval(spinInterval);
                 this.mesh.rotation.z = 0; // Reset rotation
+                this.isSpinningUltimate = false;
             }
         }, 50);
     }
@@ -500,6 +512,10 @@ export class Warrior extends Hero {
 
         // Call parent update
         super.update(deltaTime, input);
+        if (this.shieldBashInvuln > 0) {
+            this.shieldBashInvuln -= deltaTime;
+        }
+
     }
 
     /**
@@ -510,6 +526,34 @@ export class Warrior extends Hero {
             this.facingDirection = direction;
             // Flip the entire mesh by scaling on X axis
             this.mesh.scale.x = direction;
+        }
+    }
+
+    /**
+     * Override collision handling to favor shield bash timing
+     * @param {Array} enemies - Array of enemy instances
+     */
+    checkEnemyCollisions(enemies) {
+        const playerBounds = this.getBounds();
+
+        for (const enemy of enemies) {
+            if (!enemy.isAlive) continue;
+
+            const enemyBounds = enemy.getBounds();
+
+            if (checkAABBCollision(playerBounds, enemyBounds)) {
+                const playerBottom = playerBounds.bottom;
+                const enemyTop = enemyBounds.top;
+
+                if (this.velocity.y < 0 && playerBottom > enemyTop - 0.3) {
+                    enemy.takeDamage();
+                    this.velocity.y = JUMP_VELOCITY * 0.5;
+                    console.log('Stomped enemy!');
+                } else if (this.shieldBashInvuln <= 0) {
+                    this.takeDamage(20);
+                    console.log('Hit by enemy! Health:', this.currentHealth);
+                }
+            }
         }
     }
 
@@ -526,7 +570,9 @@ export class Warrior extends Hero {
         this.mesh.scale.x = Math.abs(this.mesh.scale.x) * facing;
         this.mesh.scale.y = this.visualScaleY || 1;
         this.mesh.scale.z = this.visualScaleZ || 1;
-        this.mesh.rotation.z = this.visualTiltZ || 0;
+        if (!this.isSpinningUltimate) {
+            this.mesh.rotation.z = this.visualTiltZ || 0;
+        }
     }
 
     /**
@@ -542,8 +588,192 @@ export class Warrior extends Hero {
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(ability, enemy, 1);
                 this.addUltimateCharge(this.ultimateChargePerKill);
+                if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
+                    this.abilities.e.currentCooldown = 0;
+                    this.abilities.e.isReady = true;
+                    this.dashResetCount += 1;
+                }
                 console.log('💥 Ability hit enemy!');
             }
         }
+    }
+
+    /**
+     * Shield bash damage with knockback and collision damage
+     * @param {Object} bounds - AABB bounds for the bash
+     */
+    shieldBashKnockback(bounds) {
+        const hitEnemies = [];
+
+        for (const enemy of this.enemies) {
+            if (!enemy.isAlive) continue;
+            const enemyBounds = enemy.getBounds();
+            if (checkAABBCollision(bounds, enemyBounds)) {
+                this.applyAbilityDamage(this.abilities.w, enemy, 1);
+                this.addUltimateCharge(this.ultimateChargePerKill);
+                if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
+                    this.abilities.e.currentCooldown = 0;
+                    this.abilities.e.isReady = true;
+                    this.dashResetCount += 1;
+                }
+
+                // Knockback away from the warrior
+                const knockDir = enemy.position.x >= this.position.x ? 1 : -1;
+                const startX = enemy.position.x;
+                const targetX = enemy.position.x + knockDir * 2.2;
+                const pushDuration = 120;
+                const startTime = performance.now();
+
+                const pushInterval = setInterval(() => {
+                    const t = (performance.now() - startTime) / pushDuration;
+                    if (t >= 1) {
+                        clearInterval(pushInterval);
+                        enemy.position.x = targetX;
+                        enemy.mesh.position.x = targetX;
+                        enemy.direction = knockDir;
+                        return;
+                    }
+                    const eased = t * (2 - t);
+                    const nextX = startX + (targetX - startX) * eased;
+                    enemy.position.x = nextX;
+                    enemy.mesh.position.x = nextX;
+                }, 16);
+                hitEnemies.push(enemy);
+            }
+        }
+
+        // Collision damage if knocked into another enemy
+        hitEnemies.forEach((knocked) => {
+            const knockedBounds = knocked.getBounds();
+            for (const other of this.enemies) {
+                if (!other.isAlive || other === knocked) continue;
+                const otherBounds = other.getBounds();
+                if (checkAABBCollision(knockedBounds, otherBounds)) {
+                    this.applyAbilityDamage(this.abilities.w, other, 1);
+                }
+            }
+        });
+    }
+
+    /**
+     * Create shockwave visual on dive bash
+     */
+    createShockwaveEffect() {
+        const waveGeometry = new THREE.BoxGeometry(0.6, 0.2, 0.05);
+        const waveMaterial = new THREE.MeshBasicMaterial({
+            color: 0x99ddff,
+            transparent: true,
+            opacity: 0.6
+        });
+
+        const leftWave = new THREE.Mesh(waveGeometry, waveMaterial.clone());
+        const rightWave = new THREE.Mesh(waveGeometry, waveMaterial.clone());
+        leftWave.position.set(this.position.x - 0.4, this.position.y - 0.2, 0.1);
+        rightWave.position.set(this.position.x + 0.4, this.position.y - 0.2, 0.1);
+        this.mesh.parent.add(leftWave);
+        this.mesh.parent.add(rightWave);
+
+        let opacity = 0.6;
+        let scale = 1;
+        const waveInterval = setInterval(() => {
+            opacity -= 0.08;
+            scale += 0.25;
+            leftWave.material.opacity = opacity;
+            rightWave.material.opacity = opacity;
+            leftWave.scale.set(scale, 1, 1);
+            rightWave.scale.set(scale, 1, 1);
+            leftWave.position.x -= 0.4;
+            rightWave.position.x += 0.4;
+
+            if (opacity <= 0) {
+                clearInterval(waveInterval);
+                this.mesh.parent.remove(leftWave);
+                this.mesh.parent.remove(rightWave);
+            }
+        }, 30);
+    }
+
+    /**
+     * Pixel wind effect for shield bash
+     */
+    createShieldBashWind() {
+        const windGroup = new THREE.Group();
+        const direction = -this.facingDirection;
+        const arcCount = 12;
+        const radius = 0.9;
+        const centerX = this.position.x + direction * 0.55;
+        const centerY = this.position.y + 0.1;
+
+        for (let i = 0; i < arcCount; i++) {
+            const t = i / (arcCount - 1);
+            const angle = (-0.8 + t * 1.2) * direction;
+            const falloff = 1 - Math.abs(t - 0.5) * 1.6;
+            const length = 0.42 * falloff + 0.14;
+            const thickness = 0.12 * falloff + 0.03;
+            const segmentGeometry = new THREE.PlaneGeometry(length, thickness);
+            const segmentMaterial = new THREE.MeshBasicMaterial({
+                color: 0xbfe3ff,
+                transparent: true,
+                opacity: 0.75,
+                side: THREE.DoubleSide
+            });
+            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+
+            const x = centerX + Math.cos(angle) * radius * direction;
+            const y = centerY + Math.sin(angle) * radius * 0.6;
+            segment.position.set(x, y, 0.2);
+            segment.rotation.z = angle - Math.PI / 2;
+            windGroup.add(segment);
+        }
+
+        this.mesh.parent.add(windGroup);
+
+        let opacity = 0.75;
+        let drift = 0;
+        const windInterval = setInterval(() => {
+            opacity -= 0.08;
+            drift += 0.18;
+            windGroup.children.forEach((seg, index) => {
+                seg.material.opacity = opacity;
+                seg.position.x += direction * (0.18 + index * 0.01);
+                seg.position.y += 0.01 * Math.sin(index);
+                seg.scale.x = 1 + drift * 0.03;
+            });
+
+            if (opacity <= 0) {
+                clearInterval(windInterval);
+                this.mesh.parent.remove(windGroup);
+            }
+        }, 30);
+    }
+
+    /**
+     * Smooth shield animation helper
+     */
+    animateShieldTo(x, y, rotZ, scale, durationMs) {
+        const startX = this.shield.position.x;
+        const startY = this.shield.position.y;
+        const startRot = this.shield.rotation.z;
+        const startScale = this.shield.scale.x;
+        const startTime = performance.now();
+
+        const animInterval = setInterval(() => {
+            const t = (performance.now() - startTime) / durationMs;
+            if (t >= 1) {
+                clearInterval(animInterval);
+                this.shield.position.x = x;
+                this.shield.position.y = y;
+                this.shield.rotation.z = rotZ;
+                this.shield.scale.set(scale, scale, scale);
+                return;
+            }
+
+            const eased = t * (2 - t);
+            this.shield.position.x = startX + (x - startX) * eased;
+            this.shield.position.y = startY + (y - startY) * eased;
+            this.shield.rotation.z = startRot + (rotZ - startRot) * eased;
+            const nextScale = startScale + (scale - startScale) * eased;
+            this.shield.scale.set(nextScale, nextScale, nextScale);
+        }, 16);
     }
 }
