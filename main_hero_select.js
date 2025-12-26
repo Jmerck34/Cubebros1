@@ -12,6 +12,7 @@ import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
+import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
@@ -19,7 +20,8 @@ import { DebugMenu } from './ui/DebugMenu.js';
 
 // Game state
 let gameStarted = false;
-let scene, camera, renderer, input, level, environment, player, uiManager, cameraFollow, gameLoop, pauseMenu, debugMenu;
+let scene, camera, renderer, input, level, environment, player, uiManager, cameraFollow, parallaxManager, gameLoop, pauseMenu, debugMenu;
+const VIEW_SIZE = 10;
 
 // Hero selection
 let selectedHeroClass = null;
@@ -30,12 +32,11 @@ function initScene() {
     scene.background = new THREE.Color(0x5c94fc);
 
     const aspect = window.innerWidth / window.innerHeight;
-    const viewSize = 10;
     camera = new THREE.OrthographicCamera(
-        -viewSize * aspect,
-        viewSize * aspect,
-        viewSize,
-        -viewSize,
+        -VIEW_SIZE * aspect,
+        VIEW_SIZE * aspect,
+        VIEW_SIZE,
+        -VIEW_SIZE,
         0.1,
         1000
     );
@@ -52,8 +53,8 @@ function initScene() {
     // Handle window resize
     window.addEventListener('resize', () => {
         const aspect = window.innerWidth / window.innerHeight;
-        camera.left = -viewSize * aspect;
-        camera.right = viewSize * aspect;
+        camera.left = -VIEW_SIZE * aspect;
+        camera.right = VIEW_SIZE * aspect;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
@@ -77,6 +78,11 @@ function startGame(HeroClass) {
     // Create level with platforms
     level = new Level(scene);
     level.createTestLevel();
+
+    // Setup parallax manager (foreground/midground/background)
+    parallaxManager = new ParallaxManager(camera);
+    environment.getParallaxLayers().forEach(layer => parallaxManager.addLayer(layer));
+    parallaxManager.addLayer({ root: level.group, speedMultiplier: 1 });
 
     // Add enemies to level (positioned to avoid platforms)
     const goomba1 = new Goomba(scene, 8, 0);    // Right side near grass platform
@@ -143,6 +149,7 @@ function startGame(HeroClass) {
             level.checkCollisions(player);
             player.checkEnemyCollisions(level.enemies);
             cameraFollow.update();
+            parallaxManager.update();
             uiManager.update();
 
             // Update environment animations
@@ -189,6 +196,7 @@ function resetGame() {
         }
         scene.clear();
     }
+    parallaxManager = null;
 
     // Show menu again
     document.getElementById('hero-menu').style.display = 'flex';

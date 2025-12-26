@@ -45,6 +45,13 @@ export class Player {
         this.currentHealth = 100;
         this.healthBar = new HealthBar(scene, this, this.maxHealth);
 
+        // Enemy contact settings (tuned via DebugMenu)
+        this.enemyContactDamage = 8;
+        this.enemyContactKnockbackX = 1.8;
+        this.enemyContactKnockbackY = 2.2;
+        this.enemyContactCooldownDuration = 0.6;
+        this.enemyContactCooldown = 0;
+
         // Debug physics multipliers (set by DebugMenu)
         this.debugPhysics = null;
 
@@ -206,6 +213,10 @@ export class Player {
     update(deltaTime, input) {
         const wasGrounded = this.isGrounded;
 
+        if (this.enemyContactCooldown > 0) {
+            this.enemyContactCooldown = Math.max(0, this.enemyContactCooldown - deltaTime);
+        }
+
         // Horizontal movement
         this.velocity.x = 0; // Reset horizontal velocity
 
@@ -250,6 +261,30 @@ export class Player {
         if (this.debugHitboxVisible) {
             this.updateDebugHitbox();
         }
+    }
+
+    /**
+     * Apply enemy contact damage + slight knockback with cooldown.
+     * @param {Object} enemy - Enemy instance
+     */
+    applyEnemyContact(enemy) {
+        if (this.enemyContactCooldown > 0) {
+            return;
+        }
+
+        const damage = this.enemyContactDamage || 0;
+        if (damage > 0) {
+            this.takeDamage(damage);
+        }
+
+        const knockDir = this.position.x < enemy.position.x ? -1 : 1;
+        const knockX = (this.enemyContactKnockbackX || 0) * knockDir;
+        const knockY = this.enemyContactKnockbackY || 0;
+
+        this.velocity.x = knockX;
+        this.velocity.y = Math.max(this.velocity.y, knockY);
+        this.isGrounded = false;
+        this.enemyContactCooldown = this.enemyContactCooldownDuration || 0;
     }
 
     /**
@@ -482,8 +517,8 @@ export class Player {
                     this.velocity.y = JUMP_VELOCITY * 0.5;
                     console.log('Stomped enemy!');
                 } else {
-                    // Side collision - player takes damage (20 damage per hit)
-                    this.takeDamage(20);
+                    // Side collision - player takes contact damage + knockback
+                    this.applyEnemyContact(enemy);
                     console.log('Hit by enemy! Health:', this.currentHealth);
                 }
             }

@@ -14,16 +14,16 @@ import { Goomba } from './entities/Goomba.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x5c94fc); // Mario sky blue
 
-// Orthographic camera for 2D platformer feel
+// Orthographic camera for clean 2D look
 const aspect = window.innerWidth / window.innerHeight;
 const viewSize = 10;
 const camera = new THREE.OrthographicCamera(
-    -viewSize * aspect, // left
-    viewSize * aspect,  // right
-    viewSize,           // top
-    -viewSize,          // bottom
-    0.1,                // near
-    1000                // far
+    -viewSize * aspect,
+    viewSize * aspect,
+    viewSize,
+    -viewSize,
+    0.1,
+    1000
 );
 camera.position.set(0, 0, 10);
 camera.lookAt(0, 0, 0);

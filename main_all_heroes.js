@@ -12,6 +12,7 @@ import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
+import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
 
@@ -19,16 +20,16 @@ import { Goomba } from './entities/Goomba.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x5c94fc); // Mario sky blue
 
-// Orthographic camera for 2D platformer feel
+// Orthographic camera for clean 2D look
 const aspect = window.innerWidth / window.innerHeight;
 const viewSize = 10;
 const camera = new THREE.OrthographicCamera(
-    -viewSize * aspect, // left
-    viewSize * aspect,  // right
-    viewSize,           // top
-    -viewSize,          // bottom
-    0.1,                // near
-    1000                // far
+    -viewSize * aspect,
+    viewSize * aspect,
+    viewSize,
+    -viewSize,
+    0.1,
+    1000
 );
 camera.position.set(0, 0, 10);
 camera.lookAt(0, 0, 0);
@@ -51,6 +52,11 @@ environment.createBackground();
 // Create level with platforms
 const level = new Level(scene);
 level.createTestLevel(); // Adds ground + floating platforms
+
+// Setup parallax manager (foreground/midground/background)
+const parallaxManager = new ParallaxManager(camera);
+environment.getParallaxLayers().forEach(layer => parallaxManager.addLayer(layer));
+parallaxManager.addLayer({ root: level.group, speedMultiplier: 1 });
 
 // Add enemies to level
 const goomba1 = new Goomba(scene, 8, 0);
@@ -123,6 +129,9 @@ const gameLoop = new GameLoop(
 
         // Update camera to follow player
         cameraFollow.update();
+
+        // Update parallax layers (based on camera movement)
+        parallaxManager.update();
 
         // Update UI
         uiManager.update();

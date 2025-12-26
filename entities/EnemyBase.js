@@ -10,7 +10,7 @@ export class EnemyBase {
     constructor(scene, x, y, color = 0x5b8a4a) {
         this.scene = scene;
         // Create enemy mesh (zombie cube by default)
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const geometry = new THREE.BoxGeometry(1, 1, 0.2);
         const material = new THREE.MeshBasicMaterial({ color });
         this.mesh = new THREE.Mesh(geometry, material);
 
@@ -186,25 +186,27 @@ export class EnemyBase {
     createZombieDetails() {
         const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x111111 });
         const glowMaterial = new THREE.MeshBasicMaterial({ color: 0x99ff66 });
+        const faceZ = 0.12;
+        const glowZ = 0.13;
 
         const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.02), eyeMaterial);
-        leftEye.position.set(-0.18, 0.12, 0.52);
+        leftEye.position.set(-0.18, 0.12, faceZ);
         this.mesh.add(leftEye);
 
         const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.02), eyeMaterial);
-        rightEye.position.set(0.18, 0.12, 0.52);
+        rightEye.position.set(0.18, 0.12, faceZ);
         this.mesh.add(rightEye);
 
         const glow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.02), glowMaterial);
-        glow.position.set(0.18, 0.12, 0.53);
+        glow.position.set(0.18, 0.12, glowZ);
         this.mesh.add(glow);
 
         const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.02), eyeMaterial);
-        mouth.position.set(0, -0.2, 0.52);
+        mouth.position.set(0, -0.2, faceZ);
         this.mesh.add(mouth);
 
         const scar = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.03, 0.02), eyeMaterial);
-        scar.position.set(0.05, 0.32, 0.52);
+        scar.position.set(0.05, 0.32, faceZ);
         scar.rotation.z = -0.3;
         this.mesh.add(scar);
     }
@@ -214,6 +216,7 @@ export class EnemyBase {
      * @param {number} durationSeconds
      */
     setPoisoned(durationSeconds = 0.6) {
+        if (!this.isAlive) return;
         this.poisonTimer = Math.max(this.poisonTimer, durationSeconds);
         if (!this.poisonEffect) {
             const ringGeometry = new THREE.RingGeometry(0.55, 0.7, 16);

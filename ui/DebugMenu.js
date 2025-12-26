@@ -15,6 +15,12 @@ export class DebugMenu {
             gravityMultiplier: 1.0,
             jumpForceMultiplier: 1.0
         };
+        this.globalCombat = {
+            contactDamage: 8,
+            contactKnockbackX: 1.8,
+            contactKnockbackY: 2.2,
+            contactCooldown: 0.6
+        };
         this.globalHitbox = {
             enabled: false,
             playerScaleX: 1.0,
@@ -25,6 +31,7 @@ export class DebugMenu {
 
         this.createDebugMenuOverlay();
         this.setupKeyboardListener();
+        this.applyCombatSettings();
     }
 
     /**
@@ -164,6 +171,29 @@ export class DebugMenu {
             }
             this.player.healthBar.setHealth(this.player.currentHealth);
             console.log(`[Debug] Max Health set to ${value}`);
+        });
+
+        // Enemy Contact Section
+        this.addSection('🧟 Enemy Contact');
+        this.addNumberControl('Contact Damage', this.globalCombat.contactDamage, 0, 50, 1, (value) => {
+            this.globalCombat.contactDamage = value;
+            this.applyCombatSettings();
+            console.log(`[Debug] Contact damage: ${this.globalCombat.contactDamage}`);
+        });
+        this.addNumberControl('Knockback X', this.globalCombat.contactKnockbackX, 0, 6, 0.1, (value) => {
+            this.globalCombat.contactKnockbackX = value;
+            this.applyCombatSettings();
+            console.log(`[Debug] Contact knockback X: ${this.globalCombat.contactKnockbackX.toFixed(1)}`);
+        });
+        this.addNumberControl('Knockback Y', this.globalCombat.contactKnockbackY, 0, 8, 0.1, (value) => {
+            this.globalCombat.contactKnockbackY = value;
+            this.applyCombatSettings();
+            console.log(`[Debug] Contact knockback Y: ${this.globalCombat.contactKnockbackY.toFixed(1)}`);
+        });
+        this.addNumberControl('Hit Cooldown (s)', this.globalCombat.contactCooldown, 0, 2, 0.05, (value) => {
+            this.globalCombat.contactCooldown = value;
+            this.applyCombatSettings();
+            console.log(`[Debug] Contact cooldown: ${this.globalCombat.contactCooldown.toFixed(2)}s`);
         });
 
         // Physics Section
@@ -585,7 +615,19 @@ export class DebugMenu {
         this.player = player;
         // Ensure physics reference is connected
         this.player.debugPhysics = this.globalPhysics;
+        this.applyCombatSettings();
         this.applyHitboxSettings();
+    }
+
+    /**
+     * Apply enemy contact settings to player
+     */
+    applyCombatSettings() {
+        if (!this.player) return;
+        this.player.enemyContactDamage = this.globalCombat.contactDamage;
+        this.player.enemyContactKnockbackX = this.globalCombat.contactKnockbackX;
+        this.player.enemyContactKnockbackY = this.globalCombat.contactKnockbackY;
+        this.player.enemyContactCooldownDuration = this.globalCombat.contactCooldown;
     }
 
     /**

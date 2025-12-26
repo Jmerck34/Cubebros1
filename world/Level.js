@@ -8,6 +8,8 @@ import { checkAABBCollision, resolveCollisionY, resolveCollisionX } from '../uti
 export class Level {
     constructor(scene) {
         this.scene = scene;
+        this.group = new THREE.Group();
+        this.scene.add(this.group);
         this.platforms = [];
         this.enemies = [];
     }
@@ -30,9 +32,9 @@ export class Level {
 
         switch(type) {
             case 'ground':
-                bodyColor = 0x8B4513;  // Brown dirt
-                topColor = 0x228B22;   // Forest green grass
-                sideColor = 0x654321;  // Dark brown
+                bodyColor = 0x8f563b;  // Warm dirt
+                topColor = 0x2fa65c;   // Lush grass
+                sideColor = 0x6d3f2a;  // Dark dirt
                 break;
             case 'stone':
                 bodyColor = 0x808080;  // Gray stone
@@ -41,9 +43,9 @@ export class Level {
                 break;
             case 'grass':
             default:
-                bodyColor = 0x8B4513;  // Brown
-                topColor = 0x32CD32;   // Lime green
-                sideColor = 0x654321;  // Dark brown
+                bodyColor = 0x7e4b32;  // Brown
+                topColor = 0x3bbb6b;   // Bright grass
+                sideColor = 0x5f3a28;  // Dark brown
         }
 
         const bodyMaterial = new THREE.MeshBasicMaterial({ color: bodyColor });
@@ -51,14 +53,14 @@ export class Level {
         platformGroup.add(body);
 
         // Top layer (grass/stone surface)
-        const topGeometry = new THREE.BoxGeometry(width, height * 0.15, 0.85);
+        const topGeometry = new THREE.BoxGeometry(width, height * 0.18, 0.85);
         const topMaterial = new THREE.MeshBasicMaterial({ color: topColor });
         const top = new THREE.Mesh(topGeometry, topMaterial);
         top.position.y = height * 0.425;
         platformGroup.add(top);
 
         // Side highlights for depth
-        const sideGeometry = new THREE.BoxGeometry(width * 0.98, height * 0.1, 0.75);
+        const sideGeometry = new THREE.BoxGeometry(width * 0.98, height * 0.12, 0.75);
         const sideMaterial = new THREE.MeshBasicMaterial({ color: sideColor });
         const side = new THREE.Mesh(sideGeometry, sideMaterial);
         side.position.y = -height * 0.4;
@@ -71,7 +73,7 @@ export class Level {
             for (let i = 0; i < numTufts; i++) {
                 const tuftGeometry = new THREE.BoxGeometry(0.08, 0.15, 0.05);
                 const tuftMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x228B22,
+                    color: 0x2f8f4e,
                     transparent: true,
                     opacity: 0.7
                 });
@@ -82,6 +84,24 @@ export class Level {
                     Math.random() * 0.2 - 0.1
                 );
                 platformGroup.add(tuft);
+            }
+
+            // Add pixel-like dirt specks for texture
+            const speckCount = Math.floor(width * 3);
+            for (let i = 0; i < speckCount; i++) {
+                const speckGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.02);
+                const speckMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x6f3b29,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                const speck = new THREE.Mesh(speckGeometry, speckMaterial);
+                speck.position.set(
+                    -width/2 + Math.random() * width,
+                    -height/2 + 0.1 + Math.random() * (height - 0.4),
+                    0.41
+                );
+                platformGroup.add(speck);
             }
         }
 
@@ -102,7 +122,7 @@ export class Level {
         }
 
         platformGroup.position.set(x, y, 0);
-        this.scene.add(platformGroup);
+        this.group.add(platformGroup);
 
         const platform = {
             mesh: platformGroup,
@@ -381,7 +401,7 @@ export class Level {
 
         // Position the entire wall - blocks are built from 0 upward, so position at baseY
         wallGroup.position.set(x, baseY, 0);
-        this.scene.add(wallGroup);
+        this.group.add(wallGroup);
 
         // Calculate actual visual top based on blocks (each 0.8 high, positioned at center)
         const actualVisualTop = baseY + (numBlocks * 0.8);
@@ -422,7 +442,11 @@ export class Level {
      */
     createTestLevel() {
         // Main ground platform (ground type with grass)
-        this.addPlatform(0, -3, 100, 1, 'ground');
+        const groundSurfaceY = -2.5;
+        const groundBottomY = -10;
+        const groundHeight = groundSurfaceY - groundBottomY;
+        const groundCenterY = groundSurfaceY - groundHeight / 2;
+        this.addPlatform(0, groundCenterY, 100, groundHeight, 'ground');
 
         // Floating grass platforms (thin)
         this.addPlatform(5, 0, 3, 0.5, 'grass');

@@ -690,6 +690,10 @@ export class Assassin extends Hero {
                 this.addUltimateCharge(this.ultimateChargePerKill);
                 console.log('💥 Assassin hit enemy!');
 
+                if (!enemy.isAlive) {
+                    continue;
+                }
+
                 // Apply bleed (additional damage over time)
                 if (applyBleed) {
                     this.applyBleed(enemy, ability);

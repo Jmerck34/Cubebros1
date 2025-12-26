@@ -550,7 +550,7 @@ export class Warrior extends Hero {
                     this.velocity.y = JUMP_VELOCITY * 0.5;
                     console.log('Stomped enemy!');
                 } else if (this.shieldBashInvuln <= 0) {
-                    this.takeDamage(20);
+                    this.applyEnemyContact(enemy);
                     console.log('Hit by enemy! Health:', this.currentHealth);
                 }
             }

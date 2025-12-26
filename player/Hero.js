@@ -165,8 +165,8 @@ export class Hero extends Player {
 
                     console.log('Stomped enemy!');
                 } else {
-                    // Side collision - player takes damage
-                    this.die();
+                    // Side collision - player takes contact damage + knockback
+                    this.applyEnemyContact(enemy);
                 }
             }
         }
