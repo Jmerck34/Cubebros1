@@ -115,6 +115,8 @@ window.addEventListener('resize', () => {
 const gameLoop = new GameLoop(
     // Update callback
     (deltaTime) => {
+        input.update();
+
         // Update player
         player.update(deltaTime, input);
 
@@ -150,6 +152,7 @@ gameLoop.start();
 
 console.log('🎮 HERO SELECTION READY! 🎮');
 console.log('Move: Arrow Keys/A/D | Jump: Space (double jump!)');
+console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
 console.log('');
 console.log('📋 HERO ABILITIES:');
 console.log('');

@@ -144,6 +144,7 @@ function startGame(HeroClass) {
                 return;
             }
 
+            input.update();
             player.update(deltaTime, input);
             level.updateEnemies(deltaTime);
             level.checkCollisions(player);
@@ -175,6 +176,7 @@ function startGame(HeroClass) {
     console.log(`${heroNames[HeroClass.name]} SELECTED!`);
     console.log('Move: Arrow Keys/A/D | Jump: W/Space (double jump!)');
     console.log('Abilities: Q/Left Click = A1 | Right Click = A2 | E = A3 | R = Ultimate');
+    console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
 }
 
 // Reset game (return to menu)

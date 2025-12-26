@@ -79,6 +79,8 @@ window.addEventListener('resize', () => {
 const gameLoop = new GameLoop(
     // Update callback
     (deltaTime) => {
+        input.update();
+
         // Update player
         player.update(deltaTime, input);
 
@@ -109,4 +111,5 @@ gameLoop.start();
 console.log('⚔️ WARRIOR HERO READY! ⚔️');
 console.log('Move: Arrow Keys/A/D | Jump: Space (double jump!)');
 console.log('Abilities: Left Click/Q = Sword Slash | W = Shield Bash | E = Dash | R = Whirlwind Ultimate');
+console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
 console.log('Kill enemies to charge ultimate!');

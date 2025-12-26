@@ -15,6 +15,24 @@ export class InputManager {
             ability3: ['KeyE'],
             ultimate: ['KeyR']
         };
+        this.gamepadBindings = {
+            left: ['Axis0-', 'DPadLeft'],
+            right: ['Axis0+', 'DPadRight'],
+            jump: ['Button0'],
+            ability1: ['Button2'],
+            ability2: ['Button1'],
+            ability3: ['Button3'],
+            ultimate: ['Button5', 'Button7']
+        };
+        this.gamepadAliases = {
+            DPadUp: 'Button12',
+            DPadDown: 'Button13',
+            DPadLeft: 'Button14',
+            DPadRight: 'Button15'
+        };
+        this.gamepadDeadzone = 0.25;
+        this.gamepadIndex = null;
+        this.gamepad = null;
 
         // Setup keyboard event listeners
         window.addEventListener('keydown', (event) => {
@@ -44,6 +62,49 @@ export class InputManager {
         window.addEventListener('contextmenu', (event) => {
             event.preventDefault();
         });
+
+        // Setup gamepad connection listeners
+        window.addEventListener('gamepadconnected', (event) => {
+            if (this.gamepadIndex === null) {
+                this.gamepadIndex = event.gamepad.index;
+            }
+            console.log(`Gamepad connected: ${event.gamepad.id}`);
+        });
+
+        window.addEventListener('gamepaddisconnected', (event) => {
+            if (this.gamepadIndex === event.gamepad.index) {
+                this.gamepadIndex = null;
+                this.gamepad = null;
+            }
+            console.log(`Gamepad disconnected: ${event.gamepad.id}`);
+        });
+    }
+
+    /**
+     * Poll gamepad state (call once per frame)
+     */
+    update() {
+        if (!navigator.getGamepads) {
+            this.gamepad = null;
+            this.gamepadIndex = null;
+            return;
+        }
+
+        const pads = navigator.getGamepads();
+        if (this.gamepadIndex !== null && pads[this.gamepadIndex] && pads[this.gamepadIndex].connected) {
+            this.gamepad = pads[this.gamepadIndex];
+            return;
+        }
+
+        this.gamepad = null;
+        this.gamepadIndex = null;
+        for (const pad of pads) {
+            if (pad && pad.connected) {
+                this.gamepad = pad;
+                this.gamepadIndex = pad.index;
+                break;
+            }
+        }
     }
 
     /**
@@ -161,6 +222,44 @@ export class InputManager {
                 return true;
             }
         }
+
+        const gamepadCodes = this.gamepadBindings[action] || [];
+        for (const code of gamepadCodes) {
+            if (this.isGamepadPressed(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a gamepad input is active
+     * @param {string} code
+     * @returns {boolean}
+     */
+    isGamepadPressed(code) {
+        const pad = this.gamepad;
+        if (!pad || !pad.connected) return false;
+
+        const resolved = this.gamepadAliases[code] || code;
+        if (resolved.startsWith('Button')) {
+            const index = parseInt(resolved.replace('Button', ''), 10);
+            const button = pad.buttons && pad.buttons[index];
+            if (!button) return false;
+            return button.pressed || button.value > 0.5;
+        }
+
+        if (resolved.startsWith('Axis')) {
+            const match = resolved.match(/^Axis(\d+)([+-])?$/);
+            if (!match) return false;
+            const axisIndex = parseInt(match[1], 10);
+            const axisValue = pad.axes && pad.axes[axisIndex] ? pad.axes[axisIndex] : 0;
+            const direction = match[2];
+            if (direction === '+') return axisValue > this.gamepadDeadzone;
+            if (direction === '-') return axisValue < -this.gamepadDeadzone;
+            return Math.abs(axisValue) > this.gamepadDeadzone;
+        }
+
         return false;
     }
 
