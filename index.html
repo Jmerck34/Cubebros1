@@ -36,8 +36,10 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             z-index: 1000;
+            overflow-y: auto;
+            padding: 40px 20px 60px;
         }
 
         #hero-menu h1 {
@@ -55,9 +57,11 @@
 
         .hero-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 30px;
             max-width: 900px;
+            width: 100%;
+            margin-bottom: 30px;
         }
 
         .hero-card {
@@ -67,7 +71,8 @@
             padding: 30px;
             cursor: pointer;
             transition: all 0.3s ease;
-            min-width: 350px;
+            min-width: 260px;
+            scroll-margin-top: 120px;
         }
 
         .hero-card:hover {
@@ -130,6 +135,22 @@
 
         .hero-card .ability strong {
             color: white;
+        }
+
+        .menu-focus {
+            outline: 3px solid #ffd966;
+            box-shadow: 0 0 18px rgba(255, 217, 102, 0.7);
+        }
+
+        .hero-card.menu-focus {
+            transform: scale(1.03);
+            border-color: #ffd966;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        #coop-toggle.menu-focus {
+            border-color: #ffd966;
+            box-shadow: 0 0 12px rgba(255, 217, 102, 0.7);
         }
 
         .coop-toggle {
@@ -291,7 +312,7 @@
     <div id="hero-menu">
         <h1 id="hero-menu-title">🎮 SELECT YOUR HERO 🎮</h1>
         <p id="hero-menu-subtitle">Choose your champion and battle enemies!</p>
-        <p id="hero-menu-controls" style="font-size: 14px; color: #888; margin-top: -30px;">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities</p>
+        <p id="hero-menu-controls" style="font-size: 14px; color: #888; margin-top: -30px;">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities | Controller: D-pad/Stick + A = Select</p>
         <div class="coop-toggle">
             <button id="coop-toggle" type="button">Local Co-op: Off</button>
             <div id="coop-hint">P2: Controller 1 preferred or arrows/J-L move, Up/I jump, U/O/K/P abilities</div>

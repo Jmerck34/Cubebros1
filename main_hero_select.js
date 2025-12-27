@@ -30,6 +30,14 @@ let heroMenuTitle, heroMenuSubtitle, heroMenuControls, coopToggle, coopHint;
 let heroMenuTitleDefault = '';
 let heroMenuSubtitleDefault = '';
 let heroMenuControlsDefault = '';
+let menuItems = [];
+let menuFocusIndex = 0;
+let menuLastNavTime = 0;
+let menuSelectLocked = false;
+let menuBackLocked = false;
+
+const MENU_AXIS_DEADZONE = 0.5;
+const MENU_NAV_COOLDOWN_MS = 180;
 
 const HERO_NAMES = {
     [Warrior.name]: '⚔️ WARRIOR',
@@ -309,7 +317,7 @@ function setCoopEnabled(enabled) {
     }
     if (heroMenuControls) {
         heroMenuControls.textContent = enabled
-            ? 'P1: A/D = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities'
+            ? 'P1: A/D = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities | Controller: D-pad/Stick + A = Select'
             : heroMenuControlsDefault;
     }
 }
@@ -329,13 +337,111 @@ function handleHeroSelect(HeroClass) {
             heroMenuSubtitle.textContent = `Player 1 locked in: ${HERO_NAMES[HeroClass.name]}`;
         }
         if (heroMenuControls) {
-            heroMenuControls.textContent = 'Player 2 controls: Controller 1 preferred | Arrows/J-L = Move | Up/I = Jump | U/O/K/P = Abilities';
+            heroMenuControls.textContent = 'Player 2 controls: Controller 1 preferred | Arrows/J-L = Move | Up/I = Jump | U/O/K/P = Abilities | Controller: D-pad/Stick + A = Select | B = Back';
         }
         return;
     }
 
     startGame(selectedHeroClassP1, HeroClass);
     selectedHeroClassP1 = null;
+}
+
+function buildMenuItems() {
+    const items = [];
+    if (coopToggle) {
+        items.push(coopToggle);
+    }
+    const cards = Array.from(document.querySelectorAll('.hero-card'));
+    items.push(...cards);
+    menuItems = items;
+    if (menuFocusIndex >= menuItems.length) {
+        menuFocusIndex = Math.max(0, menuItems.length - 1);
+    }
+    updateMenuFocus();
+}
+
+function updateMenuFocus() {
+    menuItems.forEach((item, index) => {
+        if (index === menuFocusIndex) {
+            item.classList.add('menu-focus');
+        } else {
+            item.classList.remove('menu-focus');
+        }
+    });
+
+    const focused = menuItems[menuFocusIndex];
+    if (focused && typeof focused.scrollIntoView === 'function') {
+        focused.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
+}
+
+function moveMenuFocus(delta) {
+    if (!menuItems.length) return;
+    const nextIndex = (menuFocusIndex + delta + menuItems.length) % menuItems.length;
+    if (nextIndex !== menuFocusIndex) {
+        menuFocusIndex = nextIndex;
+        updateMenuFocus();
+    }
+}
+
+function activateMenuItem() {
+    const focused = menuItems[menuFocusIndex];
+    if (focused && typeof focused.click === 'function') {
+        focused.click();
+    }
+}
+
+function handleMenuBack() {
+    if (localMultiplayerEnabled && selectedHeroClassP1) {
+        setCoopEnabled(localMultiplayerEnabled);
+        return true;
+    }
+    return false;
+}
+
+function pollMenuGamepad() {
+    if (gameStarted || !navigator.getGamepads) return;
+
+    const pads = navigator.getGamepads();
+    let pad = null;
+    for (const candidate of pads) {
+        if (candidate && candidate.connected) {
+            pad = candidate;
+            break;
+        }
+    }
+    if (!pad) return;
+
+    const now = performance.now();
+    const axisX = pad.axes[0] || 0;
+    const axisY = pad.axes[1] || 0;
+
+    const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
+    const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
+    const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
+    const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+
+    if ((up || down || left || right) && now - menuLastNavTime > MENU_NAV_COOLDOWN_MS) {
+        const delta = (down || right) ? 1 : -1;
+        moveMenuFocus(delta);
+        menuLastNavTime = now;
+    }
+
+    const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    if (selectPressed && !menuSelectLocked) {
+        activateMenuItem();
+        menuSelectLocked = true;
+    } else if (!selectPressed) {
+        menuSelectLocked = false;
+    }
+
+    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+    if (backPressed && !menuBackLocked) {
+        handleMenuBack();
+        menuBackLocked = true;
+    } else if (!backPressed) {
+        menuBackLocked = false;
+    }
 }
 
 // Initialize scene on load
@@ -387,9 +493,12 @@ window.addEventListener('load', () => {
         handleHeroSelect(Archer);
     });
 
+    buildMenuItems();
+
     // Render empty scene while in menu
     function menuRender() {
         if (!gameStarted) {
+            pollMenuGamepad();
             renderer.render(scene, camera);
             requestAnimationFrame(menuRender);
         }
