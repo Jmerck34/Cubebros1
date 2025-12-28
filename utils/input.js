@@ -25,6 +25,7 @@ export class InputManager {
                 this.bindings[action] = [...options.bindings[action]];
             });
         }
+        this.rebuildGameKeySet();
 
         const defaultGamepadBindings = {
             left: ['Axis0-', 'DPadLeft'],
@@ -109,6 +110,20 @@ export class InputManager {
                 }
             }
             console.log(`Gamepad disconnected: ${event.gamepad.id}`);
+        });
+    }
+
+    /**
+     * Rebuild cached set of keyboard codes used for default-prevent behavior.
+     */
+    rebuildGameKeySet() {
+        this.gameKeySet = new Set();
+        Object.values(this.bindings).forEach((codes) => {
+            codes.forEach((code) => {
+                if (!code.startsWith('Mouse')) {
+                    this.gameKeySet.add(code);
+                }
+            });
         });
     }
 
@@ -239,15 +254,7 @@ export class InputManager {
      * @returns {boolean}
      */
     isGameKey(keyCode) {
-        const boundKeys = new Set();
-        Object.values(this.bindings).forEach((codes) => {
-            codes.forEach((code) => {
-                if (!code.startsWith('Mouse')) {
-                    boundKeys.add(code);
-                }
-            });
-        });
-        return boundKeys.has(keyCode);
+        return this.gameKeySet ? this.gameKeySet.has(keyCode) : false;
     }
 
     /**
@@ -339,6 +346,7 @@ export class InputManager {
 
         this.bindings[action][slot] = code;
         this.bindings[action] = this.bindings[action].filter(Boolean);
+        this.rebuildGameKeySet();
     }
 
     /**
@@ -349,5 +357,6 @@ export class InputManager {
     clearBinding(action, slot = 0) {
         if (!this.bindings[action]) return;
         this.bindings[action].splice(slot, 1);
+        this.rebuildGameKeySet();
     }
 }

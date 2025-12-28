@@ -8,6 +8,7 @@ export class GameLoop {
         this.renderCallback = renderCallback;
         this.lastTime = 0;
         this.isRunning = false;
+        this.loop = this.loop.bind(this);
     }
 
     /**
@@ -16,7 +17,7 @@ export class GameLoop {
     start() {
         this.isRunning = true;
         this.lastTime = performance.now();
-        requestAnimationFrame(this.loop.bind(this));
+        requestAnimationFrame(this.loop);
     }
 
     /**
@@ -49,6 +50,6 @@ export class GameLoop {
         this.lastTime = currentTime;
 
         // Request next frame
-        requestAnimationFrame(this.loop.bind(this));
+        requestAnimationFrame(this.loop);
     }
 }
