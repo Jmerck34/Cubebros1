@@ -294,13 +294,15 @@ export class Warlock extends Hero {
                 bottom: currentStartY - 2
             };
 
-            for (const enemy of this.enemies) {
+            for (const enemy of this.getDamageTargets()) {
                 if (!enemy.isAlive) continue;
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(lightningBounds, enemyBounds)) {
                     this.applyAbilityDamage(this.abilities.q, enemy, 1);
-                    this.addUltimateCharge(this.ultimateChargePerKill);
+                    if (enemy.type !== 'player') {
+                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    }
                     console.log('⚡ Lightning struck enemy!');
                 }
             }
@@ -362,7 +364,7 @@ export class Warlock extends Hero {
         };
 
         // Make enemies flee away from warlock
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
@@ -571,7 +573,7 @@ export class Warlock extends Hero {
         };
 
         // Convert nearby enemies
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
@@ -603,7 +605,10 @@ export class Warlock extends Hero {
      * Convert enemy to player's side
      */
     convertEnemy(enemy) {
-        console.log('🧠 Enemy converted!');
+        if (enemy.type === 'player') {
+            return;
+        }
+        console.log('Enemy converted!');
 
         // Change enemy color to purple (warlock-controlled)
         enemy.mesh.material.color.set(0x9400d3);
@@ -629,3 +634,4 @@ export class Warlock extends Hero {
         }, 10000);
     }
 }
+

@@ -14,19 +14,26 @@ import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
+import { checkAABBCollision } from './utils/collision.js';
 import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
 import { DebugMenu } from './ui/DebugMenu.js';
 
 // Game state
 let gameStarted = false;
-let scene, camera, renderer, input, input2, level, environment, player, player2, uiManager, uiManager2, cameraFollow, parallaxManager, gameLoop, pauseMenu, debugMenu;
+let scene, camera, camera2, renderer, input, input2, level, environment, player, player2, uiManager, uiManager2, cameraFollow, cameraFollow2, parallaxManager, gameLoop, pauseMenu, debugMenu;
 const VIEW_SIZE = 10;
 
 // Hero selection
 let localMultiplayerEnabled = false;
 let selectedHeroClassP1 = null;
+let pendingHeroClassP1 = null;
+let pendingHeroClassP2 = null;
+let selectedTeamP1 = null;
+let selectedTeamP2 = null;
+let teamSelectionIndex = 0;
 let heroMenuTitle, heroMenuSubtitle, heroMenuControls, coopToggle, coopHint;
+let teamMenu, teamMenuTitle, teamMenuSubtitle, teamButtonBlue, teamButtonRed;
 let heroMenuTitleDefault = '';
 let heroMenuSubtitleDefault = '';
 let heroMenuControlsDefault = '';
@@ -72,15 +79,7 @@ function initScene() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x5c94fc);
 
-    const aspect = window.innerWidth / window.innerHeight;
-    camera = new THREE.OrthographicCamera(
-        -VIEW_SIZE * aspect,
-        VIEW_SIZE * aspect,
-        VIEW_SIZE,
-        -VIEW_SIZE,
-        0.1,
-        1000
-    );
+    camera = new THREE.OrthographicCamera(-VIEW_SIZE, VIEW_SIZE, VIEW_SIZE, -VIEW_SIZE, 0.1, 1000);
     camera.position.set(0, 0, 10);
     camera.lookAt(0, 0, 0);
 
@@ -93,19 +92,32 @@ function initScene() {
 
     // Handle window resize
     window.addEventListener('resize', () => {
-        const aspect = window.innerWidth / window.innerHeight;
-        camera.left = -VIEW_SIZE * aspect;
-        camera.right = VIEW_SIZE * aspect;
-        camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        updateCameraFrustum(camera, window.innerWidth, window.innerHeight);
+        if (camera2) {
+            updateCameraFrustum(camera2, window.innerWidth * 0.5, window.innerHeight);
+        }
     });
 }
 
+function updateCameraFrustum(targetCamera, width, height) {
+    if (!targetCamera) return;
+    const aspect = width / height;
+    targetCamera.left = -VIEW_SIZE * aspect;
+    targetCamera.right = VIEW_SIZE * aspect;
+    targetCamera.top = VIEW_SIZE;
+    targetCamera.bottom = -VIEW_SIZE;
+    targetCamera.updateProjectionMatrix();
+}
+
 // Start game with selected hero
-function startGame(HeroClass, HeroClassP2 = null) {
+function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red') {
 
     // Hide menu
     document.getElementById('hero-menu').style.display = 'none';
+    if (teamMenu) {
+        teamMenu.style.display = 'none';
+    }
     document.getElementById('ability-ui').style.display = 'flex';
     const abilityUiP2 = document.getElementById('ability-ui-p2');
     if (abilityUiP2) {
@@ -148,16 +160,28 @@ function startGame(HeroClass, HeroClassP2 = null) {
     const goomba6 = new Goomba(scene, 18, 0);   // Far right ground
     level.addEnemy(goomba6);
 
-    // Create selected hero
-    player = new HeroClass(scene, 0, 0);
+    const spawnP1 = getTeamSpawn(level, teamP1);
+    player = new HeroClass(scene, spawnP1.x, spawnP1.y);
+    player.team = teamP1;
+    player.spawnPoint = { x: spawnP1.x, y: spawnP1.y };
     player.enemies = level.enemies;
     player.level = level; // Pass level reference for platform detection
+    player.opponents = [];
 
     player2 = null;
     if (HeroClassP2) {
-        player2 = new HeroClassP2(scene, 2, 0);
+        const spawnP2 = getTeamSpawn(level, teamP2);
+        player2 = new HeroClassP2(scene, spawnP2.x, spawnP2.y);
+        player2.team = teamP2;
+        player2.spawnPoint = { x: spawnP2.x, y: spawnP2.y };
         player2.enemies = level.enemies;
         player2.level = level;
+        player2.opponents = [];
+    }
+
+    if (player2 && player.team !== player2.team) {
+        player.opponents = [player2];
+        player2.opponents = [player];
     }
 
     // Setup UI manager
@@ -165,8 +189,19 @@ function startGame(HeroClass, HeroClassP2 = null) {
     uiManager2 = player2 ? new UIManager(player2, { suffix: 'p2' }) : null;
 
     // Setup camera follow
-    cameraFollow = new CameraFollow(camera, player2 ? [player, player2] : player);
+    cameraFollow = new CameraFollow(camera, player);
     cameraFollow.setSmoothing(0.1);
+    camera2 = null;
+    cameraFollow2 = null;
+    if (player2) {
+        camera2 = new THREE.OrthographicCamera(-VIEW_SIZE, VIEW_SIZE, VIEW_SIZE, -VIEW_SIZE, 0.1, 1000);
+        camera2.position.set(0, 0, 10);
+        camera2.lookAt(0, 0, 0);
+        cameraFollow2 = new CameraFollow(camera2, player2);
+        cameraFollow2.setSmoothing(0.1);
+        updateCameraFrustum(camera2, window.innerWidth * 0.5, window.innerHeight);
+    }
+    updateCameraFrustum(camera, window.innerWidth, window.innerHeight);
 
     // Create pause menu
     pauseMenu = new PauseMenu(
@@ -210,7 +245,7 @@ function startGame(HeroClass, HeroClassP2 = null) {
             if (player2 && input2) {
                 player2.update(deltaTime, input2);
             }
-            level.updateEnemies(deltaTime);
+            level.update(deltaTime);
             level.checkCollisions(player);
             if (player2) {
                 level.checkCollisions(player2);
@@ -219,7 +254,18 @@ function startGame(HeroClass, HeroClassP2 = null) {
             if (player2) {
                 player2.checkEnemyCollisions(level.enemies);
             }
+            if (player2 && player.team !== player2.team) {
+                const p1Bounds = player.getBounds();
+                const p2Bounds = player2.getBounds();
+                if (checkAABBCollision(p1Bounds, p2Bounds)) {
+                    player.applyEnemyContact(player2);
+                    player2.applyEnemyContact(player);
+                }
+            }
             cameraFollow.update();
+            if (cameraFollow2) {
+                cameraFollow2.update();
+            }
             parallaxManager.update();
             uiManager.update();
             if (uiManager2) {
@@ -230,7 +276,34 @@ function startGame(HeroClass, HeroClassP2 = null) {
             environment.update(deltaTime);
         },
         () => {
-            renderer.render(scene, camera);
+            const size = renderer.getSize(new THREE.Vector2());
+            const fullWidth = size.x;
+            const fullHeight = size.y;
+
+            if (player2 && camera2) {
+                const halfWidth = Math.floor(fullWidth / 2);
+                renderer.autoClear = false;
+                renderer.setScissorTest(true);
+                renderer.clear();
+
+                updateCameraFrustum(camera, halfWidth, fullHeight);
+                renderer.setViewport(0, 0, halfWidth, fullHeight);
+                renderer.setScissor(0, 0, halfWidth, fullHeight);
+                renderer.render(scene, camera);
+
+                updateCameraFrustum(camera2, fullWidth - halfWidth, fullHeight);
+                renderer.setViewport(halfWidth, 0, fullWidth - halfWidth, fullHeight);
+                renderer.setScissor(halfWidth, 0, fullWidth - halfWidth, fullHeight);
+                renderer.render(scene, camera2);
+
+                renderer.setScissorTest(false);
+            } else {
+                renderer.autoClear = true;
+                renderer.setScissorTest(false);
+                updateCameraFrustum(camera, fullWidth, fullHeight);
+                renderer.setViewport(0, 0, fullWidth, fullHeight);
+                renderer.render(scene, camera);
+            }
         }
     );
 
@@ -250,6 +323,61 @@ function startGame(HeroClass, HeroClassP2 = null) {
         console.log('Abilities: Q/Left Click = A1 | Right Click = A2 | E = A3 | R = Ultimate');
     }
     console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
+}
+
+function getTeamSpawn(levelInstance, team) {
+    const spawns = levelInstance.flagSpawns || {};
+    const fallback = { x: 0, y: 0 };
+    if (team === 'red') {
+        return spawns.red || fallback;
+    }
+    return spawns.blue || fallback;
+}
+
+function showTeamMenu(playerIndex) {
+    teamSelectionIndex = playerIndex;
+    if (teamMenu) {
+        teamMenu.style.display = 'flex';
+    }
+    const heroMenu = document.getElementById('hero-menu');
+    if (heroMenu) {
+        heroMenu.style.display = 'none';
+    }
+    updateTeamMenuCopy();
+}
+
+function hideTeamMenu() {
+    if (teamMenu) {
+        teamMenu.style.display = 'none';
+    }
+}
+
+function updateTeamMenuCopy() {
+    const label = teamSelectionIndex === 2 ? 'PLAYER 2' : 'PLAYER 1';
+    if (teamMenuTitle) {
+        teamMenuTitle.textContent = `${label}: PICK YOUR TEAM`;
+    }
+    if (teamMenuSubtitle) {
+        teamMenuSubtitle.textContent = 'Choose your flag to spawn at.';
+    }
+}
+
+function handleTeamSelect(team) {
+    if (teamSelectionIndex === 1) {
+        selectedTeamP1 = team;
+        if (pendingHeroClassP2) {
+            teamSelectionIndex = 2;
+            updateTeamMenuCopy();
+            return;
+        }
+        hideTeamMenu();
+        startGame(pendingHeroClassP1, null, selectedTeamP1, null);
+        return;
+    }
+
+    selectedTeamP2 = team;
+    hideTeamMenu();
+    startGame(pendingHeroClassP1, pendingHeroClassP2, selectedTeamP1, selectedTeamP2);
 }
 
 // Reset game (return to menu)
@@ -276,6 +404,12 @@ function resetGame() {
     }
     parallaxManager = null;
     player2 = null;
+    camera2 = null;
+    cameraFollow2 = null;
+    pendingHeroClassP1 = null;
+    pendingHeroClassP2 = null;
+    selectedTeamP1 = null;
+    selectedTeamP2 = null;
     input2 = null;
     uiManager2 = null;
 
@@ -286,6 +420,7 @@ function resetGame() {
     if (abilityUiP2) {
         abilityUiP2.style.display = 'none';
     }
+    hideTeamMenu();
 
     gameStarted = false;
     selectedHeroClassP1 = null;
@@ -324,7 +459,9 @@ function setCoopEnabled(enabled) {
 
 function handleHeroSelect(HeroClass) {
     if (!localMultiplayerEnabled) {
-        startGame(HeroClass);
+        pendingHeroClassP1 = HeroClass;
+        pendingHeroClassP2 = null;
+        showTeamMenu(1);
         return;
     }
 
@@ -342,8 +479,10 @@ function handleHeroSelect(HeroClass) {
         return;
     }
 
-    startGame(selectedHeroClassP1, HeroClass);
+    pendingHeroClassP1 = selectedHeroClassP1;
+    pendingHeroClassP2 = HeroClass;
     selectedHeroClassP1 = null;
+    showTeamMenu(1);
 }
 
 function buildMenuItems() {
@@ -453,6 +592,11 @@ window.addEventListener('load', () => {
     heroMenuControls = document.getElementById('hero-menu-controls');
     coopToggle = document.getElementById('coop-toggle');
     coopHint = document.getElementById('coop-hint');
+    teamMenu = document.getElementById('team-menu');
+    teamMenuTitle = document.getElementById('team-menu-title');
+    teamMenuSubtitle = document.getElementById('team-menu-subtitle');
+    teamButtonBlue = document.getElementById('team-blue');
+    teamButtonRed = document.getElementById('team-red');
 
     if (heroMenuTitle) {
         heroMenuTitleDefault = heroMenuTitle.textContent;
@@ -469,6 +613,22 @@ window.addEventListener('load', () => {
             setCoopEnabled(!localMultiplayerEnabled);
         });
     }
+
+    if (teamButtonBlue) {
+        teamButtonBlue.addEventListener('click', () => handleTeamSelect('blue'));
+    }
+    if (teamButtonRed) {
+        teamButtonRed.addEventListener('click', () => handleTeamSelect('red'));
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (!teamMenu || teamMenu.style.display !== 'flex') return;
+        if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
+            handleTeamSelect('blue');
+        } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
+            handleTeamSelect('red');
+        }
+    });
 
     setCoopEnabled(localMultiplayerEnabled);
 

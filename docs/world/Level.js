@@ -12,6 +12,7 @@ export class Level {
         this.scene.add(this.group);
         this.platforms = [];
         this.enemies = [];
+        this.movingPlatforms = [];
     }
 
     /**
@@ -140,6 +141,33 @@ export class Level {
     }
 
     /**
+     * Add a moving platform to the level
+     * @param {number} x - Center X position
+     * @param {number} y - Center Y position
+     * @param {number} width - Platform width
+     * @param {number} height - Platform height
+     * @param {string} type - Platform type ('grass', 'stone')
+     * @param {Object} motion - Motion config
+     */
+    addMovingPlatform(x, y, width, height, type = 'stone', motion = {}) {
+        const platform = this.addPlatform(x, y, width, height, type);
+        platform.type = 'moving';
+
+        this.movingPlatforms.push({
+            platform,
+            baseX: x,
+            baseY: y,
+            rangeX: motion.rangeX ?? 0,
+            rangeY: motion.rangeY ?? 0,
+            speed: motion.speed ?? 1.2,
+            phase: motion.phase ?? Math.random() * Math.PI * 2,
+            time: 0
+        });
+
+        return platform;
+    }
+
+    /**
      * Check and resolve collisions with platforms
      * @param {Player} player - Player instance
      */
@@ -231,6 +259,16 @@ export class Level {
                     player.velocity.y = 0;
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
+                    if (platform.type === 'moving') {
+                        const prevX = platform.prevX ?? platform.mesh.position.x;
+                        const prevY = platform.prevY ?? platform.mesh.position.y;
+                        const deltaX = platform.mesh.position.x - prevX;
+                        const deltaY = platform.mesh.position.y - prevY;
+                        player.position.x += deltaX;
+                        player.position.y += deltaY;
+                        player.mesh.position.x = player.position.x;
+                        player.mesh.position.y = player.position.y;
+                    }
                 } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
                     // Player hit bottom of platform (jumping into it)
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
@@ -274,14 +312,52 @@ export class Level {
     }
 
     /**
+     * Update moving platforms
+     * @param {number} deltaTime - Time since last frame
+     */
+    updateMovingPlatforms(deltaTime) {
+        for (const moving of this.movingPlatforms) {
+            moving.time += deltaTime;
+            const offsetX = Math.sin(moving.time * moving.speed + moving.phase) * moving.rangeX;
+            const offsetY = Math.sin(moving.time * moving.speed + moving.phase) * moving.rangeY;
+
+            const nextX = moving.baseX + offsetX;
+            const nextY = moving.baseY + offsetY;
+            const platform = moving.platform;
+
+            platform.prevX = platform.mesh.position.x;
+            platform.prevY = platform.mesh.position.y;
+            platform.mesh.position.set(nextX, nextY, 0);
+            const width = platform.bounds.right - platform.bounds.left;
+            const height = platform.bounds.top - platform.bounds.bottom;
+            platform.bounds.left = nextX - width / 2;
+            platform.bounds.right = nextX + width / 2;
+            platform.bounds.top = nextY + height / 2;
+            platform.bounds.bottom = nextY - height / 2;
+        }
+    }
+
+    /**
+     * Update level systems
+     * @param {number} deltaTime - Time since last frame
+     */
+    update(deltaTime) {
+        this.updateEnemies(deltaTime);
+        this.updateMovingPlatforms(deltaTime);
+    }
+
+    /**
      * Add a decorative wall with ladder
      * @param {number} x - Center X position
      * @param {number} baseY - Base Y position (ground level)
      * @param {number} wallHeight - Total height of the wall
+     * @param {Object} options - Optional settings
      */
-    addWallWithLadder(x, baseY, wallHeight) {
+    addWallWithLadder(x, baseY, wallHeight, options = {}) {
         const wallGroup = new THREE.Group();
-        const wallWidth = 1.5;
+        const wallWidth = options.wallWidth ?? 1.5;
+        const ladderSide = options.ladderSide ?? 'right';
+        const addDoor = options.addDoor ?? false;
 
         // Main wall body (stone blocks)
         const numBlocks = Math.floor(wallHeight / 0.8);
@@ -322,7 +398,8 @@ export class Level {
         }
 
         // LADDER on the side
-        const ladderX = wallWidth/2 + 0.3; // Position ladder on right side of wall
+        const ladderOffset = wallWidth / 2 + 0.3;
+        const ladderX = ladderSide === 'left' ? -ladderOffset : ladderOffset;
         const ladderWidth = 0.5;
         const ladderDepth = 0.15;
         const ladderHeight = wallHeight - 0.5; // Ladder stops 0.5 units below wall top
@@ -359,6 +436,22 @@ export class Level {
             const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
             shadow.position.set(ladderX, rungY - 0.08, 0.58);
             wallGroup.add(shadow);
+        }
+
+        const doorWidth = Math.min(2.2, wallWidth * 0.5);
+        const doorHeight = Math.min(3.2, wallHeight * 0.45);
+        if (addDoor) {
+            const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, 0.2);
+            const doorMaterial = new THREE.MeshBasicMaterial({ color: 0x5b3a29 });
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(0, doorHeight / 2 + 0.1, 0.55);
+            wallGroup.add(door);
+
+            const doorFrameGeometry = new THREE.BoxGeometry(doorWidth + 0.2, doorHeight + 0.2, 0.1);
+            const doorFrameMaterial = new THREE.MeshBasicMaterial({ color: 0x2f1b12 });
+            const doorFrame = new THREE.Mesh(doorFrameGeometry, doorFrameMaterial);
+            doorFrame.position.set(0, doorHeight / 2 + 0.1, 0.52);
+            wallGroup.add(doorFrame);
         }
 
         // Decorative vines growing on the wall
@@ -424,8 +517,8 @@ export class Level {
         const ladderPlatform = {
             mesh: wallGroup, // Share same mesh
             bounds: {
-                left: x + wallWidth/2 + 0.05, // Right side of wall
-                right: x + wallWidth/2 + 0.85, // Width of ladder
+                left: x + ladderX - ladderWidth/2 - 0.05,
+                right: x + ladderX + ladderWidth/2 + 0.35,
                 top: baseY + wallHeight - 0.5, // Ladder top stops before wall top
                 bottom: baseY
             },
@@ -438,32 +531,94 @@ export class Level {
     }
 
     /**
+     * Add a simple flag near a castle
+     * @param {number} x - Center X position
+     * @param {number} baseY - Base Y position (ground level)
+     * @param {number} wallHeight - Height of the castle wall
+     * @param {number} color - Flag color
+     */
+    addCastleFlag(x, baseY, wallHeight, color) {
+        const flagGroup = new THREE.Group();
+        const poleHeight = Math.max(2.4, wallHeight * 0.35);
+        const poleGeometry = new THREE.BoxGeometry(0.12, poleHeight, 0.1);
+        const poleMaterial = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
+        const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+        pole.position.set(0, poleHeight / 2, 0.4);
+        flagGroup.add(pole);
+
+        const clothWidth = 1.4;
+        const clothHeight = 0.9;
+        const clothGeometry = new THREE.BoxGeometry(clothWidth, clothHeight, 0.05);
+        const clothMaterial = new THREE.MeshBasicMaterial({ color });
+        const cloth = new THREE.Mesh(clothGeometry, clothMaterial);
+        cloth.position.set(clothWidth / 2, poleHeight - clothHeight * 0.55, 0.45);
+        flagGroup.add(cloth);
+
+        const flagBaseY = baseY + wallHeight - 0.2;
+        flagGroup.position.set(x, flagBaseY, 0.9);
+        this.group.add(flagGroup);
+    }
+
+    /**
      * Create a test level with floating platforms
      */
     createTestLevel() {
         // Main ground platform (ground type with grass)
         const groundSurfaceY = -2.5;
-        const groundBottomY = -10;
+        const groundBottomY = -14;
         const groundHeight = groundSurfaceY - groundBottomY;
         const groundCenterY = groundSurfaceY - groundHeight / 2;
-        this.addPlatform(0, groundCenterY, 100, groundHeight, 'ground');
+        const groundLeft = -110;
+        const groundRight = 110;
+        const gapCenters = [-30, 0, 30];
+        const gapWidths = [12, 6, 12];
+        const gapEdges = gapCenters.map((center, index) => {
+            const half = gapWidths[index] / 2;
+            return { left: center - half, right: center + half };
+        });
 
-        // Floating grass platforms (thin)
-        this.addPlatform(5, 0, 3, 0.5, 'grass');
-        this.addPlatform(10, 2, 3, 0.5, 'grass');
-        this.addPlatform(-5, 1, 4, 0.5, 'grass');
+        // Ground segments with three symmetric gaps between castles
+        this.addPlatform((groundLeft + gapEdges[0].left) / 2, groundCenterY, gapEdges[0].left - groundLeft, groundHeight, 'ground');
+        this.addPlatform((gapEdges[0].right + gapEdges[1].left) / 2, groundCenterY, gapEdges[1].left - gapEdges[0].right, groundHeight, 'ground');
+        this.addPlatform((gapEdges[1].right + gapEdges[2].left) / 2, groundCenterY, gapEdges[2].left - gapEdges[1].right, groundHeight, 'ground');
+        this.addPlatform((gapEdges[2].right + groundRight) / 2, groundCenterY, groundRight - gapEdges[2].right, groundHeight, 'ground');
 
-        // Stone platforms (taller, for walls/obstacles)
-        this.addPlatform(15, -1, 2, 3, 'stone');    // Tall stone wall on right
-        this.addPlatform(20, -2, 1.5, 2, 'stone');  // Medium stone platform
+        const wallHeight = 10.5;
 
-        // DECORATIVE WALL WITH LADDER (left side) - raised by half a brick
-        this.addWallWithLadder(-12, -2.6, 7);       // 7 units tall, base raised 0.4 units (half brick)
-                                                     // Ladder stops 0.5 units below top for easier climbing
+        // Left castle
+        const leftCastleX = -60;
+        this.addWallWithLadder(leftCastleX, groundSurfaceY, wallHeight, {
+            wallWidth: 7,
+            ladderSide: 'right',
+            addDoor: true
+        });
+        this.addCastleFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0);
 
-        // More variety
-        this.addPlatform(-17, 2, 5, 0.5, 'grass');   // Far left floating (moved left to avoid wall)
-        this.addPlatform(25, 1, 3, 0.5, 'stone');    // Far right stone
-        this.addPlatform(0, 4, 4, 0.5, 'grass');     // High center platform
+        // Right castle
+        const rightCastleX = 60;
+        this.addWallWithLadder(rightCastleX, groundSurfaceY, wallHeight, {
+            wallWidth: 7,
+            ladderSide: 'left',
+            addDoor: true
+        });
+        this.addCastleFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f);
+
+        this.flagSpawns = {
+            blue: { x: leftCastleX, y: groundSurfaceY + wallHeight + 0.6 },
+            red: { x: rightCastleX, y: groundSurfaceY + wallHeight + 0.6 }
+        };
+
+        // Moving platforms over the longer outer gaps
+        const movingGapY = 1.4;
+        this.addMovingPlatform(gapCenters[0], movingGapY, 3.5, 0.6, 'stone', { rangeX: 3.5, speed: 1.1 });
+        this.addMovingPlatform(gapCenters[2], movingGapY, 3.5, 0.6, 'stone', { rangeX: 3.5, speed: 1.0, phase: Math.PI / 2 });
+
+        // Midfield platforms for capture-the-flag lanes
+        this.addPlatform(0, 1, 6, 0.6, 'grass');
+        this.addPlatform(-12, -0.5, 4, 0.6, 'stone');
+        this.addPlatform(12, -0.5, 4, 0.6, 'stone');
+        this.addPlatform(-6, 2.5, 3, 0.6, 'grass');
+        this.addPlatform(6, 2.5, 3, 0.6, 'grass');
     }
 }
+

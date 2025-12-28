@@ -307,13 +307,15 @@ export class Cyborg extends Hero {
             };
 
             let hit = false;
-            for (const enemy of this.enemies) {
+            for (const enemy of this.getDamageTargets()) {
                 if (!enemy.isAlive) continue;
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(fireballBounds, enemyBounds)) {
                     this.applyAbilityDamage(this.abilities.q, enemy, 2);
-                    this.addUltimateCharge(this.ultimateChargePerKill);
+                    if (enemy.type !== 'player') {
+                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    }
                     console.log('🔥 Fireball hit!');
                     hit = true;
                     break;
@@ -425,14 +427,18 @@ export class Cyborg extends Hero {
             bottom: this.position.y - 1.5
         };
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(windBounds, enemyBounds)) {
                 this.applyAbilityDamage(this.abilities.w, enemy, 1);
-                enemy.frozenTimer = 1.5;
-                this.addUltimateCharge(this.ultimateChargePerKill);
+                if (typeof enemy.frozenTimer === 'number') {
+                    enemy.frozenTimer = 1.5;
+                }
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
                 console.log('🧊 Enemy frozen!');
             }
         }
@@ -814,14 +820,16 @@ export class Cyborg extends Hero {
         };
 
         // Damage all enemies in beam
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(beamBounds, enemyBounds)) {
                 // Massive damage based on charge time
                 this.applyAbilityDamage(this.abilities.r, enemy, damage);
-                this.addUltimateCharge(this.ultimateChargePerKill);
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
                 console.log(`⚡ KAME HAME HA hit for ${damage} damage!`);
             }
         }

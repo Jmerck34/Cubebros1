@@ -20,6 +20,7 @@ export class Hero extends Player {
 
         // Ability array for debug menu iteration
         this.abilitiesList = [];
+        this.opponents = [];
 
         // Ultimate charge system
         this.ultimateCharge = 0;
@@ -187,5 +188,31 @@ export class Hero extends Player {
 
         // Also create an array for easy iteration (used by debug menu)
         this.abilitiesList = [q, w, e, r];
+    }
+
+    /**
+     * Get valid damage targets (enemies + opposing players)
+     * @returns {Array}
+     */
+    getDamageTargets() {
+        const targets = [];
+        const seen = new Set();
+
+        const addTarget = (target) => {
+            if (!target || !target.isAlive) return;
+            if (this.isSameTeam && this.isSameTeam(target)) return;
+            if (seen.has(target)) return;
+            seen.add(target);
+            targets.push(target);
+        };
+
+        for (const enemy of this.enemies || []) {
+            addTarget(enemy);
+        }
+        for (const opponent of this.opponents || []) {
+            addTarget(opponent);
+        }
+
+        return targets;
     }
 }

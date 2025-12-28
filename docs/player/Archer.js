@@ -265,14 +265,16 @@ export class Archer extends Hero {
                 bottom: arrowGroup.position.y - 0.08
             };
 
-            for (const enemy of this.enemies) {
+            for (const enemy of this.getDamageTargets()) {
                 if (!enemy.isAlive) continue;
                 if (hitEnemies.has(enemy)) continue;
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(arrowBounds, enemyBounds)) {
                     this.applyAbilityDamage(ability, enemy, damageHits);
-                    this.addUltimateCharge(this.ultimateChargePerKill);
+                    if (enemy.type !== 'player') {
+                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    }
                     hitEnemies.add(enemy);
 
                     if (!piercing) {

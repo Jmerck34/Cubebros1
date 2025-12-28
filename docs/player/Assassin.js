@@ -582,7 +582,7 @@ export class Assassin extends Hero {
         let closestEnemy = null;
         let closestDistance = Infinity;
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const distance = Math.abs(enemy.position.x - this.position.x);
@@ -600,7 +600,9 @@ export class Assassin extends Hero {
             // Deal massive damage
             this.applyAbilityDamage(this.abilities.r, closestEnemy, 3);
 
-            this.addUltimateCharge(this.ultimateChargePerKill);
+            if (closestEnemy.type !== 'player') {
+                this.addUltimateCharge(this.ultimateChargePerKill);
+            }
 
             // Visual effect
             this.createAssassinateEffect(closestEnemy.position.x, closestEnemy.position.y);
@@ -681,13 +683,15 @@ export class Assassin extends Hero {
      * Damage enemies in area with optional bleed effect
      */
     damageEnemiesInArea(bounds, ability = null, applyBleed = false, applyPoison = false) {
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(ability, enemy, 1);
-                this.addUltimateCharge(this.ultimateChargePerKill);
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
                 console.log('💥 Assassin hit enemy!');
 
                 if (!enemy.isAlive) {
@@ -695,7 +699,7 @@ export class Assassin extends Hero {
                 }
 
                 // Apply bleed (additional damage over time)
-                if (applyBleed) {
+                if (applyBleed && typeof enemy.flashBleed === 'function') {
                     this.applyBleed(enemy, ability);
                 }
 

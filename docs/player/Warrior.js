@@ -352,13 +352,34 @@ export class Warrior extends Hero {
      * Dash Forward - E Ability
      */
     dashForward() {
-        console.log('💨 DASH!');
+        console.log('DASH!');
 
         // Dash in the direction the warrior is facing
-        const dashSpeed = 15;
+        const dashDistance = 3.2;
+        const startX = this.position.x;
+        const endX = startX + this.facingDirection * dashDistance;
 
-        // Apply dash velocity
-        this.position.x += this.facingDirection * dashSpeed * 0.1;
+        // Apply dash movement
+        this.position.x = endX;
+
+        // Damage + stun enemies along dash path
+        const dashBounds = {
+            left: Math.min(startX, endX) - 0.6,
+            right: Math.max(startX, endX) + 0.6,
+            top: this.position.y + 0.9,
+            bottom: this.position.y - 0.9
+        };
+
+        for (const enemy of this.getDamageTargets()) {
+            if (!enemy.isAlive) continue;
+            const enemyBounds = enemy.getBounds();
+            if (checkAABBCollision(dashBounds, enemyBounds)) {
+                this.applyAbilityDamage(this.abilities.e, enemy, 1);
+                if (typeof enemy.setStunned === 'function') {
+                    enemy.setStunned(0.6);
+                }
+            }
+        }
 
         // Visual effect - scale horizontally (preserve facing direction)
         const currentFacing = this.facingDirection;
@@ -581,13 +602,15 @@ export class Warrior extends Hero {
      * @param {Ability} ability - Ability to scale damage with debug multipliers
      */
     damageEnemiesInArea(bounds, ability = null) {
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(ability, enemy, 1);
-                this.addUltimateCharge(this.ultimateChargePerKill);
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
                 if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
                     this.abilities.e.currentCooldown = 0;
                     this.abilities.e.isReady = true;
@@ -605,12 +628,14 @@ export class Warrior extends Hero {
     shieldBashKnockback(bounds) {
         const hitEnemies = [];
 
-        for (const enemy of this.enemies) {
+        for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(this.abilities.w, enemy, 1);
-                this.addUltimateCharge(this.ultimateChargePerKill);
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
                 if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
                     this.abilities.e.currentCooldown = 0;
                     this.abilities.e.isReady = true;
@@ -645,7 +670,7 @@ export class Warrior extends Hero {
         // Collision damage if knocked into another enemy
         hitEnemies.forEach((knocked) => {
             const knockedBounds = knocked.getBounds();
-            for (const other of this.enemies) {
+            for (const other of this.getDamageTargets()) {
                 if (!other.isAlive || other === knocked) continue;
                 const otherBounds = other.getBounds();
                 if (checkAABBCollision(knockedBounds, otherBounds)) {
@@ -777,3 +802,5 @@ export class Warrior extends Hero {
         }, 16);
     }
 }
+
+

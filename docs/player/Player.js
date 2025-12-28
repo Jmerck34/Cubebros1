@@ -35,6 +35,8 @@ export class Player {
         // State
         this.isGrounded = false;
         this.isAlive = true;
+        this.team = null;
+        this.type = 'player';
 
         // Jump state for double jump
         this.jumpsRemaining = 2; // Allow 2 jumps (ground + air)
@@ -285,6 +287,15 @@ export class Player {
         this.velocity.y = Math.max(this.velocity.y, knockY);
         this.isGrounded = false;
         this.enemyContactCooldown = this.enemyContactCooldownDuration || 0;
+    }
+
+    /**
+     * Check if another entity is on the same team
+     * @param {Object} other
+     * @returns {boolean}
+     */
+    isSameTeam(other) {
+        return Boolean(this.team && other && other.team && this.team === other.team);
     }
 
     /**

@@ -31,6 +31,10 @@ export class EnemyBase {
         this.frozenTimer = 0;
         this.isFrozen = false;
         this.freezeOriginalColor = null;
+        this.stunTimer = 0;
+        this.isStunned = false;
+        this.stunOriginalColor = null;
+        this.stunEffect = null;
         this.poisonTimer = 0;
         this.bleedTimer = 0;
         this.poisonEffect = null;
@@ -70,6 +74,31 @@ export class EnemyBase {
             this.isFrozen = false;
         }
 
+        if (this.stunTimer > 0) {
+            this.stunTimer -= deltaTime;
+            if (!this.isStunned) {
+                this.stunOriginalColor = this.mesh.material.color.getHex();
+                this.mesh.material.color.set(0xffdd55);
+                this.isStunned = true;
+            }
+            if (!this.stunEffect) {
+                this.createStunEffect();
+            }
+            this.updateStunEffect();
+        } else if (this.isStunned) {
+            if (this.frozenTimer > 0) {
+                this.mesh.material.color.set(0x88ddff);
+            } else {
+                this.mesh.material.color.set(this.stunOriginalColor || this.baseColor);
+            }
+            this.isStunned = false;
+        } else if (this.stunEffect) {
+            if (this.stunEffect.parent) {
+                this.stunEffect.parent.remove(this.stunEffect);
+            }
+            this.stunEffect = null;
+        }
+
         if (this.poisonTimer > 0) {
             this.poisonTimer -= deltaTime;
             this.updatePoisonEffect();
@@ -95,7 +124,7 @@ export class EnemyBase {
         this.position.y += this.velocity.y * deltaTime;
 
         // Horizontal movement
-        const moveSpeed = this.frozenTimer > 0 ? 0 : this.speed;
+        const moveSpeed = (this.frozenTimer > 0 || this.stunTimer > 0) ? 0 : this.speed;
         this.velocity.x = this.direction * moveSpeed;
         this.position.x += this.velocity.x * deltaTime;
 
@@ -162,6 +191,12 @@ export class EnemyBase {
                 }
                 this.poisonEffect = null;
             }
+            if (this.stunEffect) {
+                if (this.stunEffect.parent) {
+                    this.stunEffect.parent.remove(this.stunEffect);
+                }
+                this.stunEffect = null;
+            }
             if (this.bleedEffect) {
                 if (this.bleedEffect.parent) {
                     this.bleedEffect.parent.remove(this.bleedEffect);
@@ -209,6 +244,68 @@ export class EnemyBase {
         scar.position.set(0.05, 0.32, faceZ);
         scar.rotation.z = -0.3;
         this.mesh.add(scar);
+    }
+
+    /**
+     * Mark enemy as stunned (briefly stops movement)
+     * @param {number} durationSeconds
+     */
+    setStunned(durationSeconds = 0.6) {
+        if (!this.isAlive) return;
+        this.stunTimer = Math.max(this.stunTimer, durationSeconds);
+        if (!this.stunEffect) {
+            this.createStunEffect();
+        }
+    }
+
+    /**
+     * Create a stun swirl effect
+     */
+    createStunEffect() {
+        const swirlGroup = new THREE.Group();
+        const stars = [];
+        const starCount = 6;
+        for (let i = 0; i < starCount; i++) {
+            const star = new THREE.Group();
+            const sparkleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
+            const sparkleA = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.02), sparkleMaterial.clone());
+            const sparkleB = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.1, 0.02), sparkleMaterial.clone());
+            const sparkleC = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), sparkleMaterial.clone());
+            sparkleA.rotation.z = Math.PI / 8;
+            sparkleB.rotation.z = -Math.PI / 8;
+            sparkleC.rotation.z = Math.PI / 2;
+            star.add(sparkleA, sparkleB);
+            star.add(sparkleC);
+
+            star.userData.phase = (i / starCount) * Math.PI * 2;
+            star.userData.radius = 0.35 + (i % 3) * 0.06;
+            swirlGroup.add(star);
+            stars.push(star);
+        }
+
+        swirlGroup.userData.stars = stars;
+
+        swirlGroup.position.set(this.position.x, this.position.y + 0.8, 0.2);
+        this.scene.add(swirlGroup);
+        this.stunEffect = swirlGroup;
+    }
+
+    /**
+     * Update stun swirl animation
+     */
+    updateStunEffect() {
+        if (!this.stunEffect) return;
+        this.stunEffect.position.set(this.position.x, this.position.y + 0.8, 0.2);
+        const stars = this.stunEffect.userData.stars || [];
+        const time = performance.now() * 0.004;
+        for (const star of stars) {
+            const phase = star.userData.phase || 0;
+            const radius = star.userData.radius || 0.3;
+            const angle = time + phase;
+            star.rotation.z += 0.16;
+            star.position.x = Math.cos(angle) * radius;
+            star.position.y = 0.35 + Math.sin(angle) * radius * 0.6;
+        }
     }
 
     /**
@@ -303,3 +400,5 @@ export class EnemyBase {
         this.debugHitbox.scale.set(width, height, 1);
     }
 }
+
+

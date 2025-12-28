@@ -42,6 +42,64 @@
             padding: 40px 20px 60px;
         }
 
+        #team-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            gap: 18px;
+            text-align: center;
+        }
+
+        #team-menu h2 {
+            color: white;
+            font-size: 36px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+        }
+
+        #team-menu p {
+            color: #ccc;
+            font-size: 16px;
+        }
+
+        .team-buttons {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .team-button {
+            padding: 14px 26px;
+            border-radius: 12px;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .team-button:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.9);
+        }
+
+        .team-button.blue {
+            box-shadow: 0 0 14px rgba(47, 108, 176, 0.6);
+        }
+
+        .team-button.red {
+            box-shadow: 0 0 14px rgba(204, 47, 47, 0.6);
+        }
+
         #hero-menu h1 {
             color: white;
             font-size: 48px;
@@ -379,6 +437,16 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div id="team-menu">
+        <h2 id="team-menu-title">PICK YOUR TEAM</h2>
+        <p id="team-menu-subtitle">Choose your flag to spawn at.</p>
+        <div class="team-buttons">
+            <button id="team-blue" class="team-button blue" type="button">Blue Team</button>
+            <button id="team-red" class="team-button red" type="button">Red Team</button>
+        </div>
+        <p style="font-size: 12px; color: #888;">Left/A = Blue, Right/D = Red</p>
     </div>
 
     <!-- Ability UI -->

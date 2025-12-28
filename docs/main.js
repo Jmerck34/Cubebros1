@@ -84,8 +84,8 @@ const gameLoop = new GameLoop(
         // Update player
         player.update(deltaTime, input);
 
-        // Update enemies
-        level.updateEnemies(deltaTime);
+        // Update enemies and moving platforms
+        level.update(deltaTime);
 
         // Check platform collisions
         level.checkCollisions(player);
