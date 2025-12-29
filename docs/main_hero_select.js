@@ -5,6 +5,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { GameLoop } from './core/gameLoop.js';
 import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
+import { getAimDirection } from './utils/aim.js';
 import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
@@ -123,6 +124,7 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
     if (abilityUiP2) {
         abilityUiP2.style.display = HeroClassP2 ? 'flex' : 'none';
     }
+    document.body.classList.toggle('split-screen-active', Boolean(HeroClassP2));
 
     // Initialize input managers
     const playerOneBindings = localMultiplayerEnabled ? PLAYER_ONE_COOP_BINDINGS : null;
@@ -239,6 +241,36 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
             input.update();
             if (input2) {
                 input2.update();
+            }
+
+            const size = renderer.getSize(new THREE.Vector2());
+            const fullWidth = size.x;
+            const fullHeight = size.y;
+            const halfWidth = player2 ? Math.floor(fullWidth / 2) : fullWidth;
+            const aimP1 = getAimDirection({
+                input,
+                camera,
+                renderer,
+                viewport: { x: 0, y: 0, width: halfWidth, height: fullHeight },
+                origin: player.position,
+                useMouse: true
+            });
+            if (typeof player.setAimDirection === 'function') {
+                player.setAimDirection(aimP1);
+            }
+
+            if (player2 && camera2 && input2) {
+                const aimP2 = getAimDirection({
+                    input: input2,
+                    camera: camera2,
+                    renderer,
+                    viewport: { x: halfWidth, y: 0, width: fullWidth - halfWidth, height: fullHeight },
+                    origin: player2.position,
+                    useMouse: false
+                });
+                if (typeof player2.setAimDirection === 'function') {
+                    player2.setAimDirection(aimP2);
+                }
             }
 
             player.update(deltaTime, input);
@@ -424,6 +456,7 @@ function resetGame() {
 
     gameStarted = false;
     selectedHeroClassP1 = null;
+    document.body.classList.remove('split-screen-active');
     setCoopEnabled(localMultiplayerEnabled);
 }
 

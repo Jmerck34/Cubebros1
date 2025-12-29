@@ -27,6 +27,10 @@ export class Hero extends Player {
         this.ultimateChargeMax = 100;
         this.ultimateChargeRate = 5; // Per second
         this.ultimateChargePerKill = 25;
+
+        // Aim direction for ranged abilities
+        this.aimDirection = { x: 1, y: 0 };
+        this.hasAimInput = false;
     }
 
     /**
@@ -65,6 +69,9 @@ export class Hero extends Player {
      * @param {InputManager} input - Input manager
      */
     handleAbilityInput(input) {
+        if (this.controlsLocked) {
+            return;
+        }
         if (input.isAbility1Pressed() && this.abilities.q) {
             this.useAbility('q');
         }
@@ -128,6 +135,22 @@ export class Hero extends Player {
      * @param {number} baseHits - Base hit count for this ability
      */
     applyAbilityDamage(ability, enemy, baseHits = 1) {
+        if (!enemy || typeof enemy.takeDamage !== 'function') {
+            return;
+        }
+
+        const isPlayerTarget = enemy.type === 'player';
+        if (ability && typeof ability.getAdjustedDamage === 'function') {
+            const adjustedDamage = ability.getAdjustedDamage(baseHits);
+            if (isPlayerTarget) {
+                const targetMaxHealth = Number.isFinite(enemy.maxHealth) ? enemy.maxHealth : 100;
+                const damagePerHit = Math.max(1, Math.round(targetMaxHealth * 0.1));
+                const damage = Math.max(1, Math.round(adjustedDamage * damagePerHit));
+                enemy.takeDamage(damage);
+                return;
+            }
+        }
+
         if (ability && typeof ability.damageEnemy === 'function') {
             ability.damageEnemy(enemy, baseHits);
             return;
@@ -135,6 +158,10 @@ export class Hero extends Player {
 
         // Fallback: no ability reference, use base hit count
         const hits = Math.max(1, Math.round(baseHits));
+        if (isPlayerTarget) {
+            enemy.takeDamage(hits);
+            return;
+        }
         for (let i = 0; i < hits; i++) {
             enemy.takeDamage();
         }
@@ -188,6 +215,41 @@ export class Hero extends Player {
 
         // Also create an array for easy iteration (used by debug menu)
         this.abilitiesList = [q, w, e, r];
+    }
+
+    /**
+     * Set aim direction for ranged abilities.
+     * @param {{x:number,y:number}|null} direction
+     */
+    setAimDirection(direction) {
+        if (!direction || !Number.isFinite(direction.x) || !Number.isFinite(direction.y)) {
+            this.hasAimInput = false;
+            const fallbackX = typeof this.facingDirection === 'number' ? this.facingDirection : 1;
+            this.aimDirection.x = fallbackX;
+            this.aimDirection.y = 0;
+            return;
+        }
+
+        const length = Math.hypot(direction.x, direction.y);
+        if (!Number.isFinite(length) || length < 0.001) {
+            this.hasAimInput = false;
+            const fallbackX = typeof this.facingDirection === 'number' ? this.facingDirection : 1;
+            this.aimDirection.x = fallbackX;
+            this.aimDirection.y = 0;
+            return;
+        }
+
+        this.aimDirection.x = direction.x / length;
+        this.aimDirection.y = direction.y / length;
+        this.hasAimInput = true;
+    }
+
+    /**
+     * Get the latest aim direction (normalized).
+     * @returns {{x:number,y:number}}
+     */
+    getAimDirection() {
+        return this.aimDirection;
     }
 
     /**

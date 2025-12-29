@@ -38,6 +38,14 @@ export class Warrior extends Hero {
         // Shield bash sound
         this.shieldBashVolume = 0.2;
         this.initShieldBashAudio();
+
+        // Whirlwind ultimate sound
+        this.whirlwindVolume = 0.2;
+        this.initWhirlwindAudio();
+
+        // Dash sound
+        this.dashVolume = 0.08;
+        this.initDashAudio();
     }
 
     /**
@@ -179,6 +187,9 @@ export class Warrior extends Hero {
             if (!Ability.prototype.use.call(dash, hero)) return false;
 
             // Dash forward
+            if (typeof hero.playDashSound === 'function') {
+                hero.playDashSound();
+            }
             hero.dashForward();
             hero.dashResetCount = 0;
             return true;
@@ -234,6 +245,51 @@ export class Warrior extends Hero {
         const sound = this.shieldBashAudio.find((node) => node.paused || node.ended) || this.shieldBashAudio[0];
         sound.currentTime = 0;
         sound.volume = this.shieldBashVolume;
+        sound.play().catch(() => {});
+    }
+
+    initDashAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/warrior_dash.wav', import.meta.url);
+            const audioPool = [];
+            for (let i = 0; i < 3; i++) {
+                const audio = new Audio(audioUrl);
+                audio.volume = this.dashVolume;
+                audio.preload = 'auto';
+                audio.load();
+                audioPool.push(audio);
+            }
+            this.dashAudio = audioPool;
+        } catch (error) {
+            this.dashAudio = null;
+        }
+    }
+
+    playDashSound() {
+        if (!this.dashAudio || !this.dashAudio.length) return;
+        const sound = this.dashAudio.find((node) => node.paused || node.ended) || this.dashAudio[0];
+        sound.currentTime = 0;
+        sound.volume = this.dashVolume;
+        sound.play().catch(() => {});
+    }
+
+    initWhirlwindAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/warrior_ult_spin.wav', import.meta.url);
+            const audio = new Audio(audioUrl);
+            audio.volume = this.whirlwindVolume;
+            audio.preload = 'auto';
+            audio.load();
+            this.whirlwindAudio = audio;
+        } catch (error) {
+            this.whirlwindAudio = null;
+        }
+    }
+
+    playWhirlwindSound() {
+        if (!this.whirlwindAudio) return;
+        const sound = this.whirlwindAudio.cloneNode();
+        sound.volume = this.whirlwindVolume;
         sound.play().catch(() => {});
     }
 
@@ -475,6 +531,7 @@ export class Warrior extends Hero {
      */
     whirlwindUltimate() {
         console.log('🌪️ WHIRLWIND ULTIMATE!');
+        this.playWhirlwindSound();
 
         // Create whirlwind visual effect to show hitbox
         const whirlwindRange = 2.5;
@@ -853,5 +910,3 @@ export class Warrior extends Hero {
         }, 16);
     }
 }
-
-

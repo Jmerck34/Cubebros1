@@ -6,6 +6,8 @@ export class InputManager {
     constructor(options = {}) {
         this.keys = {};
         this.mouseButtons = {};
+        this.mousePosition = { x: 0, y: 0 };
+        this.hasMousePosition = false;
         const defaultBindings = {
             left: ['ArrowLeft', 'KeyA'],
             right: ['ArrowRight', 'KeyD'],
@@ -76,11 +78,20 @@ export class InputManager {
         // Setup mouse event listeners
         window.addEventListener('mousedown', (event) => {
             this.mouseButtons[event.button] = true;
+            this.mousePosition.x = event.clientX;
+            this.mousePosition.y = event.clientY;
+            this.hasMousePosition = true;
             event.preventDefault(); // Prevent context menu on right-click
         });
 
         window.addEventListener('mouseup', (event) => {
             this.mouseButtons[event.button] = false;
+        });
+
+        window.addEventListener('mousemove', (event) => {
+            this.mousePosition.x = event.clientX;
+            this.mousePosition.y = event.clientY;
+            this.hasMousePosition = true;
         });
 
         // Prevent context menu
@@ -217,6 +228,15 @@ export class InputManager {
     }
 
     /**
+     * Get latest mouse position in client coordinates.
+     * @returns {{x:number,y:number}|null}
+     */
+    getMousePosition() {
+        if (!this.hasMousePosition) return null;
+        return { x: this.mousePosition.x, y: this.mousePosition.y };
+    }
+
+    /**
      * Check if ability 1 key is pressed (Left Click or Q)
      * @returns {boolean}
      */
@@ -313,6 +333,20 @@ export class InputManager {
         }
 
         return false;
+    }
+
+    /**
+     * Get left stick axes for aim input.
+     * @returns {{x:number,y:number}|null}
+     */
+    getAimStick() {
+        const pad = this.gamepad;
+        if (!pad || !pad.connected || !pad.axes) return null;
+        const axisX = pad.axes[0] || 0;
+        const axisY = pad.axes[1] || 0;
+        const magnitude = Math.hypot(axisX, axisY);
+        if (magnitude < this.gamepadDeadzone) return null;
+        return { x: axisX, y: axisY };
     }
 
     /**

@@ -17,6 +17,7 @@ export class Player {
         const geometry = new THREE.BoxGeometry(1, 1, 1);
         const material = new THREE.MeshBasicMaterial({ color: 0x4a4f57 }); // Neutral slate
         this.mesh = new THREE.Mesh(geometry, material);
+        this.baseColor = material.color.getHex();
 
         // Add to scene
         scene.add(this.mesh);
@@ -37,6 +38,24 @@ export class Player {
         this.isAlive = true;
         this.team = null;
         this.type = 'player';
+        this.respawnDelay = 1.2;
+        this.respawnTimer = 0;
+
+        // Status effects (for hero-vs-hero interactions)
+        this.frozenTimer = 0;
+        this.isFrozen = false;
+        this.stunTimer = 0;
+        this.isStunned = false;
+        this.stunEffect = null;
+        this.poisonTimer = 0;
+        this.poisonEffect = null;
+        this.bleedTimer = 0;
+        this.bleedFlashTimer = 0;
+        this.fearTimer = 0;
+        this.fearDirection = 0;
+        this.mindControlTimer = 0;
+        this.controlsInverted = false;
+        this.controlsLocked = false;
 
         // Jump state for double jump
         this.jumpsRemaining = 2; // Allow 2 jumps (ground + air)
@@ -68,7 +87,16 @@ export class Player {
         this.debugHitboxVisible = false;
         this.debugHitbox = null;
         this.jumpSoundVolume = 0.05;
+        this.landSoundVolume = 0.05;
+        this.wasGrounded = false;
+        this.didLandThisFrame = false;
+        this.landSoundReady = false;
+        this.landSoundCooldown = 0;
+        this.hasEverGrounded = false;
+        this.fallPeakY = this.position.y;
+        this.fallDistance = 0;
         this.initJumpAudio();
+        this.initLandAudio();
 
         // Sync mesh position
         this.syncMeshPosition();
@@ -130,11 +158,29 @@ export class Player {
                 const audio = new Audio(audioUrl);
                 audio.volume = this.jumpSoundVolume;
                 audio.preload = 'auto';
+                audio.load();
                 audioPool.push(audio);
             }
             this.jumpAudio = audioPool;
         } catch (error) {
             this.jumpAudio = null;
+        }
+    }
+
+    initLandAudio() {
+        try {
+            const landUrl = new URL('../assets/sfx/landing_thud.wav', import.meta.url);
+            const audioPool = [];
+            for (let i = 0; i < 4; i++) {
+                const audio = new Audio(landUrl);
+                audio.volume = this.landSoundVolume;
+                audio.preload = 'auto';
+                audio.load();
+                audioPool.push(audio);
+            }
+            this.landAudio = audioPool;
+        } catch (error) {
+            this.landAudio = null;
         }
     }
 
@@ -146,15 +192,271 @@ export class Player {
         sound.play().catch(() => {});
     }
 
+    playLandSound(impactSpeed = 1, fallDistance = 0) {
+        if (!this.landAudio || !this.landAudio.length) return;
+        const sound = this.landAudio.find((node) => node.paused || node.ended) || this.landAudio[0];
+        const speedFactor = Math.min(1, Math.max(0.3, impactSpeed / 10));
+        const distanceFactor = Math.min(1, Math.max(0.2, fallDistance / 6));
+        const intensity = Math.min(1, Math.max(0.2, distanceFactor * 0.75 + speedFactor * 0.25));
+        sound.currentTime = 0;
+        sound.volume = this.landSoundVolume * intensity;
+        sound.play().catch(() => {});
+        this.landSoundCooldown = 0.12;
+    }
+
     /**
      * Set body color and synced accent elements
      * @param {number} hexColor - Hex color for the body
      */
     setBodyColor(hexColor) {
+        this.baseColor = hexColor;
         this.mesh.material.color.set(hexColor);
         if (this.frontPanel) {
             this.frontPanel.material.color.set(hexColor);
         }
+    }
+
+    /**
+     * Apply a temporary status tint to the core body panels.
+     * @param {number} hexColor
+     */
+    setEffectColor(hexColor) {
+        this.mesh.material.color.set(hexColor);
+        if (this.frontPanel) {
+            this.frontPanel.material.color.set(hexColor);
+        }
+    }
+
+    /**
+     * Update timers and visuals for status effects.
+     * @param {number} deltaTime
+     */
+    updateStatusEffects(deltaTime) {
+        if (this.frozenTimer > 0) {
+            this.frozenTimer = Math.max(0, this.frozenTimer - deltaTime);
+        }
+        this.isFrozen = this.frozenTimer > 0;
+        if (this.stunTimer > 0) {
+            this.stunTimer = Math.max(0, this.stunTimer - deltaTime);
+        }
+        if (this.poisonTimer > 0) {
+            this.poisonTimer = Math.max(0, this.poisonTimer - deltaTime);
+        }
+        if (this.bleedTimer > 0) {
+            this.bleedTimer = Math.max(0, this.bleedTimer - deltaTime);
+        }
+        if (this.bleedFlashTimer > 0) {
+            this.bleedFlashTimer = Math.max(0, this.bleedFlashTimer - deltaTime);
+        }
+        if (this.fearTimer > 0) {
+            this.fearTimer = Math.max(0, this.fearTimer - deltaTime);
+        }
+        if (this.mindControlTimer > 0) {
+            this.mindControlTimer = Math.max(0, this.mindControlTimer - deltaTime);
+        }
+
+        if (this.stunTimer > 0) {
+            if (!this.isStunned) {
+                this.isStunned = true;
+                this.createStunEffect();
+            }
+            this.updateStunEffect();
+        } else if (this.isStunned) {
+            this.isStunned = false;
+            if (this.stunEffect && this.stunEffect.parent) {
+                this.stunEffect.parent.remove(this.stunEffect);
+            }
+            this.stunEffect = null;
+        }
+
+        if (this.poisonTimer > 0) {
+            this.updatePoisonEffect();
+        } else if (this.poisonEffect) {
+            if (this.poisonEffect.parent) {
+                this.poisonEffect.parent.remove(this.poisonEffect);
+            }
+            this.poisonEffect = null;
+        }
+
+        this.controlsLocked = this.stunTimer > 0 || this.frozenTimer > 0;
+        this.controlsInverted = this.mindControlTimer > 0;
+
+        const tint = this.bleedFlashTimer > 0
+            ? 0xff6666
+            : (this.frozenTimer > 0
+                ? 0x88ddff
+                : (this.stunTimer > 0
+                    ? 0xffdd55
+                    : (this.fearTimer > 0
+                        ? 0xff6666
+                        : (this.mindControlTimer > 0 ? 0x9400d3 : this.baseColor))));
+        this.setEffectColor(tint);
+    }
+
+    /**
+     * Apply freeze to player.
+     * @param {number} durationSeconds
+     */
+    setFrozen(durationSeconds = 1.2) {
+        if (!this.isAlive) return;
+        this.frozenTimer = Math.max(this.frozenTimer, durationSeconds);
+    }
+
+    /**
+     * Apply stun to player.
+     * @param {number} durationSeconds
+     */
+    setStunned(durationSeconds = 0.6) {
+        if (!this.isAlive) return;
+        this.stunTimer = Math.max(this.stunTimer, durationSeconds);
+        if (!this.stunEffect) {
+            this.createStunEffect();
+        }
+    }
+
+    /**
+     * Create stun swirl effect.
+     */
+    createStunEffect() {
+        const swirlGroup = new THREE.Group();
+        const stars = [];
+        const starCount = 6;
+        for (let i = 0; i < starCount; i++) {
+            const star = new THREE.Group();
+            const sparkleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
+            const sparkleA = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.02), sparkleMaterial.clone());
+            const sparkleB = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.1, 0.02), sparkleMaterial.clone());
+            const sparkleC = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), sparkleMaterial.clone());
+            sparkleA.rotation.z = Math.PI / 8;
+            sparkleB.rotation.z = -Math.PI / 8;
+            sparkleC.rotation.z = Math.PI / 2;
+            star.add(sparkleA, sparkleB);
+            star.add(sparkleC);
+
+            star.userData.phase = (i / starCount) * Math.PI * 2;
+            star.userData.radius = 0.35 + (i % 3) * 0.06;
+            swirlGroup.add(star);
+            stars.push(star);
+        }
+
+        swirlGroup.userData.stars = stars;
+        swirlGroup.position.set(this.position.x, this.position.y + 0.8, 0.2);
+        this.scene.add(swirlGroup);
+        this.stunEffect = swirlGroup;
+    }
+
+    /**
+     * Update stun swirl animation.
+     */
+    updateStunEffect() {
+        if (!this.stunEffect) return;
+        this.stunEffect.position.set(this.position.x, this.position.y + 0.8, 0.2);
+        const stars = this.stunEffect.userData.stars || [];
+        const time = performance.now() * 0.004;
+        for (const star of stars) {
+            const phase = star.userData.phase || 0;
+            const radius = star.userData.radius || 0.3;
+            const angle = time + phase;
+            star.rotation.z += 0.16;
+            star.position.x = Math.cos(angle) * radius;
+            star.position.y = 0.35 + Math.sin(angle) * radius * 0.6;
+        }
+    }
+
+    /**
+     * Apply poison effect (visual).
+     * @param {number} durationSeconds
+     */
+    setPoisoned(durationSeconds = 0.6) {
+        if (!this.isAlive) return;
+        this.poisonTimer = Math.max(this.poisonTimer, durationSeconds);
+        if (!this.poisonEffect) {
+            const ringGeometry = new THREE.RingGeometry(0.55, 0.7, 16);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: 0x33ff77,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            });
+            this.poisonEffect = new THREE.Mesh(ringGeometry, ringMaterial);
+            this.scene.add(this.poisonEffect);
+        }
+    }
+
+    /**
+     * Update poison ring animation.
+     */
+    updatePoisonEffect() {
+        if (!this.poisonEffect) return;
+        const pulse = 0.1 + Math.sin(performance.now() * 0.01) * 0.08;
+        this.poisonEffect.position.set(this.position.x, this.position.y - 0.1, 0.2);
+        this.poisonEffect.scale.set(1 + pulse, 1 + pulse, 1);
+        this.poisonEffect.material.opacity = 0.4 + pulse * 0.6;
+    }
+
+    /**
+     * Apply bleed status duration (visual timing).
+     * @param {number} durationSeconds
+     */
+    setBleeding(durationSeconds = 1.0) {
+        this.bleedTimer = Math.max(this.bleedTimer, durationSeconds);
+    }
+
+    /**
+     * Flash red briefly on bleed tick.
+     */
+    flashBleed() {
+        this.bleedFlashTimer = Math.max(this.bleedFlashTimer, 0.15);
+    }
+
+    /**
+     * Apply fear (forced movement away).
+     * @param {number} sourceX
+     * @param {number} durationSeconds
+     */
+    applyFear(sourceX, durationSeconds = 0.7) {
+        if (!this.isAlive) return;
+        this.fearTimer = Math.max(this.fearTimer, durationSeconds);
+        this.fearDirection = this.position.x >= sourceX ? 1 : -1;
+    }
+
+    /**
+     * Apply mind control (invert controls).
+     * @param {number} durationSeconds
+     */
+    applyMindControl(durationSeconds = 2.5) {
+        if (!this.isAlive) return;
+        this.mindControlTimer = Math.max(this.mindControlTimer, durationSeconds);
+    }
+
+    /**
+     * Clear all status effects.
+     */
+    clearStatusEffects() {
+        this.frozenTimer = 0;
+        this.stunTimer = 0;
+        this.poisonTimer = 0;
+        this.bleedTimer = 0;
+        this.bleedFlashTimer = 0;
+        this.fearTimer = 0;
+        this.mindControlTimer = 0;
+        this.controlsLocked = false;
+        this.controlsInverted = false;
+        this.fearDirection = 0;
+        this.isFrozen = false;
+        this.isStunned = false;
+
+        if (this.stunEffect && this.stunEffect.parent) {
+            this.stunEffect.parent.remove(this.stunEffect);
+        }
+        this.stunEffect = null;
+
+        if (this.poisonEffect && this.poisonEffect.parent) {
+            this.poisonEffect.parent.remove(this.poisonEffect);
+        }
+        this.poisonEffect = null;
+
+        this.setEffectColor(this.baseColor);
     }
 
     /**
@@ -240,14 +542,37 @@ export class Player {
      */
     update(deltaTime, input) {
         const wasGrounded = this.isGrounded;
+        this.wasGrounded = this.isGrounded;
+        this.didLandThisFrame = false;
 
         if (this.enemyContactCooldown > 0) {
             this.enemyContactCooldown = Math.max(0, this.enemyContactCooldown - deltaTime);
         }
+        if (this.landSoundCooldown > 0) {
+            this.landSoundCooldown = Math.max(0, this.landSoundCooldown - deltaTime);
+        }
+
+        if (!this.isAlive) {
+            this.respawnTimer = Math.max(0, this.respawnTimer - deltaTime);
+            if (this.respawnTimer === 0) {
+                this.respawn();
+            }
+            return;
+        }
+
+        this.updateStatusEffects(deltaTime);
+
+        if (!Number.isFinite(this.currentHealth)) {
+            this.currentHealth = 0;
+            this.healthBar.setHealth(0);
+        }
 
         if (this.currentHealth <= 0) {
             this.die();
+            return;
         }
+
+        const controlsLocked = this.controlsLocked;
 
         // Horizontal movement
         this.velocity.x = 0; // Reset horizontal velocity
@@ -255,19 +580,36 @@ export class Player {
         // Apply debug speed multiplier if available
         const debugMultiplier = this.debugPhysics ? this.debugPhysics.moveSpeedMultiplier : 1.0;
         const speedMultiplier = debugMultiplier * (this.moveSpeedMultiplier || 1);
-
-        if (input.isLeftPressed()) {
-            this.velocity.x = -PLAYER_SPEED * speedMultiplier;
+        let leftPressed = input.isLeftPressed();
+        let rightPressed = input.isRightPressed();
+        if (this.controlsInverted) {
+            const swap = leftPressed;
+            leftPressed = rightPressed;
+            rightPressed = swap;
         }
-        if (input.isRightPressed()) {
-            this.velocity.x = PLAYER_SPEED * speedMultiplier;
+
+        if (!controlsLocked) {
+            if (this.fearTimer > 0 && this.fearDirection) {
+                this.velocity.x = PLAYER_SPEED * speedMultiplier * this.fearDirection;
+            } else {
+                if (leftPressed) {
+                    this.velocity.x = -PLAYER_SPEED * speedMultiplier;
+                }
+                if (rightPressed) {
+                    this.velocity.x = PLAYER_SPEED * speedMultiplier;
+                }
+            }
         }
 
         // Apply horizontal velocity
         this.position.x += this.velocity.x * deltaTime;
 
         // Handle jump input
-        handleJump(this, input);
+        if (!controlsLocked) {
+            handleJump(this, input);
+        } else {
+            this.jumpKeyWasPressed = false;
+        }
 
         // Apply gravity (collision handled by Level)
         applyGravity(this, deltaTime);
@@ -300,6 +642,10 @@ export class Player {
      * @param {Object} enemy - Enemy instance
      */
     applyEnemyContact(enemy) {
+        if (!this.isAlive) {
+            return;
+        }
+
         if (this.enemyContactCooldown > 0) {
             return;
         }
@@ -475,8 +821,21 @@ export class Player {
      * @param {number} amount - Amount of damage to take
      */
     takeDamage(amount) {
-        this.currentHealth -= amount;
-        this.healthBar.takeDamage(amount);
+        if (!this.isAlive) {
+            return;
+        }
+
+        const damage = Number.isFinite(amount) ? amount : 1;
+        if (damage <= 0) {
+            return;
+        }
+
+        if (!Number.isFinite(this.currentHealth)) {
+            this.currentHealth = this.maxHealth;
+        }
+
+        this.currentHealth = Math.max(0, this.currentHealth - damage);
+        this.healthBar.takeDamage(damage);
 
         if (this.currentHealth <= 0) {
             this.die();
@@ -496,17 +855,49 @@ export class Player {
      * Handle player death - respawn at spawn point
      */
     die() {
+        if (!this.isAlive) {
+            return;
+        }
+
         console.log('Player died - respawning');
+        this.isAlive = false;
+        this.respawnTimer = this.respawnDelay;
+        this.clearStatusEffects();
+        this.currentHealth = 0;
+        this.healthBar.setHealth(0);
+        this.healthBar.hide();
+        this.mesh.visible = false;
         this.position.x = this.spawnPoint.x;
         this.position.y = this.spawnPoint.y;
         this.velocity.x = 0;
         this.velocity.y = 0;
         this.isGrounded = false;
         this.jumpsRemaining = 2;
+        this.enemyContactCooldown = 0;
+    }
 
-        // Reset health on respawn
+    /**
+     * Respawn after death delay.
+     */
+    respawn() {
+        this.isAlive = true;
         this.currentHealth = this.maxHealth;
         this.healthBar.setHealth(this.maxHealth);
+        this.healthBar.show();
+        this.mesh.visible = true;
+        this.landSoundReady = false;
+        this.landSoundCooldown = 0;
+        this.hasEverGrounded = false;
+        this.didLandThisFrame = false;
+        this.wasGrounded = false;
+        this.fallPeakY = this.position.y;
+        this.fallDistance = 0;
+        this.visualBob = 0;
+        this.visualScaleY = 1;
+        this.visualScaleZ = 1;
+        this.visualTiltZ = 0;
+        this.syncMeshPosition();
+        this.healthBar.update(0);
     }
 
     /**
@@ -538,6 +929,10 @@ export class Player {
      * @param {Array} enemies - Array of enemy instances
      */
     checkEnemyCollisions(enemies) {
+        if (!this.isAlive) {
+            return;
+        }
+
         const playerBounds = this.getBounds();
 
         for (const enemy of enemies) {
@@ -570,6 +965,7 @@ export class Player {
      * Clean up player visuals/UI
      */
     destroy() {
+        this.clearStatusEffects();
         if (this.healthBar) {
             this.healthBar.destroy();
         }

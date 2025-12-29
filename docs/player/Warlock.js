@@ -24,8 +24,17 @@ export class Warlock extends Hero {
         // Hover state
         this.isHovering = false;
         this.hoverCloud = null;
+        this.hoverTrailParticles = [];
+        this.hoverTimeout = null;
+        this.hoverAnimationInterval = null;
 
-        // Converted enemies (mind control)
+        // Chaos storm state (ultimate)
+        this.isChaosStormActive = false;
+        this.chaosStormInterval = null;
+        this.chaosStormVisualInterval = null;
+        this.chaosStormGroup = null;
+
+        // Converted enemies (legacy mind control)
         this.convertedEnemies = [];
 
         // Facing direction (1 = right, -1 = left)
@@ -120,22 +129,24 @@ export class Warlock extends Hero {
             return true;
         };
 
-        // R - Mind Control
-        const mindControl = new Ability('Mind Control', 0, true);
-        mindControl.use = (hero) => {
-            hero.castMindControl();
-            return true;
+        // R - Chaos Storm
+        const chaosStorm = new Ability('Chaos Storm', 0, true);
+        chaosStorm.use = (hero) => {
+            return hero.castChaosStorm();
         };
 
-        this.setAbilities(lightningStrike, fear, hover, mindControl);
+        this.setAbilities(lightningStrike, fear, hover, chaosStorm);
     }
 
     /**
      * Update - Override to handle hover and facing direction
      */
     update(deltaTime, input) {
-        // Update facing direction based on input
-        if (input.isLeftPressed()) {
+        // Update facing direction based on aim or movement input
+        const aim = this.getAimDirection();
+        if (this.hasAimInput && Math.abs(aim.x) > 0.15) {
+            this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+        } else if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
         } else if (input.isRightPressed()) {
             this.setFacingDirection(1);
@@ -143,14 +154,29 @@ export class Warlock extends Hero {
 
         // If hovering, ignore gravity
         if (this.isHovering) {
+            this.updateStatusEffects(deltaTime);
+            if (this.controlsLocked) {
+                this.deactivateHover();
+                return;
+            }
             // Custom update without gravity
             this.velocity.x = 0;
-
-            if (input.isLeftPressed()) {
-                this.velocity.x = -5; // Slower while hovering
+            let leftPressed = input.isLeftPressed();
+            let rightPressed = input.isRightPressed();
+            if (this.controlsInverted) {
+                const swap = leftPressed;
+                leftPressed = rightPressed;
+                rightPressed = swap;
             }
-            if (input.isRightPressed()) {
-                this.velocity.x = 5;
+            if (this.fearTimer > 0 && this.fearDirection) {
+                this.velocity.x = 5 * this.fearDirection;
+            } else {
+                if (leftPressed) {
+                    this.velocity.x = -5; // Slower while hovering
+                }
+                if (rightPressed) {
+                    this.velocity.x = 5;
+                }
             }
 
             this.position.x += this.velocity.x * deltaTime;
@@ -162,6 +188,11 @@ export class Warlock extends Hero {
             }
 
             this.syncMeshPosition();
+
+            // Keep UI synced while hovering
+            if (this.healthBar) {
+                this.healthBar.update(deltaTime);
+            }
 
             // Still check for ability inputs while hovering
             this.handleAbilityInput(input);
@@ -195,7 +226,10 @@ export class Warlock extends Hero {
         this.staff.rotation.z = -0.3;
         setTimeout(() => { this.staff.rotation.z = 0.2; }, 200);
 
-        const direction = this.facingDirection;
+        const aim = this.getAimDirection();
+        const useAim = this.hasAimInput;
+        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+        const perpendicular = { x: -direction.y, y: direction.x };
         const lightningBolts = [];
         const startX = this.position.x;
         const startY = this.position.y;
@@ -248,10 +282,9 @@ export class Warlock extends Hero {
 
             for (let i = 0; i < segments; i++) {
                 const segmentDistance = maxDistance / segments;
-                const nextX = currentX + direction * segmentDistance + (Math.random() - 0.5) * 0.3;
-                // Flip Y offset vertically when going left
-                const yOffset = (Math.random() - 0.5) * 0.4;
-                const nextY = currentY + (direction > 0 ? yOffset : -yOffset);
+                const lateralOffset = (Math.random() - 0.5) * 0.4;
+                const nextX = currentX + direction.x * segmentDistance + perpendicular.x * lateralOffset;
+                const nextY = currentY + direction.y * segmentDistance + perpendicular.y * lateralOffset;
 
                 // Main bolt with pulsing opacity
                 const bolt = createBolt(currentX, currentY, nextX, nextY, 0.1, 0xffff00, 0.9 * pulseIntensity);
@@ -265,11 +298,10 @@ export class Warlock extends Hero {
                 if (Math.random() > 0.5) {
                     const branchAngle = (Math.random() - 0.5) * Math.PI / 2;
                     const branchLength = 0.3 + Math.random() * 0.6;
-                    // Flip both X and Y for branches when going left
-                    const branchXOffset = Math.cos(branchAngle) * branchLength;
-                    const branchYOffset = Math.sin(branchAngle) * branchLength;
-                    const branchEndX = nextX + (direction > 0 ? branchXOffset : -branchXOffset);
-                    const branchEndY = nextY + (direction > 0 ? branchYOffset : -branchYOffset);
+                    const branchDirX = direction.x * Math.cos(branchAngle) + perpendicular.x * Math.sin(branchAngle);
+                    const branchDirY = direction.y * Math.cos(branchAngle) + perpendicular.y * Math.sin(branchAngle);
+                    const branchEndX = nextX + branchDirX * branchLength;
+                    const branchEndY = nextY + branchDirY * branchLength;
 
                     const branch = createBolt(nextX, nextY, branchEndX, branchEndY, 0.06, 0xffff00, 0.7 * pulseIntensity);
                     lightningBolts.push(branch);
@@ -287,11 +319,14 @@ export class Warlock extends Hero {
             }
 
             // Check for enemy hits (follows hero's current position)
+            const endX = currentStartX + direction.x * maxDistance;
+            const endY = currentStartY + direction.y * maxDistance;
+            const thickness = 2;
             const lightningBounds = {
-                left: currentStartX + (direction > 0 ? 0 : -maxDistance),
-                right: currentStartX + (direction > 0 ? maxDistance : 0),
-                top: currentStartY + 2,
-                bottom: currentStartY - 2
+                left: Math.min(currentStartX, endX) - thickness,
+                right: Math.max(currentStartX, endX) + thickness,
+                top: Math.max(currentStartY, endY) + thickness,
+                bottom: Math.min(currentStartY, endY) - thickness
             };
 
             for (const enemy of this.getDamageTargets()) {
@@ -369,20 +404,24 @@ export class Warlock extends Hero {
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(fearBounds, enemyBounds)) {
-                // Calculate direction away from warlock
-                const directionAway = enemy.position.x > this.position.x ? 1 : -1;
+                if (enemy.type === 'player' && typeof enemy.applyFear === 'function') {
+                    enemy.applyFear(this.position.x, 0.7);
+                } else {
+                    // Calculate direction away from warlock
+                    const directionAway = enemy.position.x > this.position.x ? 1 : -1;
 
-                // Set enemy direction to move away
-                if (enemy.direction !== undefined) {
-                    enemy.direction = directionAway;
+                    // Set enemy direction to move away
+                    if (enemy.direction !== undefined) {
+                        enemy.direction = directionAway;
+                    }
+
+                    // Flash enemy red
+                    const originalColor = enemy.mesh.material.color.getHex();
+                    enemy.mesh.material.color.set(0xff0000);
+                    setTimeout(() => {
+                        enemy.mesh.material.color.set(originalColor);
+                    }, 500);
                 }
-
-                // Flash enemy red
-                const originalColor = enemy.mesh.material.color.getHex();
-                enemy.mesh.material.color.set(0xff0000);
-                setTimeout(() => {
-                    enemy.mesh.material.color.set(originalColor);
-                }, 500);
 
                 console.log('😱 Enemy feared!');
             }
@@ -538,67 +577,206 @@ export class Warlock extends Hero {
     }
 
     /**
-     * Cast Mind Control - R Ability (Ultimate)
+     * Cast Chaos Storm - R Ability (Ultimate)
      */
-    castMindControl() {
+    castChaosStorm() {
         if (this.ultimateCharge < this.ultimateChargeMax) {
             console.log('Ultimate not ready!');
-            return;
+            return false;
+        }
+        if (this.isChaosStormActive) {
+            return false;
         }
 
-        console.log('🧠 MIND CONTROL!');
+        console.log('🌑 CHAOS STORM!');
 
         // Cancel hover when using ability
         if (this.isHovering) {
             this.deactivateHover();
         }
 
-        // Create mind control wave
-        const waveGeometry = new THREE.CircleGeometry(4, 16);
-        const waveMaterial = new THREE.MeshBasicMaterial({
-            color: 0x9400d3,
-            transparent: true,
-            opacity: 0.6
-        });
-        const wave = new THREE.Mesh(waveGeometry, waveMaterial);
-        wave.position.set(this.position.x, this.position.y, 0.1);
-        this.mesh.parent.add(wave);
+        const durationMs = 3000;
+        const tickIntervalMs = 500;
+        const radius = 3.5;
+        const baseHits = 2;
+        const lifeStealRatio = 0.35;
 
-        // Mind control radius
-        const controlBounds = {
-            left: this.position.x - 4,
-            right: this.position.x + 4,
-            top: this.position.y + 4,
-            bottom: this.position.y - 4
+        this.isChaosStormActive = true;
+        this.clearChaosStormVisuals();
+        this.chaosStormGroup = this.createChaosStormEffect(radius);
+
+        const ability = this.abilities.r;
+        let elapsed = 0;
+
+        const applyTick = () => {
+            if (!this.isAlive) {
+                this.stopChaosStorm();
+                return;
+            }
+
+            const stormBounds = {
+                left: this.position.x - radius,
+                right: this.position.x + radius,
+                top: this.position.y + radius,
+                bottom: this.position.y - radius
+            };
+
+            for (const enemy of this.getDamageTargets()) {
+                if (!enemy.isAlive) continue;
+                const enemyBounds = enemy.getBounds();
+                if (!checkAABBCollision(stormBounds, enemyBounds)) continue;
+
+                this.applyAbilityDamage(ability, enemy, baseHits);
+
+                const adjustedHits = ability && typeof ability.getAdjustedDamage === 'function'
+                    ? ability.getAdjustedDamage(baseHits)
+                    : baseHits;
+                const hits = Math.max(1, Math.round(adjustedHits));
+                let estimatedDamage = hits;
+                if (enemy.type === 'player') {
+                    const targetMaxHealth = Number.isFinite(enemy.maxHealth) ? enemy.maxHealth : 100;
+                    const damagePerHit = Math.max(1, Math.round(targetMaxHealth * 0.1));
+                    estimatedDamage = hits * damagePerHit;
+                }
+
+                const healAmount = estimatedDamage * lifeStealRatio;
+                if (healAmount > 0) {
+                    this.heal(healAmount);
+                }
+            }
         };
 
-        // Convert nearby enemies
-        for (const enemy of this.getDamageTargets()) {
-            if (!enemy.isAlive) continue;
-
-            const enemyBounds = enemy.getBounds();
-            if (checkAABBCollision(controlBounds, enemyBounds)) {
-                this.convertEnemy(enemy);
+        applyTick();
+        this.chaosStormInterval = setInterval(() => {
+            elapsed += tickIntervalMs;
+            applyTick();
+            if (elapsed >= durationMs) {
+                this.stopChaosStorm();
             }
+        }, tickIntervalMs);
+
+        this.chaosStormVisualInterval = setInterval(() => {
+            this.updateChaosStormVisuals();
+        }, 40);
+
+        return true;
+    }
+
+    /**
+     * Create chaos storm visuals around the warlock.
+     * @param {number} radius
+     * @returns {THREE.Group}
+     */
+    createChaosStormEffect(radius) {
+        const stormGroup = new THREE.Group();
+
+        const ringGeometry = new THREE.RingGeometry(radius * 0.6, radius, 32);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0x1b001f,
+            transparent: true,
+            opacity: 0.45,
+            side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.position.z = 0.08;
+        stormGroup.add(ring);
+
+        const coreGeometry = new THREE.CircleGeometry(radius * 0.45, 24);
+        const coreMaterial = new THREE.MeshBasicMaterial({
+            color: 0x120015,
+            transparent: true,
+            opacity: 0.35
+        });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        core.position.z = 0.06;
+        stormGroup.add(core);
+
+        const wisps = [];
+        const wispCount = 8;
+        for (let i = 0; i < wispCount; i++) {
+            const wispGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+            const wispMaterial = new THREE.MeshBasicMaterial({
+                color: 0x5a00a8,
+                transparent: true,
+                opacity: 0.7
+            });
+            const wisp = new THREE.Mesh(wispGeometry, wispMaterial);
+            wisp.userData.angle = (i / wispCount) * Math.PI * 2;
+            wisp.userData.radius = radius * (0.55 + Math.random() * 0.35);
+            wisp.userData.speed = 0.06 + Math.random() * 0.05;
+            wisp.userData.phase = Math.random() * Math.PI * 2;
+            stormGroup.add(wisp);
+            wisps.push(wisp);
         }
 
-        // Fade out wave
-        let opacity = 0.6;
-        let scale = 1;
-        const fadeInterval = setInterval(() => {
-            opacity -= 0.05;
-            scale += 0.1;
-            wave.material.opacity = opacity;
-            wave.scale.set(scale, scale, 1);
+        stormGroup.userData = {
+            ring,
+            core,
+            wisps
+        };
 
-            if (opacity <= 0) {
-                clearInterval(fadeInterval);
-                this.mesh.parent.remove(wave);
+        stormGroup.position.set(0, 0, 0.12);
+        this.mesh.add(stormGroup);
+        return stormGroup;
+    }
+
+    /**
+     * Update chaos storm visuals (pulse + swirl).
+     */
+    updateChaosStormVisuals() {
+        if (!this.chaosStormGroup) return;
+        const { ring, core, wisps } = this.chaosStormGroup.userData || {};
+        const time = performance.now() * 0.002;
+
+        if (ring) {
+            const pulse = 0.92 + Math.sin(time * 3) * 0.08;
+            ring.scale.set(pulse, pulse, 1);
+            ring.material.opacity = 0.35 + Math.sin(time * 2) * 0.1;
+        }
+
+        if (core) {
+            const corePulse = 0.85 + Math.sin(time * 4) * 0.1;
+            core.scale.set(corePulse, corePulse, 1);
+            core.material.opacity = 0.25 + Math.sin(time * 2.5 + 1.2) * 0.08;
+        }
+
+        if (Array.isArray(wisps)) {
+            for (const wisp of wisps) {
+                wisp.userData.angle += wisp.userData.speed;
+                const angle = wisp.userData.angle;
+                const radius = wisp.userData.radius;
+                wisp.position.x = Math.cos(angle) * radius;
+                wisp.position.y = Math.sin(angle) * radius;
+                wisp.position.z = 0.08 + Math.sin(time * 3 + wisp.userData.phase) * 0.05;
+                wisp.material.opacity = 0.5 + Math.sin(time * 5 + wisp.userData.phase) * 0.2;
             }
-        }, 30);
+        }
+    }
 
-        // Consume ultimate charge
-        this.ultimateCharge = 0;
+    /**
+     * Clear chaos storm visuals immediately.
+     */
+    clearChaosStormVisuals() {
+        if (this.chaosStormGroup && this.chaosStormGroup.parent) {
+            this.chaosStormGroup.parent.remove(this.chaosStormGroup);
+        }
+        this.chaosStormGroup = null;
+    }
+
+    /**
+     * Stop chaos storm effects and cleanup.
+     */
+    stopChaosStorm() {
+        if (this.chaosStormInterval) {
+            clearInterval(this.chaosStormInterval);
+            this.chaosStormInterval = null;
+        }
+        if (this.chaosStormVisualInterval) {
+            clearInterval(this.chaosStormVisualInterval);
+            this.chaosStormVisualInterval = null;
+        }
+        this.isChaosStormActive = false;
+        this.clearChaosStormVisuals();
     }
 
     /**
@@ -634,4 +812,3 @@ export class Warlock extends Hero {
         }, 10000);
     }
 }
-

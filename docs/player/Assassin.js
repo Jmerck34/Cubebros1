@@ -31,6 +31,18 @@ export class Assassin extends Hero {
 
         // Set assassin abilities
         this.initializeAbilities();
+
+        // Dagger flip sound
+        this.flipSoundVolume = 0.2;
+        this.initFlipAudio();
+
+        // Poison throw sound
+        this.poisonThrowVolume = 0.2;
+        this.initPoisonThrowAudio();
+
+        // Poison impact sound
+        this.poisonImpactVolume = 0.2;
+        this.initPoisonImpactAudio();
     }
 
     /**
@@ -129,12 +141,91 @@ export class Assassin extends Hero {
         this.setAbilities(daggerSlash, poisonBomb, shadowWalk, assassinate);
     }
 
+    initFlipAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/assassin_q_loop.wav', import.meta.url);
+            const audio = new Audio(audioUrl);
+            audio.volume = this.flipSoundVolume;
+            audio.preload = 'auto';
+            audio.loop = true;
+            audio.load();
+            this.flipAudio = audio;
+        } catch (error) {
+            this.flipAudio = null;
+        }
+    }
+
+    playFlipLoop(durationMs = 280) {
+        if (!this.flipAudio) return;
+        if (this.flipAudioTimer) {
+            clearTimeout(this.flipAudioTimer);
+            this.flipAudioTimer = null;
+        }
+        this.flipAudio.pause();
+        this.flipAudio.currentTime = 0;
+        this.flipAudio.volume = this.flipSoundVolume;
+        this.flipAudio.loop = true;
+        this.flipAudio.play().catch(() => {});
+        this.flipAudioTimer = setTimeout(() => {
+            this.stopFlipLoop();
+        }, durationMs);
+    }
+
+    stopFlipLoop() {
+        if (!this.flipAudio) return;
+        this.flipAudio.pause();
+        this.flipAudio.currentTime = 0;
+    }
+
+    initPoisonThrowAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/assassin_poison_throw.wav', import.meta.url);
+            const audio = new Audio(audioUrl);
+            audio.volume = this.poisonThrowVolume;
+            audio.preload = 'auto';
+            audio.load();
+            this.poisonThrowAudio = audio;
+        } catch (error) {
+            this.poisonThrowAudio = null;
+        }
+    }
+
+    playPoisonThrowSound() {
+        if (!this.poisonThrowAudio) return;
+        const sound = this.poisonThrowAudio.cloneNode();
+        sound.volume = this.poisonThrowVolume;
+        sound.play().catch(() => {});
+    }
+
+    initPoisonImpactAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/assassin_poison_impact.wav', import.meta.url);
+            const audio = new Audio(audioUrl);
+            audio.volume = this.poisonImpactVolume;
+            audio.preload = 'auto';
+            audio.load();
+            this.poisonImpactAudio = audio;
+        } catch (error) {
+            this.poisonImpactAudio = null;
+        }
+    }
+
+    playPoisonImpactSound() {
+        if (!this.poisonImpactAudio) return;
+        const sound = this.poisonImpactAudio.cloneNode();
+        sound.volume = this.poisonImpactVolume;
+        sound.play().catch(() => {});
+    }
+
     /**
      * Update - Override to handle shadow walk timer and facing direction
      */
     update(deltaTime, input) {
-        // Update facing direction based on input
-        if (input.isLeftPressed()) {
+        // Update facing direction based on aim or movement input
+        const aim = this.getAimDirection();
+        if (this.hasAimInput && Math.abs(aim.x) > 0.15) {
+            this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+        } else if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
         } else if (input.isRightPressed()) {
             this.setFacingDirection(1);
@@ -192,6 +283,7 @@ export class Assassin extends Hero {
         }
 
         // Tornado spin during combo
+        this.playFlipLoop(520);
         this.playTornadoSpin(500);
         this.playFlipOnce(280);
 
@@ -362,6 +454,7 @@ export class Assassin extends Hero {
         if (this.isShadowWalking) {
             this.deactivateShadowWalk();
         }
+        this.playPoisonThrowSound();
 
         // Create poison bomb projectile (body + cap + fuse)
         const bombGroup = new THREE.Group();
@@ -382,22 +475,31 @@ export class Assassin extends Hero {
         fuse.position.set(0.04, 0.22, 0);
         bombGroup.add(fuse);
 
+        const aim = this.getAimDirection();
+        const useAim = this.hasAimInput;
+        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+
         // Starting position
-        bombGroup.position.set(this.position.x + (0.5 * this.facingDirection), this.position.y, 0.2);
+        bombGroup.position.set(
+            this.position.x + (0.5 * direction.x),
+            this.position.y + (0.5 * direction.y),
+            0.2
+        );
         this.mesh.parent.add(bombGroup);
 
-        // Throw direction based on facing
-        const throwDirection = this.facingDirection;
-        let bombX = this.position.x;
-        let bombY = this.position.y;
-        let velocityY = 5;
+        // Throw direction based on facing or aim
+        const throwDirection = direction;
+        let bombX = bombGroup.position.x;
+        let bombY = bombGroup.position.y;
+        let velocityY = useAim ? throwDirection.y * 8 : 5;
+        const velocityX = throwDirection.x * 8;
 
         // Get level reference (stored when enemy reference is set)
         const level = this.level || { platforms: [] };
 
         // Animate bomb trajectory
         const bombInterval = setInterval(() => {
-            bombX += throwDirection * 8 * 0.016;
+            bombX += velocityX * 0.016;
             velocityY -= 20 * 0.016; // Gravity
             bombY += velocityY * 0.016;
 
@@ -424,10 +526,16 @@ export class Assassin extends Hero {
                 }
             }
 
+            const hitGround = bombY < -2;
+            const outOfRange = Math.abs(bombX - this.position.x) > 10;
+
             // Check if hit ground, platform, or went off screen
-            if (hitPlatform || bombY < -2 || Math.abs(bombX - this.position.x) > 10) {
+            if (hitPlatform || hitGround || outOfRange) {
                 clearInterval(bombInterval);
                 this.mesh.parent.remove(bombGroup);
+                if (hitPlatform || hitGround) {
+                    this.playPoisonImpactSound();
+                }
 
                 // Create poison cloud at impact location
                 this.createPoisonCloud(bombX, bombY);
@@ -715,6 +823,9 @@ export class Assassin extends Hero {
      */
     applyBleed(enemy, ability = null) {
         let bleedTicks = 3;
+        if (typeof enemy.setBleeding === 'function') {
+            enemy.setBleeding(bleedTicks);
+        }
         const bleedInterval = setInterval(() => {
             if (enemy.isAlive && bleedTicks > 0) {
                 this.applyAbilityDamage(ability, enemy, 1);

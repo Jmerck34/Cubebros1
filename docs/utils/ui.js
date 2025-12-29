@@ -13,7 +13,9 @@ export class UIManager {
             q: {
                 slot: document.getElementById(getId('ability-q')),
                 overlay: document.getElementById(getId('cooldown-q')),
-                text: document.getElementById(getId('cooldown-text-q'))
+                text: document.getElementById(getId('cooldown-text-q')),
+                chargeWrap: document.getElementById(getId('charge-meter-q')),
+                chargeFill: document.getElementById(getId('charge-meter-fill-q'))
             },
             w: {
                 slot: document.getElementById(getId('ability-w')),
@@ -47,6 +49,9 @@ export class UIManager {
 
         // Update ultimate charge bar
         this.updateUltimateCharge();
+
+        // Update charge shot meter (Archer)
+        this.updateChargeMeter();
     }
 
     /**
@@ -99,5 +104,31 @@ export class UIManager {
                 ultimateSlot.classList.remove('ready');
             }
         }
+    }
+
+    /**
+     * Update Archer charge shot meter
+     */
+    updateChargeMeter() {
+        const chargeWrap = this.elements.q?.chargeWrap;
+        const chargeFill = this.elements.q?.chargeFill;
+        if (!chargeWrap || !chargeFill) {
+            return;
+        }
+
+        const maxCharge = this.hero?.maxChargeTime;
+        const currentCharge = this.hero?.chargeTime;
+        const isCharging = Boolean(this.hero?.isCharging);
+
+        if (!Number.isFinite(maxCharge) || maxCharge <= 0) {
+            chargeWrap.style.opacity = '0';
+            chargeFill.style.width = '0%';
+            return;
+        }
+
+        const ratio = Number.isFinite(currentCharge) ? currentCharge / maxCharge : 0;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        chargeFill.style.width = `${clamped * 100}%`;
+        chargeWrap.style.opacity = clamped > 0 || isCharging ? '1' : '0';
     }
 }

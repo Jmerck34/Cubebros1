@@ -25,6 +25,47 @@
             height: 100%;
         }
 
+        #split-screen-border {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 6px;
+            transform: translateX(-50%);
+            background: linear-gradient(180deg, #4f4f4f 0%, #6a6a6a 50%, #4f4f4f 100%);
+            border-left: 2px solid rgba(255, 255, 255, 0.25);
+            border-right: 2px solid rgba(0, 0, 0, 0.45);
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 90;
+            display: none;
+        }
+
+        #split-screen-border::before,
+        #split-screen-border::after {
+            content: '';
+            position: absolute;
+            top: 8px;
+            bottom: 8px;
+            width: 2px;
+        }
+
+        #split-screen-border::before {
+            left: 1px;
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: none;
+        }
+
+        #split-screen-border::after {
+            right: 1px;
+            background: rgba(0, 0, 0, 0.25);
+            box-shadow: none;
+        }
+
+        body.split-screen-active #split-screen-border {
+            display: block;
+        }
+
         /* Hero Selection Menu */
         #hero-menu {
             position: fixed;
@@ -267,6 +308,17 @@
             right: 20px;
         }
 
+        body.split-screen-active #ability-ui {
+            left: 25%;
+            transform: translateX(-50%);
+        }
+
+        body.split-screen-active #ability-ui-p2 {
+            left: 75%;
+            right: auto;
+            transform: translateX(-50%);
+        }
+
         .ability-ui-label {
             position: absolute;
             top: -18px;
@@ -361,10 +413,32 @@
             background: linear-gradient(90deg, #ff9900, #ffdd00);
             transition: width 0.2s ease;
         }
+
+        .charge-meter {
+            position: absolute;
+            top: -10px;
+            left: 4px;
+            right: 4px;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 4px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.1s ease;
+        }
+
+        .charge-meter-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4ee58a, #b5ffd8);
+            transition: width 0.05s linear;
+        }
     </style>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
+    <div id="split-screen-border" aria-hidden="true"></div>
 
     <!-- Hero Selection Menu -->
     <div id="hero-menu">
@@ -433,7 +507,7 @@
                     <div class="ability"><strong>Q/Click:</strong> Lightning Strike (AoE)</div>
                     <div class="ability"><strong>Right Click:</strong> Fear (turn enemies)</div>
                     <div class="ability"><strong>E:</strong> Hover (cloud flight)</div>
-                    <div class="ability"><strong>R:</strong> Mind Control (convert)</div>
+                    <div class="ability"><strong>R:</strong> Chaos Storm (lifesteal aura)</div>
                 </div>
             </div>
         </div>
@@ -452,6 +526,9 @@
     <!-- Ability UI -->
     <div id="ability-ui" class="ability-ui">
         <div class="ability-slot" id="ability-q">
+            <div class="charge-meter" id="charge-meter-q">
+                <div class="charge-meter-fill" id="charge-meter-fill-q"></div>
+            </div>
             <div class="cooldown-overlay" id="cooldown-q"></div>
             <div class="cooldown-text" id="cooldown-text-q"></div>
             <span style="font-size: 16px;">🖱️L</span>
@@ -483,6 +560,9 @@
     <div id="ability-ui-p2" class="ability-ui">
         <div class="ability-ui-label">P2</div>
         <div class="ability-slot" id="ability-q-p2">
+            <div class="charge-meter" id="charge-meter-q-p2">
+                <div class="charge-meter-fill" id="charge-meter-fill-q-p2"></div>
+            </div>
             <div class="cooldown-overlay" id="cooldown-q-p2"></div>
             <div class="cooldown-text" id="cooldown-text-q-p2"></div>
             <span>U</span>

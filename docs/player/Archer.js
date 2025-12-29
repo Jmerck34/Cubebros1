@@ -123,8 +123,11 @@ export class Archer extends Hero {
      * Update - handle charging, potion effects, and machine bow
      */
     update(deltaTime, input) {
-        // Update facing direction based on input
-        if (input.isLeftPressed()) {
+        // Update facing direction based on aim or movement input
+        const aim = this.getAimDirection();
+        if (this.hasAimInput && Math.abs(aim.x) > 0.15) {
+            this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+        } else if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
         } else if (input.isRightPressed()) {
             this.setFacingDirection(1);
@@ -146,6 +149,9 @@ export class Archer extends Hero {
      * Override ability input to reserve A1 for charge logic
      */
     handleAbilityInput(input) {
+        if (this.controlsLocked) {
+            return;
+        }
         if (input.isAbility2Pressed() && this.abilities.w) {
             this.useAbility('w');
         }
@@ -233,9 +239,15 @@ export class Archer extends Hero {
         fletch.position.set(-0.08, 0, 0);
         arrowGroup.add(fletch);
 
-        const direction = this.facingDirection;
+        const aim = this.getAimDirection();
+        const useAim = this.hasAimInput;
+        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
         arrowGroup.scale.x = 1;
-        arrowGroup.position.set(this.position.x + direction * 0.6, this.position.y + 0.1, 0.2);
+        arrowGroup.position.set(
+            this.position.x + direction.x * 0.6,
+            this.position.y + 0.1 + direction.y * 0.6,
+            0.2
+        );
         this.mesh.parent.add(arrowGroup);
 
         const baseSpeed = 10;
@@ -247,9 +259,9 @@ export class Archer extends Hero {
 
         const damageHits = 1 + Math.round(chargeRatio * 2);
 
-        let velocityY = 3.5 + chargeRatio * 2.2;
+        let velocityY = useAim ? direction.y * speed : 3.5 + chargeRatio * 2.2;
         const gravity = -20;
-        const velocityX = direction * speed;
+        const velocityX = direction.x * speed;
 
         const arrowInterval = setInterval(() => {
             arrowGroup.position.x += velocityX * 0.016;

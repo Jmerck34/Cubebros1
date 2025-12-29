@@ -177,14 +177,12 @@ const player = new Warrior(scene, 0, 0);
   - Slower movement but immune to gravity
   - Good for avoiding ground hazards
 
-- **R - Mind Control Ultimate** (Charge required)
-  - Large area of effect
-  - Converts nearby enemies to your side
-  - Controlled enemies turn **purple**
-  - They attack other enemies for you
-  - Lasts 10 seconds
+- **R - Chaos Storm Ultimate** (Charge required)
+  - Dark storm surrounds you
+  - Heavy tick damage in a wide radius
+  - Lifesteal per hit while storm is active
 
-**Playstyle:** Controller/Support - Manipulate the battlefield with Fear and Mind Control, use Hover for positioning, Lightning for poke
+**Playstyle:** Controller/Bruiser - Zone enemies with Fear and Chaos Storm, use Hover for positioning, Lightning for poke
 
 ---
 
@@ -234,7 +232,7 @@ const player = new Warrior(scene, 0, 0);
 - Freeze Blast creates space when enemies get close
 
 ### Warlock
-- Mind Control turns fights around instantly
+- Chaos Storm lets you brawl in the middle of fights
 - Fear + Lightning combo is very strong
 - Hover over pits and hazards
 - Control enemies, don't face-tank them

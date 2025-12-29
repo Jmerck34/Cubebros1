@@ -37,12 +37,15 @@ export function handleJump(player, input) {
 
     // Handle jump with key press detection to prevent spam
     if (jumpPressed && !player.jumpKeyWasPressed && player.jumpsRemaining > 0) {
-        player.velocity.y = JUMP_VELOCITY * jumpMultiplier;
-        player.jumpsRemaining--;
-        player.isGrounded = false;
         if (typeof player.playJumpSound === 'function') {
             player.playJumpSound();
         }
+        if ('landSoundReady' in player) {
+            player.landSoundReady = true;
+        }
+        player.velocity.y = JUMP_VELOCITY * jumpMultiplier;
+        player.jumpsRemaining--;
+        player.isGrounded = false;
 
         // Log which jump this is
         if (player.jumpsRemaining === 1) {

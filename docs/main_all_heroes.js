@@ -5,6 +5,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { GameLoop } from './core/gameLoop.js';
 import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
+import { getAimDirection } from './utils/aim.js';
 import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
@@ -116,6 +117,17 @@ const gameLoop = new GameLoop(
     // Update callback
     (deltaTime) => {
         input.update();
+        const size = renderer.getSize(new THREE.Vector2());
+        const aim = getAimDirection({
+            input,
+            camera,
+            renderer,
+            viewport: { x: 0, y: 0, width: size.x, height: size.y },
+            origin: player.position
+        });
+        if (typeof player.setAimDirection === 'function') {
+            player.setAimDirection(aim);
+        }
 
         // Update player
         player.update(deltaTime, input);

@@ -172,10 +172,70 @@ export class Level {
      * @param {Player} player - Player instance
      */
     checkCollisions(player) {
+        if (!player || !player.isAlive) {
+            return;
+        }
+
         const playerBounds = player.getBounds();
         const playerVelocity = player.velocity;
         let onLadder = false;
         let onWall = false;
+        const updateFallTracking = () => {
+            if (!Number.isFinite(player.fallPeakY)) {
+                player.fallPeakY = player.position.y;
+            }
+            if (!Number.isFinite(player.fallDistance)) {
+                player.fallDistance = 0;
+            }
+            if (player.wasGrounded) {
+                player.fallPeakY = player.position.y;
+                player.fallDistance = 0;
+                return;
+            }
+            if (player.position.y > player.fallPeakY) {
+                player.fallPeakY = player.position.y;
+            }
+            const drop = player.fallPeakY - player.position.y;
+            if (drop > player.fallDistance) {
+                player.fallDistance = drop;
+            }
+        };
+        const triggerLandingSound = (impactSpeed) => {
+            if (player.didLandThisFrame) return;
+            if (player.landSoundCooldown > 0) return;
+            if (player.landSoundReady === false) return;
+            if (impactSpeed < 0.2) return;
+            if (typeof player.playLandSound === 'function') {
+                player.didLandThisFrame = true;
+                player.landSoundReady = false;
+                const fallDistance = Number.isFinite(player.fallDistance) ? player.fallDistance : 0;
+                player.playLandSound(impactSpeed, fallDistance);
+            }
+        };
+        const tryPreLandingSound = (platform) => {
+            if (!player.landSoundReady || player.didLandThisFrame || player.landSoundCooldown > 0) return;
+            if (playerVelocity.y >= -0.1) return;
+            if (platform.isLadder) return;
+            const horizontalOverlap = playerBounds.right > platform.bounds.left &&
+                playerBounds.left < platform.bounds.right;
+            if (!horizontalOverlap) return;
+            const distanceToTop = playerBounds.bottom - platform.bounds.top;
+            if (distanceToTop <= 0) return;
+            const speed = Math.abs(playerVelocity.y);
+            const timeToImpact = distanceToTop / Math.max(0.01, speed);
+            if (timeToImpact <= 0.04) {
+                triggerLandingSound(speed);
+            }
+        };
+
+        updateFallTracking();
+
+        for (const platform of this.platforms) {
+            tryPreLandingSound(platform);
+            if (player.didLandThisFrame) {
+                break;
+            }
+        }
 
         // First pass: Check wall collisions (higher priority)
         for (const platform of this.platforms) {
@@ -190,10 +250,12 @@ export class Level {
                 const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
 
                 if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
+                    const impactSpeed = Math.abs(playerVelocity.y);
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
+                    triggerLandingSound(impactSpeed);
                 } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
@@ -255,10 +317,12 @@ export class Level {
                 // Resolve based on smallest overlap AND velocity direction (prevents edge glitching)
                 if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
                     // Player landed on top of platform (coming from above)
+                    const impactSpeed = Math.abs(playerVelocity.y);
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
+                    triggerLandingSound(impactSpeed);
                     if (platform.type === 'moving') {
                         const prevX = platform.prevX ?? platform.mesh.position.x;
                         const prevY = platform.prevY ?? platform.mesh.position.y;
@@ -288,6 +352,17 @@ export class Level {
         // Reset ladder flag if not on ladder
         if (!onLadder) {
             player.onLadder = false;
+        }
+
+        if (player.isGrounded) {
+            player.hasEverGrounded = true;
+            player.landSoundReady = false;
+            player.fallPeakY = player.position.y;
+            player.fallDistance = 0;
+        } else if (player.wasGrounded) {
+            player.landSoundReady = true;
+        } else if (!player.hasEverGrounded) {
+            player.landSoundReady = true;
         }
     }
 
@@ -584,11 +659,12 @@ export class Level {
         this.addPlatform((gapEdges[2].right + groundRight) / 2, groundCenterY, groundRight - gapEdges[2].right, groundHeight, 'ground');
 
         const wallHeight = 10.5;
+        const castleWallWidth = 7;
 
         // Left castle
         const leftCastleX = -60;
         this.addWallWithLadder(leftCastleX, groundSurfaceY, wallHeight, {
-            wallWidth: 7,
+            wallWidth: castleWallWidth,
             ladderSide: 'right',
             addDoor: true
         });
@@ -597,7 +673,7 @@ export class Level {
         // Right castle
         const rightCastleX = 60;
         this.addWallWithLadder(rightCastleX, groundSurfaceY, wallHeight, {
-            wallWidth: 7,
+            wallWidth: castleWallWidth,
             ladderSide: 'left',
             addDoor: true
         });
@@ -607,6 +683,34 @@ export class Level {
             blue: { x: leftCastleX, y: groundSurfaceY + wallHeight + 0.6 },
             red: { x: rightCastleX, y: groundSurfaceY + wallHeight + 0.6 }
         };
+
+        const boundaryWidth = 1.5;
+        const boundaryTop = groundSurfaceY + wallHeight + 6;
+        const boundaryBottom = groundBottomY;
+        const leftBoundaryRight = leftCastleX - castleWallWidth / 2;
+        const rightBoundaryLeft = rightCastleX + castleWallWidth / 2;
+
+        this.platforms.push({
+            mesh: null,
+            bounds: {
+                left: leftBoundaryRight - boundaryWidth,
+                right: leftBoundaryRight,
+                top: boundaryTop,
+                bottom: boundaryBottom
+            },
+            type: 'wall'
+        });
+
+        this.platforms.push({
+            mesh: null,
+            bounds: {
+                left: rightBoundaryLeft,
+                right: rightBoundaryLeft + boundaryWidth,
+                top: boundaryTop,
+                bottom: boundaryBottom
+            },
+            type: 'wall'
+        });
 
         // Moving platforms over the longer outer gaps
         const movingGapY = 1.4;
@@ -621,4 +725,3 @@ export class Level {
         this.addPlatform(6, 2.5, 3, 0.6, 'grass');
     }
 }
-

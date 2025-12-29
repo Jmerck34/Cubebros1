@@ -24,6 +24,7 @@ export class Cyborg extends Hero {
         // Kame Hame Ha charging state
         this.isChargingBeam = false;
         this.beamChargeTime = 0;
+        this.beamAimDirection = { x: 1, y: 0 };
 
         // Bubble shield state
         this.bubbleShield = null;
@@ -163,13 +164,17 @@ export class Cyborg extends Hero {
     update(deltaTime, input) {
         // Freeze movement during charging
         if (this.isChargingBeam) {
+            this.updateStatusEffects(deltaTime);
             this.beamChargeTime += deltaTime;
             // Don't update position or process input while charging
             return;
         }
 
-        // Update facing direction based on input
-        if (input.isLeftPressed()) {
+        // Update facing direction based on aim or movement input
+        const aim = this.getAimDirection();
+        if (this.hasAimInput && Math.abs(aim.x) > 0.15) {
+            this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+        } else if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
         } else if (input.isRightPressed()) {
             this.setFacingDirection(1);
@@ -231,21 +236,30 @@ export class Cyborg extends Hero {
         const outerLayer = new THREE.Mesh(outerGeometry, outerMaterial);
         fireballGroup.add(outerLayer);
 
-        fireballGroup.position.set(this.position.x + (0.5 * this.facingDirection), this.position.y, 0.2);
+        const aim = this.getAimDirection();
+        const useAim = this.hasAimInput;
+        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+
+        fireballGroup.position.set(
+            this.position.x + (0.5 * direction.x),
+            this.position.y + (0.5 * direction.y),
+            0.2
+        );
         this.mesh.parent.add(fireballGroup);
 
         // Trail particles array
         const trailParticles = [];
 
-        // Fire direction based on facing
-        const direction = this.facingDirection;
-        let fireballX = this.position.x;
+        // Fire direction based on aim
+        const speed = 12;
+        const fireballPos = { x: fireballGroup.position.x, y: fireballGroup.position.y };
         let rotationAngle = 0;
 
         // Animate fireball
         const fireballInterval = setInterval(() => {
-            fireballX += direction * 12 * 0.016;
-            fireballGroup.position.x = fireballX;
+            fireballPos.x += direction.x * speed * 0.016;
+            fireballPos.y += direction.y * speed * 0.016;
+            fireballGroup.position.set(fireballPos.x, fireballPos.y, 0.2);
 
             // Spin the fire missile
             rotationAngle += 0.2;
@@ -323,7 +337,7 @@ export class Cyborg extends Hero {
             }
 
             // Remove if hit or off screen
-            if (hit || Math.abs(fireballX - this.position.x) > 15) {
+            if (hit || Math.hypot(fireballPos.x - this.position.x, fireballPos.y - this.position.y) > 15) {
                 clearInterval(fireballInterval);
                 this.mesh.parent.remove(fireballGroup);
 
@@ -351,7 +365,10 @@ export class Cyborg extends Hero {
         this.cyborgRig.scale.set(1.3, 1.3, 1.3);
         setTimeout(() => { this.cyborgRig.scale.set(1, 1, 1); }, 300);
 
-        const direction = this.facingDirection;
+        const aim = this.getAimDirection();
+        const useAim = this.hasAimInput;
+        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+        const perpendicular = { x: -direction.y, y: direction.x };
         const windParticles = [];
 
         // Create icy shards
@@ -367,8 +384,10 @@ export class Cyborg extends Hero {
             const particle = new THREE.Mesh(particleGeometry, particleMaterial);
 
             // Random starting position in wind wave
-            const startX = this.position.x + direction * (0.5 + Math.random() * 0.5);
-            const startY = this.position.y + (Math.random() - 0.5) * 2;
+            const forwardOffset = 0.5 + Math.random() * 0.5;
+            const lateralOffset = (Math.random() - 0.5) * 2;
+            const startX = this.position.x + direction.x * forwardOffset + perpendicular.x * lateralOffset;
+            const startY = this.position.y + direction.y * forwardOffset + perpendicular.y * lateralOffset;
             particle.position.set(startX, startY, 0.15);
             this.mesh.parent.add(particle);
 
@@ -379,7 +398,9 @@ export class Cyborg extends Hero {
                 radius: 0.2 + Math.random() * 0.4,
                 speed: 0.9 + Math.random() * 0.5,
                 opacity: 0.7,
-                life: 0
+                life: 0,
+                centerX: startX,
+                centerY: startY
             });
         }
 
@@ -398,8 +419,10 @@ export class Cyborg extends Hero {
                 const spiralX = Math.cos(particle.angle) * currentRadius;
                 const spiralY = Math.sin(particle.angle) * currentRadius * 0.5;
 
-                particle.mesh.position.x += direction * particle.speed * 0.1;
-                particle.mesh.position.y = this.position.y + spiralY;
+                particle.centerX += direction.x * particle.speed * 0.1;
+                particle.centerY += direction.y * particle.speed * 0.1;
+                particle.mesh.position.x = particle.centerX + perpendicular.x * spiralY;
+                particle.mesh.position.y = particle.centerY + perpendicular.y * spiralY;
                 particle.mesh.rotation.z += 0.2;
 
                 // Fade out
@@ -420,11 +443,16 @@ export class Cyborg extends Hero {
         }, 16);
 
         // Freeze enemies in cone
+        const startX = this.position.x;
+        const startY = this.position.y;
+        const endX = startX + direction.x * 3;
+        const endY = startY + direction.y * 3;
+        const thickness = 1.5;
         const windBounds = {
-            left: this.position.x + (direction > 0 ? 0 : -3),
-            right: this.position.x + (direction > 0 ? 3 : 0),
-            top: this.position.y + 1.5,
-            bottom: this.position.y - 1.5
+            left: Math.min(startX, endX) - thickness,
+            right: Math.max(startX, endX) + thickness,
+            top: Math.max(startY, endY) + thickness,
+            bottom: Math.min(startY, endY) - thickness
         };
 
         for (const enemy of this.getDamageTargets()) {
@@ -433,7 +461,9 @@ export class Cyborg extends Hero {
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(windBounds, enemyBounds)) {
                 this.applyAbilityDamage(this.abilities.w, enemy, 1);
-                if (typeof enemy.frozenTimer === 'number') {
+                if (typeof enemy.setFrozen === 'function') {
+                    enemy.setFrozen(1.5);
+                } else if (typeof enemy.frozenTimer === 'number') {
                     enemy.frozenTimer = 1.5;
                 }
                 if (enemy.type !== 'player') {
@@ -587,6 +617,11 @@ export class Cyborg extends Hero {
 
         console.log('⚡ KAME HAME HA!!! ⚡');
 
+        const aim = this.getAimDirection();
+        this.beamAimDirection = this.hasAimInput
+            ? { x: aim.x, y: aim.y }
+            : { x: this.facingDirection, y: 0 };
+
         // Start charging (freezes character)
         this.isChargingBeam = true;
         this.beamChargeTime = 0;
@@ -641,8 +676,8 @@ export class Cyborg extends Hero {
 
         // Position in front of cyborg (based on facing direction)
         energyBall.position.set(
-            this.position.x + (0.7 * this.facingDirection),
-            this.position.y,
+            this.position.x + (0.7 * this.beamAimDirection.x),
+            this.position.y + (0.7 * this.beamAimDirection.y),
             0.2
         );
         this.mesh.parent.add(energyBall);
@@ -685,8 +720,8 @@ export class Cyborg extends Hero {
             energyBall.scale.set(growthScale, growthScale, growthScale);
 
             // Update energy ball position to follow cyborg
-            energyBall.position.x = this.position.x + (0.7 * this.facingDirection);
-            energyBall.position.y = this.position.y;
+            energyBall.position.x = this.position.x + (0.7 * this.beamAimDirection.x);
+            energyBall.position.y = this.position.y + (0.7 * this.beamAimDirection.y);
 
             // Animate particles spiraling inward
             chargeParticles.forEach(p => {
@@ -718,7 +753,9 @@ export class Cyborg extends Hero {
     fireKameHameHa() {
         this.isChargingBeam = false;
 
-        const direction = this.facingDirection;
+        const direction = this.beamAimDirection || { x: this.facingDirection, y: 0 };
+        const perpendicular = { x: -direction.y, y: direction.x };
+        const angle = Math.atan2(direction.y, direction.x);
         const damage = Math.floor(this.beamChargeTime * 2); // More charge = more damage
 
         // Create beam group with multiple layers
@@ -764,7 +801,12 @@ export class Cyborg extends Hero {
         const glow = new THREE.Mesh(glowGeometry, glowMaterial);
         beamGroup.add(glow);
 
-        beamGroup.position.set(this.position.x + direction * 5, this.position.y, 0.2);
+        beamGroup.position.set(
+            this.position.x + direction.x * 5,
+            this.position.y + direction.y * 5,
+            0.2
+        );
+        beamGroup.rotation.z = angle;
         this.mesh.parent.add(beamGroup);
 
         // Create energy particles flowing along the beam
@@ -782,8 +824,8 @@ export class Cyborg extends Hero {
             const offsetX = (Math.random() - 0.5) * 10;
             const offsetY = (Math.random() - 0.5) * 1.2;
             particle.position.set(
-                this.position.x + direction * (5 + offsetX),
-                this.position.y + offsetY,
+                this.position.x + direction.x * (5 + offsetX) + perpendicular.x * offsetY,
+                this.position.y + direction.y * (5 + offsetX) + perpendicular.y * offsetY,
                 0.15
             );
             this.mesh.parent.add(particle);
@@ -801,10 +843,10 @@ export class Cyborg extends Hero {
         const particleInterval = setInterval(() => {
             beamParticles.forEach(p => {
                 p.life += 0.016;
-                p.offsetX += direction * p.speed * 0.016;
+                p.offsetX += p.speed * 0.016;
 
-                p.mesh.position.x = this.position.x + direction * (5 + p.offsetX);
-                p.mesh.position.y = this.position.y + p.offsetY;
+                p.mesh.position.x = this.position.x + direction.x * (5 + p.offsetX) + perpendicular.x * p.offsetY;
+                p.mesh.position.y = this.position.y + direction.y * (5 + p.offsetX) + perpendicular.y * p.offsetY;
 
                 // Fade out particles as they travel
                 p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
@@ -812,11 +854,16 @@ export class Cyborg extends Hero {
         }, 16);
 
         // Beam damage area
+        const startX = this.position.x;
+        const startY = this.position.y;
+        const endX = startX + direction.x * 10;
+        const endY = startY + direction.y * 10;
+        const thickness = 0.7;
         const beamBounds = {
-            left: this.position.x + (direction > 0 ? 0 : -10),
-            right: this.position.x + (direction > 0 ? 10 : 0),
-            top: this.position.y + 0.7,
-            bottom: this.position.y - 0.7
+            left: Math.min(startX, endX) - thickness,
+            right: Math.max(startX, endX) + thickness,
+            top: Math.max(startY, endY) + thickness,
+            bottom: Math.min(startY, endY) - thickness
         };
 
         // Damage all enemies in beam
