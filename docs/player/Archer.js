@@ -152,10 +152,16 @@ export class Archer extends Hero {
         if (this.controlsLocked) {
             return;
         }
+        if (this.isCarryingFlag && input.isFlagDropPressed()) {
+            return;
+        }
         if (input.isAbility2Pressed() && this.abilities.w) {
             this.useAbility('w');
         }
         if (input.isAbility3Pressed() && this.abilities.e) {
+            if (this.isCarryingFlag && this.flagCarryBlocksAbility3) {
+                return;
+            }
             this.useAbility('e');
         }
         if (input.isUltimatePressed() && this.abilities.r) {

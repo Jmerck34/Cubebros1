@@ -414,6 +414,46 @@
             transition: width 0.2s ease;
         }
 
+        #team-scoreboard {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            gap: 14px;
+            z-index: 150;
+            font-family: 'Arial', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .score-card {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.65);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .score-card .score-value {
+            font-size: 18px;
+        }
+
+        .score-card.blue {
+            border-color: rgba(47, 108, 176, 0.9);
+            color: #9ad2ff;
+        }
+
+        .score-card.red {
+            border-color: rgba(204, 47, 47, 0.9);
+            color: #ffb2b2;
+        }
+
         .charge-meter {
             position: absolute;
             top: -10px;
@@ -439,6 +479,16 @@
 <body>
     <canvas id="game-canvas"></canvas>
     <div id="split-screen-border" aria-hidden="true"></div>
+    <div id="team-scoreboard" aria-live="polite">
+        <div class="score-card blue">
+            <span>Blue</span>
+            <span class="score-value" id="score-blue">0</span>
+        </div>
+        <div class="score-card red">
+            <span>Red</span>
+            <span class="score-value" id="score-red">0</span>
+        </div>
+    </div>
 
     <!-- Hero Selection Menu -->
     <div id="hero-menu">

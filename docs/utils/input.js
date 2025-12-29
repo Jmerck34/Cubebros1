@@ -15,7 +15,8 @@ export class InputManager {
             ability1: ['Mouse0', 'KeyQ'],
             ability2: ['Mouse2'],
             ability3: ['KeyE'],
-            ultimate: ['KeyR']
+            ultimate: ['KeyR'],
+            flagDrop: ['KeyF']
         };
         this.bindings = {};
         Object.keys(defaultBindings).forEach((action) => {
@@ -209,6 +210,14 @@ export class InputManager {
      */
     isJumpPressed() {
         return this.isActionPressed('jump');
+    }
+
+    /**
+     * Check if flag drop key is pressed
+     * @returns {boolean}
+     */
+    isFlagDropPressed() {
+        return this.isActionPressed('flagDrop');
     }
 
     /**

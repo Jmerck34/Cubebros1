@@ -40,6 +40,10 @@ export class Player {
         this.type = 'player';
         this.respawnDelay = 1.2;
         this.respawnTimer = 0;
+        this.isCarryingFlag = false;
+        this.flagCarryTeam = null;
+        this.flagCarryBlocksAbility3 = false;
+        this.flagDropWasPressed = false;
 
         // Status effects (for hero-vs-hero interactions)
         this.frozenTimer = 0;

@@ -23,6 +23,9 @@ import { DebugMenu } from './ui/DebugMenu.js';
 // Game state
 let gameStarted = false;
 let scene, camera, camera2, renderer, input, input2, level, environment, player, player2, uiManager, uiManager2, cameraFollow, cameraFollow2, parallaxManager, gameLoop, pauseMenu, debugMenu;
+let flagState = null;
+let teamScoreboard, scoreBlueEl, scoreRedEl;
+let teamScores = { blue: 0, red: 0 };
 const VIEW_SIZE = 10;
 
 // Hero selection
@@ -62,7 +65,8 @@ const PLAYER_ONE_COOP_BINDINGS = {
     ability1: ['Mouse0', 'KeyQ'],
     ability2: ['Mouse2'],
     ability3: ['KeyE'],
-    ultimate: ['KeyR']
+    ultimate: ['KeyR'],
+    flagDrop: ['KeyF']
 };
 
 const PLAYER_TWO_BINDINGS = {
@@ -72,7 +76,8 @@ const PLAYER_TWO_BINDINGS = {
     ability1: ['KeyU'],
     ability2: ['KeyO'],
     ability3: ['KeyK'],
-    ultimate: ['KeyP']
+    ultimate: ['KeyP'],
+    flagDrop: ['KeyP']
 };
 
 // Initialize scene (before game starts)
@@ -109,6 +114,303 @@ function updateCameraFrustum(targetCamera, width, height) {
     targetCamera.top = VIEW_SIZE;
     targetCamera.bottom = -VIEW_SIZE;
     targetCamera.updateProjectionMatrix();
+}
+
+function initScoreboard() {
+    teamScoreboard = document.getElementById('team-scoreboard');
+    scoreBlueEl = document.getElementById('score-blue');
+    scoreRedEl = document.getElementById('score-red');
+    setScoreboardVisible(false);
+}
+
+function setScoreboardVisible(visible) {
+    if (teamScoreboard) {
+        teamScoreboard.style.display = visible ? 'flex' : 'none';
+    }
+}
+
+function updateScoreboard() {
+    if (scoreBlueEl) {
+        scoreBlueEl.textContent = `${teamScores.blue}`;
+    }
+    if (scoreRedEl) {
+        scoreRedEl.textContent = `${teamScores.red}`;
+    }
+}
+
+function createFlag(team, base, color) {
+    const flagGroup = new THREE.Group();
+    const pole = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 1.1, 0.06),
+        new THREE.MeshBasicMaterial({ color: 0x4a3a2a })
+    );
+    pole.position.y = 0.55;
+    flagGroup.add(pole);
+
+    const cloth = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.35, 0.05),
+        new THREE.MeshBasicMaterial({ color })
+    );
+    cloth.position.set(0.32, 0.75, 0);
+    flagGroup.add(cloth);
+
+    flagGroup.position.set(base.x, base.y, 0.45);
+    scene.add(flagGroup);
+
+    const ringGeometry = new THREE.RingGeometry(0.9, 1.35, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.set(base.x, base.y, 0.05);
+    ring.visible = false;
+    scene.add(ring);
+
+    return {
+        team,
+        base,
+        mesh: flagGroup,
+        ring,
+        carrier: null,
+        isAtBase: true,
+        dropped: false,
+        returnTimer: 0,
+        pickupCooldown: 0,
+        lastCarrierPosition: { x: base.x, y: base.y }
+    };
+}
+
+function initCTF(levelInstance) {
+    const spawns = levelInstance.flagSpawns || {
+        blue: { x: -60, y: 3 },
+        red: { x: 60, y: 3 }
+    };
+    teamScores = { blue: 0, red: 0 };
+    updateScoreboard();
+    setScoreboardVisible(true);
+
+    flagState = {
+        returnDelay: 10,
+        returnRadius: 1.3,
+        baseRadius: 1.8,
+        bases: {
+            blue: { x: spawns.blue.x, y: spawns.blue.y },
+            red: { x: spawns.red.x, y: spawns.red.y }
+        },
+        flags: {
+            blue: createFlag('blue', spawns.blue, 0x2f6cb0),
+            red: createFlag('red', spawns.red, 0xcc2f2f)
+        }
+    };
+}
+
+function clearCTF() {
+    if (flagState && flagState.flags) {
+        Object.values(flagState.flags).forEach((flag) => {
+            if (flag.mesh && flag.mesh.parent) {
+                flag.mesh.parent.remove(flag.mesh);
+            }
+            if (flag.ring && flag.ring.parent) {
+                flag.ring.parent.remove(flag.ring);
+            }
+        });
+    }
+    flagState = null;
+    setScoreboardVisible(false);
+}
+
+function getFlagBounds(flag) {
+    const x = flag.mesh.position.x;
+    const y = flag.mesh.position.y;
+    return {
+        left: x - 0.4,
+        right: x + 0.4,
+        top: y + 0.9,
+        bottom: y - 0.2
+    };
+}
+
+function setFlagCarrier(flag, carrier) {
+    flag.carrier = carrier;
+    flag.isAtBase = false;
+    flag.dropped = false;
+    flag.returnTimer = 0;
+    flag.pickupCooldown = 0;
+    if (flag.ring) {
+        flag.ring.visible = false;
+    }
+    flag.lastCarrierPosition = { x: carrier.position.x, y: carrier.position.y };
+    carrier.isCarryingFlag = true;
+    carrier.flagCarryTeam = flag.team;
+}
+
+function clearFlagCarrier(flag, carrier) {
+    if (carrier) {
+        carrier.isCarryingFlag = false;
+        carrier.flagCarryTeam = null;
+    }
+    flag.carrier = null;
+}
+
+function resetFlag(flag) {
+    clearFlagCarrier(flag, flag.carrier);
+    flag.isAtBase = true;
+    flag.dropped = false;
+    flag.returnTimer = 0;
+    flag.pickupCooldown = 0;
+    flag.mesh.position.set(flag.base.x, flag.base.y, 0.45);
+    if (flag.ring) {
+        flag.ring.visible = false;
+        flag.ring.position.set(flag.base.x, flag.base.y, 0.05);
+    }
+    flag.lastCarrierPosition = { x: flag.base.x, y: flag.base.y };
+}
+
+function dropFlag(flag) {
+    const dropPos = flag.lastCarrierPosition || flag.base;
+    clearFlagCarrier(flag, flag.carrier);
+    flag.isAtBase = false;
+    flag.dropped = true;
+    flag.returnTimer = flagState.returnDelay;
+    flag.pickupCooldown = 0.25;
+    flag.mesh.position.set(dropPos.x, dropPos.y, 0.45);
+    if (flag.ring) {
+        flag.ring.visible = true;
+        flag.ring.position.set(dropPos.x, dropPos.y, 0.05);
+    }
+}
+
+function isPlayerInBase(player, team) {
+    if (!flagState) return false;
+    const base = flagState.bases[team];
+    if (!base) return false;
+    const radius = flagState.baseRadius;
+    const baseBounds = {
+        left: base.x - radius,
+        right: base.x + radius,
+        top: base.y + radius,
+        bottom: base.y - radius
+    };
+    return checkAABBCollision(player.getBounds(), baseBounds);
+}
+
+function updateCTF(deltaTime, inputP1, inputP2) {
+    if (!flagState) return;
+    const players = [
+        { player, input: inputP1 },
+        { player: player2, input: inputP2 }
+    ].filter((entry) => entry.player);
+
+    const playerInputs = players.map(({ player: activePlayer, input: activeInput }) => {
+        const dropPressed = activeInput?.isFlagDropPressed?.() || false;
+        const dropJustPressed = dropPressed && !activePlayer.flagDropWasPressed;
+        return { player: activePlayer, input: activeInput, dropPressed, dropJustPressed };
+    });
+
+    playerInputs.forEach(({ player: activePlayer, dropPressed, dropJustPressed }) => {
+        activePlayer.flagCarryBlocksAbility3 = Boolean(activePlayer.isCarryingFlag);
+        if (activePlayer.isCarryingFlag && dropJustPressed) {
+            const carriedFlag = flagState.flags[activePlayer.flagCarryTeam];
+            if (carriedFlag && carriedFlag.carrier === activePlayer) {
+                carriedFlag.lastCarrierPosition = { x: activePlayer.position.x, y: activePlayer.position.y };
+                dropFlag(carriedFlag);
+            }
+        }
+    });
+
+    Object.values(flagState.flags).forEach((flag) => {
+        if (flag.carrier) {
+            if (flag.carrier.isAlive) {
+                flag.lastCarrierPosition = { x: flag.carrier.position.x, y: flag.carrier.position.y };
+                flag.mesh.position.set(flag.carrier.position.x, flag.carrier.position.y + 1.0, 0.45);
+            } else {
+                dropFlag(flag);
+            }
+        } else if (flag.dropped) {
+            if (flag.ring) {
+                flag.ring.position.set(flag.mesh.position.x, flag.mesh.position.y, 0.05);
+            }
+            if (flag.pickupCooldown > 0) {
+                flag.pickupCooldown -= deltaTime;
+            }
+        }
+    });
+
+    playerInputs.forEach(({ player: activePlayer, dropPressed }) => {
+        if (!activePlayer.isAlive) return;
+        Object.values(flagState.flags).forEach((flag) => {
+            if (flag.carrier) return;
+            const flagBounds = getFlagBounds(flag);
+            if (!checkAABBCollision(activePlayer.getBounds(), flagBounds)) return;
+
+            if (flag.team === activePlayer.team) {
+                return;
+            } else if (!activePlayer.isCarryingFlag) {
+                if (flag.dropped && !dropPressed) {
+                    return;
+                }
+                if (flag.pickupCooldown > 0) {
+                    return;
+                }
+                setFlagCarrier(flag, activePlayer);
+            }
+        });
+    });
+
+    Object.values(flagState.flags).forEach((flag) => {
+        if (!flag.dropped) return;
+        const radius = flagState.returnRadius;
+        const ringBounds = {
+            left: flag.mesh.position.x - radius,
+            right: flag.mesh.position.x + radius,
+            top: flag.mesh.position.y + radius,
+            bottom: flag.mesh.position.y - radius
+        };
+
+        let friendlyInRing = false;
+        let enemyInRing = false;
+
+        players.forEach(({ player: activePlayer }) => {
+            if (!activePlayer.isAlive) return;
+            if (!checkAABBCollision(activePlayer.getBounds(), ringBounds)) return;
+            if (activePlayer.team === flag.team) {
+                friendlyInRing = true;
+            } else {
+                enemyInRing = true;
+            }
+        });
+
+        if (friendlyInRing && !enemyInRing) {
+            flag.returnTimer -= deltaTime;
+            if (flag.returnTimer <= 0) {
+                resetFlag(flag);
+            }
+        } else {
+            flag.returnTimer = flagState.returnDelay;
+        }
+    });
+
+    playerInputs.forEach(({ player: activePlayer }) => {
+        if (!activePlayer.isCarryingFlag || !activePlayer.isAlive) return;
+        const enemyTeam = activePlayer.flagCarryTeam;
+        if (!enemyTeam || enemyTeam === activePlayer.team) return;
+        const ownFlag = flagState.flags[activePlayer.team];
+        if (!ownFlag || !ownFlag.isAtBase) return;
+        if (!isPlayerInBase(activePlayer, activePlayer.team)) return;
+
+        teamScores[activePlayer.team] += 1;
+        updateScoreboard();
+        resetFlag(flagState.flags[enemyTeam]);
+        activePlayer.isCarryingFlag = false;
+        activePlayer.flagCarryTeam = null;
+    });
+
+    playerInputs.forEach(({ player: activePlayer, dropPressed }) => {
+        activePlayer.flagDropWasPressed = dropPressed;
+    });
 }
 
 // Start game with selected hero
@@ -230,6 +532,8 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
         player2.debugPhysics = debugMenu.getPhysicsMultipliers();
     }
 
+    initCTF(level);
+
     // Game Loop
     gameLoop = new GameLoop(
         (deltaTime) => {
@@ -303,6 +607,8 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
             if (uiManager2) {
                 uiManager2.update();
             }
+
+            updateCTF(deltaTime, input, input2);
 
             // Update environment animations
             environment.update(deltaTime);
@@ -434,6 +740,7 @@ function resetGame() {
         }
         scene.clear();
     }
+    clearCTF();
     parallaxManager = null;
     player2 = null;
     camera2 = null;
@@ -619,6 +926,7 @@ function pollMenuGamepad() {
 // Initialize scene on load
 window.addEventListener('load', () => {
     initScene();
+    initScoreboard();
 
     heroMenuTitle = document.getElementById('hero-menu-title');
     heroMenuSubtitle = document.getElementById('hero-menu-subtitle');

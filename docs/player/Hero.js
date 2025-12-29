@@ -72,6 +72,9 @@ export class Hero extends Player {
         if (this.controlsLocked) {
             return;
         }
+        if (this.isCarryingFlag && input.isFlagDropPressed()) {
+            return;
+        }
         if (input.isAbility1Pressed() && this.abilities.q) {
             this.useAbility('q');
         }
@@ -79,6 +82,9 @@ export class Hero extends Player {
             this.useAbility('w');
         }
         if (input.isAbility3Pressed() && this.abilities.e) {
+            if (this.isCarryingFlag && this.flagCarryBlocksAbility3) {
+                return;
+            }
             this.useAbility('e');
         }
         if (input.isUltimatePressed() && this.abilities.r) {
