@@ -558,7 +558,7 @@ export class Assassin extends Hero {
      * Check if player is immune to damage
      */
     die() {
-        if (this.isShadowWalking) return; // Immune during shadow walk
+        if (this.isShadowWalking && this.currentHealth > 0) return; // Immune during shadow walk
         super.die();
     }
 

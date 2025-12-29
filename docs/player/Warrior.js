@@ -30,6 +30,14 @@ export class Warrior extends Hero {
 
         // Set warrior abilities
         this.initializeAbilities();
+
+        // Sword swing sound
+        this.swordSwingVolume = 0.2;
+        this.initSwordSwingAudio();
+
+        // Shield bash sound
+        this.shieldBashVolume = 0.2;
+        this.initShieldBashAudio();
     }
 
     /**
@@ -188,6 +196,47 @@ export class Warrior extends Hero {
         this.setAbilities(swordSlash, shieldBash, dash, whirlwind);
     }
 
+    initSwordSwingAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/warrior_swing.wav', import.meta.url);
+            this.swordSwingAudio = new Audio(audioUrl);
+            this.swordSwingAudio.volume = this.swordSwingVolume;
+        } catch (error) {
+            this.swordSwingAudio = null;
+        }
+    }
+
+    playSwordSwingSound() {
+        if (!this.swordSwingAudio) return;
+        const sound = this.swordSwingAudio.cloneNode();
+        sound.volume = this.swordSwingVolume;
+        sound.play().catch(() => {});
+    }
+
+    initShieldBashAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/warrior_shield_bash.mp3', import.meta.url);
+            const audioPool = [];
+            for (let i = 0; i < 3; i++) {
+                const audio = new Audio(audioUrl);
+                audio.volume = this.shieldBashVolume;
+                audio.preload = 'auto';
+                audioPool.push(audio);
+            }
+            this.shieldBashAudio = audioPool;
+        } catch (error) {
+            this.shieldBashAudio = null;
+        }
+    }
+
+    playShieldBashSound() {
+        if (!this.shieldBashAudio || !this.shieldBashAudio.length) return;
+        const sound = this.shieldBashAudio.find((node) => node.paused || node.ended) || this.shieldBashAudio[0];
+        sound.currentTime = 0;
+        sound.volume = this.shieldBashVolume;
+        sound.play().catch(() => {});
+    }
+
     /**
      * Sword Slash Attack - Q Ability
      */
@@ -209,6 +258,7 @@ export class Warrior extends Hero {
                 setTimeout(() => {
                     // Slash
                     this.sword.rotation.z = swing.end;
+                    this.playSwordSwingSound();
                     this.createCrescentSlash(true, swing.start, swing.end, index, swing.offsetY, swing.tint);
                 }, 80);
             }, swing.delay);
@@ -327,6 +377,7 @@ export class Warrior extends Hero {
             this.animateShieldTo(-1.0, -0.1, 0.3, 1.2, 120);
             this.shieldBashInvuln = 0.25;
             this.createShieldBashWind();
+            this.playShieldBashSound();
 
             // Small forward push to player
             this.velocity.x += (this.velocity.x >= 0 ? 3 : -3);

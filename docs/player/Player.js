@@ -67,6 +67,8 @@ export class Player {
         this.hitboxScale = { x: 1, y: 1 };
         this.debugHitboxVisible = false;
         this.debugHitbox = null;
+        this.jumpSoundVolume = 0.05;
+        this.initJumpAudio();
 
         // Sync mesh position
         this.syncMeshPosition();
@@ -118,6 +120,30 @@ export class Player {
 
         // Slight tint on the front panel to match hero color
         this.bodyCore = core;
+    }
+
+    initJumpAudio() {
+        try {
+            const audioUrl = new URL('../assets/sfx/jump.mp3', import.meta.url);
+            const audioPool = [];
+            for (let i = 0; i < 4; i++) {
+                const audio = new Audio(audioUrl);
+                audio.volume = this.jumpSoundVolume;
+                audio.preload = 'auto';
+                audioPool.push(audio);
+            }
+            this.jumpAudio = audioPool;
+        } catch (error) {
+            this.jumpAudio = null;
+        }
+    }
+
+    playJumpSound() {
+        if (!this.jumpAudio || !this.jumpAudio.length) return;
+        const sound = this.jumpAudio.find((node) => node.paused || node.ended) || this.jumpAudio[0];
+        sound.currentTime = 0;
+        sound.volume = this.jumpSoundVolume;
+        sound.play().catch(() => {});
     }
 
     /**
@@ -217,6 +243,10 @@ export class Player {
 
         if (this.enemyContactCooldown > 0) {
             this.enemyContactCooldown = Math.max(0, this.enemyContactCooldown - deltaTime);
+        }
+
+        if (this.currentHealth <= 0) {
+            this.die();
         }
 
         // Horizontal movement
