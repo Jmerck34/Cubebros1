@@ -13,6 +13,7 @@ export class Level {
         this.platforms = [];
         this.enemies = [];
         this.movingPlatforms = [];
+        this.flags = [];
     }
 
     /**
@@ -419,6 +420,7 @@ export class Level {
     update(deltaTime) {
         this.updateEnemies(deltaTime);
         this.updateMovingPlatforms(deltaTime);
+        this.updateFlags();
     }
 
     /**
@@ -614,19 +616,19 @@ export class Level {
      */
     addCastleFlag(x, baseY, wallHeight, color) {
         const flagGroup = new THREE.Group();
-        const poleHeight = Math.max(2.4, wallHeight * 0.35);
-        const poleGeometry = new THREE.BoxGeometry(0.12, poleHeight, 0.1);
+        const poleHeight = 1.1;
+        const poleGeometry = new THREE.BoxGeometry(0.06, poleHeight, 0.06);
         const poleMaterial = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
         const pole = new THREE.Mesh(poleGeometry, poleMaterial);
         pole.position.set(0, poleHeight / 2, 0.4);
         flagGroup.add(pole);
 
-        const clothWidth = 1.4;
-        const clothHeight = 0.9;
+        const clothWidth = 0.55;
+        const clothHeight = 0.35;
         const clothGeometry = new THREE.BoxGeometry(clothWidth, clothHeight, 0.05);
         const clothMaterial = new THREE.MeshBasicMaterial({ color });
         const cloth = new THREE.Mesh(clothGeometry, clothMaterial);
-        cloth.position.set(clothWidth / 2, poleHeight - clothHeight * 0.55, 0.45);
+        cloth.position.set(0.32, 0.75, 0.45);
         flagGroup.add(cloth);
 
         const flagBaseY = baseY + wallHeight - 0.2;
@@ -635,9 +637,113 @@ export class Level {
     }
 
     /**
+     * Add an interactive capture-the-flag flag
+     * @param {number} x - Center X position
+     * @param {number} baseY - Base Y position (ground level)
+     * @param {number} wallHeight - Height of the castle wall
+     * @param {number} color - Flag color
+     * @param {string} team - Team label
+     */
+    addInteractiveFlag(x, baseY, wallHeight, color, team) {
+        const flagGroup = new THREE.Group();
+        const poleHeight = 1.1;
+        const poleGeometry = new THREE.BoxGeometry(0.06, poleHeight, 0.06);
+        const poleMaterial = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
+        const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+        pole.position.set(0, poleHeight / 2, 0.4);
+        flagGroup.add(pole);
+
+        const clothWidth = 0.55;
+        const clothHeight = 0.35;
+        const clothGeometry = new THREE.BoxGeometry(clothWidth, clothHeight, 0.05);
+        const clothMaterial = new THREE.MeshBasicMaterial({ color });
+        const cloth = new THREE.Mesh(clothGeometry, clothMaterial);
+        cloth.position.set(0.32, 0.75, 0.45);
+        flagGroup.add(cloth);
+
+        const flagBaseY = baseY + wallHeight - 0.2;
+        flagGroup.position.set(x, flagBaseY, 0.9);
+        this.group.add(flagGroup);
+
+        const flag = {
+            mesh: flagGroup,
+            team,
+            carrier: null,
+            baseX: x,
+            baseY: flagBaseY,
+            boundsOffsets: {
+                left: -0.4,
+                right: 0.4,
+                top: 0.9,
+                bottom: -0.2
+            },
+            bounds: {
+                left: x - 0.4,
+                right: x + 0.4,
+                top: flagBaseY + 0.9,
+                bottom: flagBaseY - 0.2
+            }
+        };
+
+        this.flags.push(flag);
+        return flag;
+    }
+
+    /**
+     * Update flag positions (carry or idle)
+     */
+    updateFlags() {
+        for (const flag of this.flags) {
+            if (flag.carrier && flag.carrier.currentHealth <= 0) {
+                flag.carrier.carryingFlag = null;
+                flag.carrier = null;
+            }
+
+            if (flag.carrier) {
+                const carrierPos = flag.carrier.getPosition();
+                const nextX = carrierPos.x;
+                const nextY = carrierPos.y + 1.2;
+                flag.mesh.position.set(nextX, nextY, 0.9);
+                const offsets = flag.boundsOffsets || { left: -0.6, right: 0.8, bottom: 0, top: 2.2 };
+                flag.bounds.left = nextX + offsets.left;
+                flag.bounds.right = nextX + offsets.right;
+                flag.bounds.bottom = nextY + offsets.bottom;
+                flag.bounds.top = nextY + offsets.top;
+            } else {
+                flag.mesh.position.set(flag.baseX, flag.baseY, 0.9);
+                const offsets = flag.boundsOffsets || { left: -0.6, right: 0.8, bottom: 0, top: 2.2 };
+                flag.bounds.left = flag.baseX + offsets.left;
+                flag.bounds.right = flag.baseX + offsets.right;
+                flag.bounds.bottom = flag.baseY + offsets.bottom;
+                flag.bounds.top = flag.baseY + offsets.top;
+            }
+        }
+    }
+
+    /**
+     * Let a player pick up any nearby flag
+     * @param {Player} player
+     */
+    checkFlagPickup(player) {
+        if (!player || !player.getBounds) return;
+        if (player.carryingFlag) return;
+        const playerBounds = player.getBounds();
+        for (const flag of this.flags) {
+            if (flag.carrier) {
+                continue;
+            }
+            if (checkAABBCollision(playerBounds, flag.bounds)) {
+                flag.carrier = player;
+                player.carryingFlag = flag;
+            }
+        }
+    }
+
+    /**
      * Create a test level with floating platforms
      */
-    createTestLevel() {
+    createTestLevel(options = {}) {
+        const includeInteractiveFlags = options.includeInteractiveFlags !== false;
         // Main ground platform (ground type with grass)
         const groundSurfaceY = -2.5;
         const groundBottomY = -14;
@@ -668,7 +774,9 @@ export class Level {
             ladderSide: 'right',
             addDoor: true
         });
-        this.addCastleFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0);
+        if (includeInteractiveFlags) {
+            this.addInteractiveFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0, 'blue');
+        }
 
         // Right castle
         const rightCastleX = 60;
@@ -677,7 +785,9 @@ export class Level {
             ladderSide: 'left',
             addDoor: true
         });
-        this.addCastleFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f);
+        if (includeInteractiveFlags) {
+            this.addInteractiveFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f, 'red');
+        }
 
         this.flagSpawns = {
             blue: { x: leftCastleX, y: groundSurfaceY + wallHeight + 0.6 },

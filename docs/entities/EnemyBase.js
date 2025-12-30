@@ -39,6 +39,8 @@ export class EnemyBase {
         this.bleedTimer = 0;
         this.poisonEffect = null;
         this.bleedEffect = null;
+        this.bleedDrops = [];
+        this.bleedDropTimer = 0;
         this.baseColor = color;
         this.hitboxScale = { x: 1, y: 1 };
         this.debugHitboxVisible = false;
@@ -111,12 +113,9 @@ export class EnemyBase {
 
         if (this.bleedTimer > 0) {
             this.bleedTimer -= deltaTime;
-            this.updateBleedEffect();
-        } else if (this.bleedEffect) {
-            if (this.bleedEffect.parent) {
-                this.bleedEffect.parent.remove(this.bleedEffect);
-            }
-            this.bleedEffect = null;
+            this.updateBleedEffect(deltaTime, true);
+        } else {
+            this.updateBleedEffect(deltaTime, false);
         }
 
         // Apply gravity
@@ -197,12 +196,7 @@ export class EnemyBase {
                 }
                 this.stunEffect = null;
             }
-            if (this.bleedEffect) {
-                if (this.bleedEffect.parent) {
-                    this.bleedEffect.parent.remove(this.bleedEffect);
-                }
-                this.bleedEffect = null;
-            }
+            this.clearBleedDrops();
             console.log('Enemy defeated!');
         }
     }
@@ -350,8 +344,70 @@ export class EnemyBase {
     /**
      * Update bleed drip animation
      */
-    updateBleedEffect() {
-        if (this.bleedTimer <= 0) return;
+    updateBleedEffect(deltaTime, isBleeding) {
+        const drops = this.bleedDrops || [];
+        if (isBleeding) {
+            this.bleedDropTimer = Math.max(0, this.bleedDropTimer - deltaTime);
+            if (this.bleedDropTimer === 0) {
+                this.spawnBleedDrop();
+                this.bleedDropTimer = 0.12 + Math.random() * 0.1;
+            }
+        }
+
+        for (let i = drops.length - 1; i >= 0; i--) {
+            const drop = drops[i];
+            drop.life += deltaTime;
+            drop.velocityY += drop.gravity * deltaTime;
+            drop.mesh.position.x += drop.velocityX * deltaTime;
+            drop.mesh.position.y += drop.velocityY * deltaTime;
+            drop.opacity -= deltaTime * 1.6;
+            drop.mesh.material.opacity = Math.max(0, drop.opacity);
+
+            if (drop.opacity <= 0 || drop.life > 0.9) {
+                if (drop.mesh.parent) {
+                    drop.mesh.parent.remove(drop.mesh);
+                }
+                drops.splice(i, 1);
+            }
+        }
+
+        this.bleedDrops = drops;
+    }
+
+    spawnBleedDrop() {
+        if (!this.scene) return;
+        const geometry = new THREE.SphereGeometry(0.06, 8, 8);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xb0001e,
+            transparent: true,
+            opacity: 0.7
+        });
+        const drop = new THREE.Mesh(geometry, material);
+        drop.scale.set(0.8, 1.4, 1);
+        const offsetX = (Math.random() - 0.5) * 0.35;
+        const offsetY = 0.35 + Math.random() * 0.2;
+        drop.position.set(this.position.x + offsetX, this.position.y + offsetY, 0.6);
+        this.scene.add(drop);
+
+        this.bleedDrops.push({
+            mesh: drop,
+            velocityX: (Math.random() - 0.5) * 0.2,
+            velocityY: -0.2 - Math.random() * 0.2,
+            gravity: -6,
+            opacity: 0.7,
+            life: 0
+        });
+    }
+
+    clearBleedDrops() {
+        if (!this.bleedDrops) return;
+        this.bleedDrops.forEach((drop) => {
+            if (drop.mesh && drop.mesh.parent) {
+                drop.mesh.parent.remove(drop.mesh);
+            }
+        });
+        this.bleedDrops = [];
+        this.bleedDropTimer = 0;
     }
 
     /**

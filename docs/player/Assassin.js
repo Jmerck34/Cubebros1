@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+﻿import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { Hero } from './Hero.js';
 import { Ability } from './Ability.js';
 import { checkAABBCollision } from '../utils/collision.js';
@@ -66,9 +66,9 @@ export class Assassin extends Hero {
         leftBlade.position.set(0, 0.375, 0); // Flip to point outward
         this.leftDaggerGroup.add(leftBlade);
 
-        // Position left dagger on left side, rotated to point left
+        // Position left dagger on left side, tilted 45 degrees outward
         this.leftDaggerGroup.position.set(-0.6, 0.1, 0.1);
-        this.leftDaggerGroup.rotation.z = Math.PI / 2; // Rotate 90 degrees to point horizontally
+        this.leftDaggerGroup.rotation.z = Math.PI / 4; // 45 degree tilt
         this.mesh.add(this.leftDaggerGroup);
         this.leftDagger = this.leftDaggerGroup;
 
@@ -82,9 +82,9 @@ export class Assassin extends Hero {
         rightBlade.position.set(0, 0.375, 0); // Flip to match left dagger orientation
         this.rightDaggerGroup.add(rightBlade);
 
-        // Position right dagger on right side, rotated to point right
+        // Position right dagger on right side, tilted 45 degrees outward
         this.rightDaggerGroup.position.set(0.6, 0.1, 0.1);
-        this.rightDaggerGroup.rotation.z = -Math.PI / 2; // Rotate -90 degrees to point horizontally right
+        this.rightDaggerGroup.rotation.z = -Math.PI / 4; // -45 degree tilt
         this.mesh.add(this.rightDaggerGroup);
         this.rightDagger = this.rightDaggerGroup;
     }
@@ -134,8 +134,7 @@ export class Assassin extends Hero {
         // R - Assassinate
         const assassinate = new Ability('Assassinate', 0, true);
         assassinate.use = (hero) => {
-            hero.assassinateTarget();
-            return true;
+            return hero.assassinateTarget();
         };
 
         this.setAbilities(daggerSlash, poisonBomb, shadowWalk, assassinate);
@@ -240,6 +239,10 @@ export class Assassin extends Hero {
                 this.deactivateShadowWalk();
             }
 
+            if (this.healthBar && typeof this.healthBar.setOpacity === 'function') {
+                this.healthBar.setOpacity(0.05);
+            }
+
             // Update shadow line position to follow player
             if (this.shadowLine) {
                 // Find current ground level beneath the player
@@ -275,7 +278,7 @@ export class Assassin extends Hero {
      * Dagger Slash Combo - Q Ability (Dual crescent moons on both sides)
      */
     daggerSlashCombo() {
-        console.log('🗡️ DUAL DAGGER SLASH!');
+        console.log('ðŸ—¡ï¸ DUAL DAGGER SLASH!');
 
         // Cancel shadow walk if active
         if (this.isShadowWalking) {
@@ -294,12 +297,12 @@ export class Assassin extends Hero {
         for (let i = 0; i < 3; i++) {
             setTimeout(() => {
                 // Both daggers slash simultaneously
-                this.leftDagger.rotation.z = Math.PI / 2 - 1.0; // Slash animation left
-                this.rightDagger.rotation.z = -Math.PI / 2 + 1.0; // Slash animation right
+                this.leftDagger.rotation.z = Math.PI / 4 - 1.0; // Slash animation left
+                this.rightDagger.rotation.z = -Math.PI / 4 + 1.0; // Slash animation right
 
                 setTimeout(() => {
-                    this.leftDagger.rotation.z = Math.PI / 2; // Reset left
-                    this.rightDagger.rotation.z = -Math.PI / 2; // Reset right
+                    this.leftDagger.rotation.z = Math.PI / 4; // Reset left
+                    this.rightDagger.rotation.z = -Math.PI / 4; // Reset right
                 }, 80);
 
                 // Deal damage on LEFT side
@@ -397,11 +400,11 @@ export class Assassin extends Hero {
 
         // Create circle segments, excluding top and bottom quarters
         for (let i = 0; i < segments; i++) {
-            // Full circle angle (0 to 2π)
+            // Full circle angle (0 to 2Ï€)
             const angle = (i / segments) * Math.PI * 2;
 
-            // Skip top quarter (45° to 135°) and bottom quarter (225° to 315°)
-            // Keep only left side (135° to 225°) and right side (315° to 45°)
+            // Skip top quarter (45Â° to 135Â°) and bottom quarter (225Â° to 315Â°)
+            // Keep only left side (135Â° to 225Â°) and right side (315Â° to 45Â°)
             const degrees = (angle * 180) / Math.PI;
             if ((degrees > 45 && degrees < 135) || (degrees > 225 && degrees < 315)) {
                 continue; // Skip top and bottom quarters
@@ -448,7 +451,7 @@ export class Assassin extends Hero {
      * Throw Poison Bomb - W Ability (Now detects platforms)
      */
     throwPoisonBomb() {
-        console.log('💣 POISON BOMB!');
+        console.log('ðŸ’£ POISON BOMB!');
 
         // Cancel shadow walk if active
         if (this.isShadowWalking) {
@@ -604,13 +607,21 @@ export class Assassin extends Hero {
      * Activate Shadow Walk - E Ability (Shadow now touches ground)
      */
     activateShadowWalk() {
-        console.log('👤 SHADOW WALK!');
+        console.log('ðŸ‘¤ SHADOW WALK!');
 
         this.isShadowWalking = true;
         this.shadowWalkTimer = 5; // 5 seconds
 
         // Hide the main character mesh
         this.mesh.visible = false;
+        if (this.healthBar) {
+            if (typeof this.healthBar.show === 'function') {
+                this.healthBar.show();
+            }
+            if (typeof this.healthBar.setOpacity === 'function') {
+                this.healthBar.setOpacity(0.05);
+            }
+        }
 
         // Find the ground level beneath the player
         let groundLevel = -3; // Default ground level
@@ -654,6 +665,14 @@ export class Assassin extends Hero {
 
         // Show the main character mesh again
         this.mesh.visible = true;
+        if (this.healthBar) {
+            if (typeof this.healthBar.setOpacity === 'function') {
+                this.healthBar.setOpacity(1);
+            }
+            if (typeof this.healthBar.show === 'function') {
+                this.healthBar.show();
+            }
+        }
 
         // Remove the shadow line
         if (this.shadowLine) {
@@ -676,10 +695,8 @@ export class Assassin extends Hero {
     assassinateTarget() {
         if (this.ultimateCharge < this.ultimateChargeMax) {
             console.log('Ultimate not ready!');
-            return;
+            return false;
         }
-
-        console.log('💀 ASSASSINATE!');
 
         // Cancel shadow walk if active
         if (this.isShadowWalking) {
@@ -700,29 +717,34 @@ export class Assassin extends Hero {
             }
         }
 
-        if (closestEnemy) {
-            // Teleport next to enemy based on facing direction
-            this.position.x = closestEnemy.position.x - (1 * this.facingDirection);
-            this.position.y = closestEnemy.position.y;
-
-            // Deal massive damage
-            this.applyAbilityDamage(this.abilities.r, closestEnemy, 3);
-
-            if (closestEnemy.type !== 'player') {
-                this.addUltimateCharge(this.ultimateChargePerKill);
-            }
-
-            // Visual effect
-            this.createAssassinateEffect(closestEnemy.position.x, closestEnemy.position.y);
-
-            // Create teleport trail
-            this.createTeleportTrail();
+        if (!closestEnemy) {
+            console.log('No assassinate target in range.');
+            return false;
         }
+
+        console.log('ASSASSINATE!');
+
+        // Teleport next to enemy based on facing direction
+        this.position.x = closestEnemy.position.x - (1 * this.facingDirection);
+        this.position.y = closestEnemy.position.y;
+
+        // Deal massive damage
+        this.applyAbilityDamage(this.abilities.r, closestEnemy, 3);
+
+        if (closestEnemy.type !== 'player') {
+            this.addUltimateCharge(this.ultimateChargePerKill);
+        }
+
+        // Visual effect
+        this.createAssassinateEffect(closestEnemy.position.x, closestEnemy.position.y);
+
+        // Create teleport trail
+        this.createTeleportTrail();
 
         // Consume ultimate charge
         this.ultimateCharge = 0;
+        return true;
     }
-
     /**
      * Create assassinate visual effect
      */
@@ -800,7 +822,7 @@ export class Assassin extends Hero {
                 if (enemy.type !== 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
-                console.log('💥 Assassin hit enemy!');
+                console.log('ðŸ’¥ Assassin hit enemy!');
 
                 if (!enemy.isAlive) {
                     continue;
@@ -832,7 +854,7 @@ export class Assassin extends Hero {
                 if (typeof enemy.flashBleed === 'function') {
                     enemy.flashBleed();
                 }
-                console.log('🩸 Bleed damage!');
+                console.log('ðŸ©¸ Bleed damage!');
                 bleedTicks--;
             } else {
                 clearInterval(bleedInterval);

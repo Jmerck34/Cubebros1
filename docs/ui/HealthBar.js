@@ -8,7 +8,9 @@ export class HealthBar {
     constructor(scene, player, maxHealth = 100) {
         this.scene = scene;
         this.player = player;
-        this.maxHealth = maxHealth;
+        this.baseMaxHealth = maxHealth;
+        this.bonusHealth = 0;
+        this.maxHealth = this.baseMaxHealth + this.bonusHealth;
         this.currentHealth = maxHealth;
 
         // Create health bar container group
@@ -27,6 +29,15 @@ export class HealthBar {
         this.foreground = new THREE.Mesh(fgGeometry, fgMaterial);
         this.foreground.position.z = 0.61;
         this.healthBarGroup.add(this.foreground);
+
+        // Bonus bar (blue - shows temporary health bonus)
+        const bonusGeometry = new THREE.PlaneGeometry(1, 0.15);
+        const bonusMaterial = new THREE.MeshBasicMaterial({ color: 0x3aa9ff, transparent: true, opacity: 0.85 });
+        this.bonusBar = new THREE.Mesh(bonusGeometry, bonusMaterial);
+        this.bonusBar.position.z = 0.615;
+        this.bonusBar.scale.x = 0;
+        this.bonusBar.visible = false;
+        this.healthBarGroup.add(this.bonusBar);
 
         // Border (black outline)
         const borderShape = new THREE.Shape();
@@ -77,10 +88,14 @@ export class HealthBar {
      */
     setHealth(health) {
         const previousHealth = this.currentHealth;
-        this.currentHealth = Math.max(0, Math.min(health, this.maxHealth));
+        const maxHealth = this.baseMaxHealth + this.bonusHealth;
+        this.maxHealth = maxHealth;
+        this.currentHealth = Math.max(0, Math.min(health, maxHealth));
 
         // Update health bar width
-        const healthPercentage = this.currentHealth / this.maxHealth;
+        const baseMax = Math.max(1, this.baseMaxHealth);
+        const baseHealth = Math.min(this.currentHealth, this.baseMaxHealth);
+        const healthPercentage = baseHealth / baseMax;
         this.foreground.scale.x = healthPercentage;
 
         // Adjust position to keep bar left-aligned
@@ -96,10 +111,45 @@ export class HealthBar {
             this.foreground.material.color.set(0xff6600); // Orange-red
         }
 
+        const bonusRemaining = Math.max(0, this.currentHealth - this.baseMaxHealth);
+        const bonusPercent = bonusRemaining / baseMax;
+        if (bonusPercent > 0) {
+            const shieldWidth = Math.min(bonusPercent, 1);
+            const baseEnd = -0.5 + healthPercentage;
+            const maxStart = 0.5 - shieldWidth;
+            const start = Math.min(baseEnd, maxStart);
+            this.bonusBar.scale.x = shieldWidth;
+            this.bonusBar.position.x = start + shieldWidth / 2;
+            this.bonusBar.visible = true;
+        } else {
+            this.bonusBar.scale.x = 0;
+            this.bonusBar.visible = false;
+        }
+
         // Trigger damage flash if health decreased
         if (health < previousHealth) {
             this.triggerDamageFlash();
         }
+    }
+
+    /**
+     * Set base max health (non-bonus).
+     * @param {number} maxHealth
+     */
+    setBaseMaxHealth(maxHealth) {
+        this.baseMaxHealth = Math.max(1, maxHealth);
+        this.maxHealth = this.baseMaxHealth + this.bonusHealth;
+        this.setHealth(this.currentHealth);
+    }
+
+    /**
+     * Set bonus health amount.
+     * @param {number} amount
+     */
+    setBonusHealth(amount) {
+        this.bonusHealth = Math.max(0, amount);
+        this.maxHealth = this.baseMaxHealth + this.bonusHealth;
+        this.setHealth(this.currentHealth);
     }
 
     /**
@@ -198,5 +248,20 @@ export class HealthBar {
      */
     show() {
         this.healthBarGroup.visible = true;
+    }
+
+    /**
+     * Set overall health bar opacity.
+     * @param {number} opacity
+     */
+    setOpacity(opacity) {
+        const clamped = Math.max(0, Math.min(1, opacity));
+        if (!this.healthBarGroup) return;
+        this.healthBarGroup.traverse((child) => {
+            if (child.material && typeof child.material.opacity === 'number') {
+                child.material.transparent = true;
+                child.material.opacity = clamped;
+            }
+        });
     }
 }

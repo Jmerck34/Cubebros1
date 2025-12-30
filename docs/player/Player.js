@@ -9,6 +9,10 @@ import { HealthBar } from '../ui/HealthBar.js';
  * @class Player
  */
 export class Player {
+    static getAllPlayers() {
+        return Array.from(Player.instances || []);
+    }
+
     constructor(scene, startX = 0, startY = 0) {
         // Store scene reference for health bar
         this.scene = scene;
@@ -55,6 +59,8 @@ export class Player {
         this.poisonEffect = null;
         this.bleedTimer = 0;
         this.bleedFlashTimer = 0;
+        this.bleedDrops = [];
+        this.bleedDropTimer = 0;
         this.fearTimer = 0;
         this.fearDirection = 0;
         this.mindControlTimer = 0;
@@ -66,9 +72,17 @@ export class Player {
         this.jumpKeyWasPressed = false; // Track key state to prevent spam
 
         // Health system
-        this.maxHealth = 100;
-        this.currentHealth = 100;
-        this.healthBar = new HealthBar(scene, this, this.maxHealth);
+        this.baseMaxHealth = 100;
+        this.bonusHealth = 0;
+        this.bonusHealthTimer = 0;
+        this.maxHealth = this.baseMaxHealth + this.bonusHealth;
+        this.currentHealth = this.maxHealth;
+        this.healthBar = new HealthBar(scene, this, this.baseMaxHealth);
+
+        if (!Player.instances) {
+            Player.instances = new Set();
+        }
+        Player.instances.add(this);
 
         // Enemy contact settings (tuned via DebugMenu)
         this.enemyContactDamage = 8;
@@ -248,6 +262,9 @@ export class Player {
         }
         if (this.bleedTimer > 0) {
             this.bleedTimer = Math.max(0, this.bleedTimer - deltaTime);
+            this.updateBleedEffect(deltaTime, true);
+        } else {
+            this.updateBleedEffect(deltaTime, false);
         }
         if (this.bleedFlashTimer > 0) {
             this.bleedFlashTimer = Math.max(0, this.bleedFlashTimer - deltaTime);
@@ -414,6 +431,77 @@ export class Player {
     }
 
     /**
+     * Update bleed drip animation.
+     * @param {number} deltaTime
+     * @param {boolean} isBleeding
+     */
+    updateBleedEffect(deltaTime, isBleeding) {
+        if (!this.bleedDrops) {
+            this.bleedDrops = [];
+        }
+        if (isBleeding) {
+            this.bleedDropTimer = Math.max(0, this.bleedDropTimer - deltaTime);
+            if (this.bleedDropTimer === 0) {
+                this.spawnBleedDrop();
+                this.bleedDropTimer = 0.12 + Math.random() * 0.1;
+            }
+        }
+
+        for (let i = this.bleedDrops.length - 1; i >= 0; i--) {
+            const drop = this.bleedDrops[i];
+            drop.life += deltaTime;
+            drop.velocityY += drop.gravity * deltaTime;
+            drop.mesh.position.x += drop.velocityX * deltaTime;
+            drop.mesh.position.y += drop.velocityY * deltaTime;
+            drop.opacity -= deltaTime * 1.6;
+            drop.mesh.material.opacity = Math.max(0, drop.opacity);
+
+            if (drop.opacity <= 0 || drop.life > 0.9) {
+                if (drop.mesh.parent) {
+                    drop.mesh.parent.remove(drop.mesh);
+                }
+                this.bleedDrops.splice(i, 1);
+            }
+        }
+    }
+
+    spawnBleedDrop() {
+        if (!this.scene) return;
+        const geometry = new THREE.SphereGeometry(0.06, 8, 8);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xb0001e,
+            transparent: true,
+            opacity: 0.7
+        });
+        const drop = new THREE.Mesh(geometry, material);
+        drop.scale.set(0.8, 1.4, 1);
+        const offsetX = (Math.random() - 0.5) * 0.35;
+        const offsetY = 0.35 + Math.random() * 0.2;
+        drop.position.set(this.position.x + offsetX, this.position.y + offsetY, 0.6);
+        this.scene.add(drop);
+
+        this.bleedDrops.push({
+            mesh: drop,
+            velocityX: (Math.random() - 0.5) * 0.2,
+            velocityY: -0.2 - Math.random() * 0.2,
+            gravity: -6,
+            opacity: 0.7,
+            life: 0
+        });
+    }
+
+    clearBleedDrops() {
+        if (!this.bleedDrops) return;
+        this.bleedDrops.forEach((drop) => {
+            if (drop.mesh && drop.mesh.parent) {
+                drop.mesh.parent.remove(drop.mesh);
+            }
+        });
+        this.bleedDrops = [];
+        this.bleedDropTimer = 0;
+    }
+
+    /**
      * Apply fear (forced movement away).
      * @param {number} sourceX
      * @param {number} durationSeconds
@@ -449,6 +537,7 @@ export class Player {
         this.fearDirection = 0;
         this.isFrozen = false;
         this.isStunned = false;
+        this.clearBleedDrops();
 
         if (this.stunEffect && this.stunEffect.parent) {
             this.stunEffect.parent.remove(this.stunEffect);
@@ -565,6 +654,7 @@ export class Player {
         }
 
         this.updateStatusEffects(deltaTime);
+        this.updateBonusHealth(deltaTime);
 
         if (!Number.isFinite(this.currentHealth)) {
             this.currentHealth = 0;
@@ -669,6 +759,7 @@ export class Player {
         this.enemyContactCooldown = this.enemyContactCooldownDuration || 0;
     }
 
+
     /**
      * Check if another entity is on the same team
      * @param {Object} other
@@ -676,6 +767,14 @@ export class Player {
      */
     isSameTeam(other) {
         return Boolean(this.team && other && other.team && this.team === other.team);
+    }
+
+    /**
+     * Get all player instances.
+     * @returns {Array<Player>}
+     */
+    getAllPlayers() {
+        return Player.getAllPlayers();
     }
 
     /**
@@ -856,6 +955,85 @@ export class Player {
     }
 
     /**
+     * Apply a temporary bonus health amount.
+     * @param {number} percent
+     * @param {number} durationSeconds
+     */
+    applyHealthBonus(percent = 0.3, durationSeconds = 2) {
+        const bonusAmount = Math.round(this.baseMaxHealth * percent);
+        if (!Number.isFinite(bonusAmount) || bonusAmount <= 0) {
+            return;
+        }
+
+        const previousBonus = this.bonusHealth;
+        const nextBonus = Math.max(previousBonus, bonusAmount);
+        const bonusDelta = nextBonus - previousBonus;
+
+        this.bonusHealth = nextBonus;
+        this.bonusHealthTimer = Math.max(this.bonusHealthTimer, durationSeconds);
+        this.maxHealth = this.baseMaxHealth + this.bonusHealth;
+
+        if (bonusDelta > 0) {
+            this.currentHealth = Math.min(this.currentHealth + bonusDelta, this.maxHealth);
+        }
+
+        if (this.healthBar) {
+            this.healthBar.setBonusHealth(this.bonusHealth);
+            this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    /**
+     * Update bonus health timer.
+     * @param {number} deltaTime
+     */
+    updateBonusHealth(deltaTime) {
+        if (this.bonusHealthTimer > 0) {
+            this.bonusHealthTimer = Math.max(0, this.bonusHealthTimer - deltaTime);
+            if (this.bonusHealthTimer === 0) {
+                this.clearHealthBonus();
+            }
+        }
+    }
+
+    /**
+     * Clear any active bonus health.
+     */
+    clearHealthBonus() {
+        if (this.bonusHealth <= 0) {
+            return;
+        }
+        this.bonusHealth = 0;
+        this.bonusHealthTimer = 0;
+        this.maxHealth = this.baseMaxHealth;
+        if (this.currentHealth > this.maxHealth) {
+            this.currentHealth = this.maxHealth;
+        }
+        if (this.healthBar) {
+            this.healthBar.setBonusHealth(0);
+            this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    /**
+     * Set base max health (non-bonus).
+     * @param {number} maxHealth
+     */
+    setBaseMaxHealth(maxHealth) {
+        const nextMax = Math.max(1, Math.round(maxHealth));
+        this.baseMaxHealth = nextMax;
+        this.maxHealth = this.baseMaxHealth + this.bonusHealth;
+        if (this.currentHealth > this.maxHealth) {
+            this.currentHealth = this.maxHealth;
+        }
+        if (this.healthBar) {
+            this.healthBar.setBaseMaxHealth(this.baseMaxHealth);
+            this.healthBar.setBonusHealth(this.bonusHealth);
+            this.healthBar.setHealth(this.currentHealth);
+        }
+    }
+
+    /**
      * Handle player death - respawn at spawn point
      */
     die() {
@@ -866,6 +1044,7 @@ export class Player {
         console.log('Player died - respawning');
         this.isAlive = false;
         this.respawnTimer = this.respawnDelay;
+        this.clearHealthBonus();
         this.clearStatusEffects();
         this.currentHealth = 0;
         this.healthBar.setHealth(0);
@@ -885,6 +1064,7 @@ export class Player {
      */
     respawn() {
         this.isAlive = true;
+        this.clearHealthBonus();
         this.currentHealth = this.maxHealth;
         this.healthBar.setHealth(this.maxHealth);
         this.healthBar.show();
@@ -970,12 +1150,17 @@ export class Player {
      */
     destroy() {
         this.clearStatusEffects();
+        this.clearHealthBonus();
+        this.clearBleedDrops();
         if (this.healthBar) {
             this.healthBar.destroy();
         }
         this.setDebugHitboxVisible(false);
         if (this.scene && this.mesh) {
             this.scene.remove(this.mesh);
+        }
+        if (Player.instances) {
+            Player.instances.delete(this);
         }
     }
 

@@ -439,7 +439,7 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
 
     // Create level with platforms
     level = new Level(scene);
-    level.createTestLevel();
+    level.createTestLevel({ includeInteractiveFlags: false });
 
     // Setup parallax manager (foreground/midground/background)
     parallaxManager = new ParallaxManager(camera);
@@ -589,6 +589,10 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
             player.checkEnemyCollisions(level.enemies);
             if (player2) {
                 player2.checkEnemyCollisions(level.enemies);
+            }
+            level.checkFlagPickup(player);
+            if (player2) {
+                level.checkFlagPickup(player2);
             }
             if (player2 && player.team !== player2.team) {
                 const p1Bounds = player.getBounds();

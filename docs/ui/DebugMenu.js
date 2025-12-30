@@ -165,11 +165,15 @@ export class DebugMenu {
             console.log(`[Debug] Current Health set to ${value}`);
         });
         this.addNumberControl('Max Health', this.player.maxHealth, 50, 500, 10, (value) => {
-            this.player.maxHealth = value;
-            if (this.player.currentHealth > value) {
-                this.player.currentHealth = value;
+            if (typeof this.player.setBaseMaxHealth === 'function') {
+                this.player.setBaseMaxHealth(value);
+            } else {
+                this.player.maxHealth = value;
+                if (this.player.currentHealth > value) {
+                    this.player.currentHealth = value;
+                }
+                this.player.healthBar.setHealth(this.player.currentHealth);
             }
-            this.player.healthBar.setHealth(this.player.currentHealth);
             console.log(`[Debug] Max Health set to ${value}`);
         });
 

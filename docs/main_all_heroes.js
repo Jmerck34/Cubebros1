@@ -140,6 +140,7 @@ const gameLoop = new GameLoop(
 
         // Check enemy collisions
         player.checkEnemyCollisions(level.enemies);
+        level.checkFlagPickup(player);
 
         // Update camera to follow player
         cameraFollow.update();

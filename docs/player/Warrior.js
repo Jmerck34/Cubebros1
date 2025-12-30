@@ -96,6 +96,7 @@ export class Warrior extends Hero {
         this.swordGroup.rotation.z = -0.87; // ~50 degrees clockwise (blade points forward-down)
         this.mesh.add(this.swordGroup);
         this.sword = this.swordGroup; // Keep reference
+        this.swordBase = { x: 0.5, y: -0.2, z: 0.1, rotZ: -0.87 };
 
         // Create SHIELD - Rounded medieval shield
         this.shieldGroup = new THREE.Group();
@@ -422,17 +423,25 @@ export class Warrior extends Hero {
         const originalX = this.shieldBase.x;
         const originalY = this.shieldBase.y;
         const originalRot = this.shieldBase.rotZ;
+        const swordOriginalX = this.swordBase.x;
+        const swordOriginalY = this.swordBase.y;
+        const swordOriginalRot = this.swordBase.rotZ;
 
         // Wind up (pull shield back and up)
         this.shield.position.x = -0.4;
         this.shield.position.y = 0.2;
         this.shield.rotation.z = -0.2;
+        this.sword.position.x = 0.4;
+        this.sword.position.y = 0.2;
+        this.sword.rotation.z = 0.2;
 
         setTimeout(() => {
             // Bash forward with force
             this.animateShieldTo(-1.0, -0.1, 0.3, 1.2, 120);
+            this.animateSwordTo(1.0, -0.1, -0.3, 1.2, 120);
             this.shieldBashInvuln = 0.25;
-            this.createShieldBashWind();
+            this.createShieldBashWind(-this.facingDirection);
+            this.createShieldBashWind(this.facingDirection);
             this.playShieldBashSound();
 
             // Small forward push to player
@@ -452,6 +461,7 @@ export class Warrior extends Hero {
         setTimeout(() => {
             // Return to original position
             this.animateShieldTo(originalX, originalY, originalRot, 1, 140);
+            this.animateSwordTo(swordOriginalX, swordOriginalY, swordOriginalRot, 1, 140);
         }, 350);
     }
 
@@ -534,8 +544,10 @@ export class Warrior extends Hero {
         this.playWhirlwindSound();
 
         // Create whirlwind visual effect to show hitbox
-        const whirlwindRange = 2.5;
-        this.createWhirlwindEffect(whirlwindRange);
+        const baseWhirlwindRange = 2.5;
+        const whirlwindRange = baseWhirlwindRange * 1.35;
+        const whirlDurationMs = 1200;
+        this.createWhirlwindEffect(whirlwindRange, whirlDurationMs);
 
         // Spin animation
         let spinCount = 0;
@@ -564,7 +576,7 @@ export class Warrior extends Hero {
     /**
      * Create whirlwind visual effect showing the attack range
      */
-    createWhirlwindEffect(range) {
+    createWhirlwindEffect(range, durationMs = 800) {
         const whirlwindGroup = new THREE.Group();
 
         // Create multiple swirling wind trails
@@ -604,24 +616,27 @@ export class Warrior extends Hero {
         whirlwindGroup.position.set(0, 0, 0.15);
         this.mesh.add(whirlwindGroup);
 
-        // Animate - spin and fade out
+        // Animate - spin and fade out over duration
         let rotation = 0;
-        let opacity = 0.4;
+        const baseOpacity = 0.4;
         let scale = 1.0;
+        const startTime = performance.now();
         const animInterval = setInterval(() => {
+            const elapsed = performance.now() - startTime;
+            const t = Math.min(1, elapsed / Math.max(1, durationMs));
             rotation += 0.4; // Faster spin
-            opacity -= 0.05;
-            scale += 0.08;
+            const opacity = baseOpacity * (1 - t);
+            scale = 1.0 + t * 0.8;
 
             whirlwindGroup.rotation.z = rotation;
             whirlwindGroup.scale.set(scale, scale, 1);
 
             // Update opacity for all segments
             whirlwindGroup.children.forEach(segment => {
-                segment.material.opacity = opacity * (segment.material.opacity / 0.4);
+                segment.material.opacity = opacity * (segment.material.opacity / baseOpacity);
             });
 
-            if (opacity <= 0) {
+            if (t >= 1) {
                 clearInterval(animInterval);
                 this.mesh.remove(whirlwindGroup);
             }
@@ -829,9 +844,9 @@ export class Warrior extends Hero {
     /**
      * Pixel wind effect for shield bash
      */
-    createShieldBashWind() {
+    createShieldBashWind(directionOverride = null) {
         const windGroup = new THREE.Group();
-        const direction = -this.facingDirection;
+        const direction = directionOverride !== null ? directionOverride : -this.facingDirection;
         const arcCount = 12;
         const radius = 0.9;
         const centerX = this.position.x + direction * 0.55;
@@ -907,6 +922,39 @@ export class Warrior extends Hero {
             this.shield.rotation.z = startRot + (rotZ - startRot) * eased;
             const nextScale = startScale + (scale - startScale) * eased;
             this.shield.scale.set(nextScale, nextScale, nextScale);
+        }, 16);
+    }
+
+    /**
+     * Smooth sword animation helper (mirrors shield bash).
+     */
+    animateSwordTo(x, y, rotZ, scale, durationMs) {
+        if (!this.sword) {
+            return;
+        }
+        const startX = this.sword.position.x;
+        const startY = this.sword.position.y;
+        const startRot = this.sword.rotation.z;
+        const startScale = this.sword.scale.x;
+        const startTime = performance.now();
+
+        const animInterval = setInterval(() => {
+            const t = (performance.now() - startTime) / durationMs;
+            if (t >= 1) {
+                clearInterval(animInterval);
+                this.sword.position.x = x;
+                this.sword.position.y = y;
+                this.sword.rotation.z = rotZ;
+                this.sword.scale.set(scale, scale, scale);
+                return;
+            }
+
+            const eased = t * (2 - t);
+            this.sword.position.x = startX + (x - startX) * eased;
+            this.sword.position.y = startY + (y - startY) * eased;
+            this.sword.rotation.z = startRot + (rotZ - startRot) * eased;
+            const nextScale = startScale + (scale - startScale) * eased;
+            this.sword.scale.set(nextScale, nextScale, nextScale);
         }, 16);
     }
 }

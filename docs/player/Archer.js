@@ -145,6 +145,7 @@ export class Archer extends Hero {
         super.update(deltaTime, input);
     }
 
+
     /**
      * Override ability input to reserve A1 for charge logic
      */
@@ -256,8 +257,8 @@ export class Archer extends Hero {
         );
         this.mesh.parent.add(arrowGroup);
 
-        const baseSpeed = 10;
-        const speed = baseSpeed + chargeRatio * 8;
+        const baseSpeed = 14;
+        const speed = baseSpeed + chargeRatio * 10;
         const startX = arrowGroup.position.x;
         const startY = arrowGroup.position.y;
         const hitEnemies = new Set();
@@ -266,7 +267,7 @@ export class Archer extends Hero {
         const damageHits = 1 + Math.round(chargeRatio * 2);
 
         let velocityY = useAim ? direction.y * speed : 3.5 + chargeRatio * 2.2;
-        const gravity = -20;
+        const gravity = -14;
         const velocityX = direction.x * speed;
 
         const arrowInterval = setInterval(() => {
