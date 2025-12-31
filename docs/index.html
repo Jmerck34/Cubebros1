@@ -62,7 +62,88 @@
             box-shadow: none;
         }
 
-        body.split-screen-active #split-screen-border {
+        #split-screen-border-horizontal {
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 6px;
+            transform: translateY(-50%);
+            background: linear-gradient(90deg, #4f4f4f 0%, #6a6a6a 50%, #4f4f4f 100%);
+            border-top: 2px solid rgba(255, 255, 255, 0.25);
+            border-bottom: 2px solid rgba(0, 0, 0, 0.45);
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 90;
+            display: none;
+        }
+
+        #split-screen-border-horizontal::before,
+        #split-screen-border-horizontal::after {
+            content: '';
+            position: absolute;
+            left: 8px;
+            right: 8px;
+            height: 2px;
+        }
+
+        #split-screen-border-horizontal::before {
+            top: 1px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        #split-screen-border-horizontal::after {
+            bottom: 1px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        body.split-screen-active #split-screen-border,
+        body.split-screen-quad #split-screen-border {
+            display: block;
+        }
+
+        body.split-screen-quad #split-screen-border-horizontal {
+            display: block;
+        }
+
+        #menu-split-border {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 6px;
+            transform: translateX(-50%);
+            background: linear-gradient(180deg, #4f4f4f 0%, #6a6a6a 50%, #4f4f4f 100%);
+            border-left: 2px solid rgba(255, 255, 255, 0.25);
+            border-right: 2px solid rgba(0, 0, 0, 0.45);
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 1002;
+            display: none;
+        }
+
+        #menu-split-border .menu-split-label {
+            position: absolute;
+            top: 16px;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: rgba(255, 255, 255, 0.9);
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+
+        #menu-split-border .menu-split-label.left {
+            right: 16px;
+        }
+
+        #menu-split-border .menu-split-label.right {
+            left: 16px;
+        }
+
+        body.menu-split-active #menu-split-border {
             display: block;
         }
 
@@ -83,6 +164,28 @@
             padding: 40px 20px 60px;
         }
 
+        .controller-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 14px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 1001;
+            transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+        }
+
+        .controller-toggle:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.16);
+        }
+
         #team-menu {
             position: fixed;
             top: 0;
@@ -97,15 +200,32 @@
             z-index: 1001;
             gap: 18px;
             text-align: center;
+            padding: 40px 20px;
         }
 
-        #team-menu h2 {
+        #team-menu.split {
+            flex-direction: row;
+            justify-content: space-evenly;
+            gap: 40px;
+            text-align: center;
+            flex-wrap: wrap;
+        }
+
+        .team-menu-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            min-width: 240px;
+        }
+
+        .team-menu-panel h2 {
             color: white;
             font-size: 36px;
             text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
         }
 
-        #team-menu p {
+        .team-menu-panel p {
             color: #ccc;
             font-size: 16px;
         }
@@ -141,6 +261,47 @@
             box-shadow: 0 0 14px rgba(204, 47, 47, 0.6);
         }
 
+        .team-button.menu-focus-p1 {
+            outline: 3px solid rgba(122, 198, 255, 0.9);
+            box-shadow: 0 0 16px rgba(122, 198, 255, 0.5);
+        }
+
+        .team-button.menu-focus-p2 {
+            outline: 3px solid rgba(255, 160, 160, 0.9);
+            box-shadow: 0 0 16px rgba(255, 160, 160, 0.5);
+        }
+
+        .team-button.menu-focus-p3 {
+            outline: 3px solid rgba(120, 230, 170, 0.9);
+            box-shadow: 0 0 16px rgba(120, 230, 170, 0.5);
+        }
+
+        .team-button.menu-focus-p4 {
+            outline: 3px solid rgba(200, 165, 255, 0.9);
+            box-shadow: 0 0 16px rgba(200, 165, 255, 0.5);
+        }
+
+        .team-button.selected-p1 {
+            border-color: rgba(122, 198, 255, 0.9);
+        }
+
+        .team-button.selected-p2 {
+            border-color: rgba(255, 160, 160, 0.9);
+        }
+
+        .team-button.selected-p3 {
+            border-color: rgba(120, 230, 170, 0.9);
+        }
+
+        .team-button.selected-p4 {
+            border-color: rgba(200, 165, 255, 0.9);
+        }
+
+        .team-controls {
+            font-size: 12px;
+            color: #888;
+        }
+
         #hero-menu h1 {
             color: white;
             font-size: 48px;
@@ -150,27 +311,74 @@
 
         #hero-menu p {
             color: #ccc;
-            font-size: 18px;
-            margin-bottom: 40px;
+            font-size: 15px;
+            margin-bottom: 24px;
+            text-align: center;
+            line-height: 1.35;
+            max-width: 900px;
+        }
+
+        #hero-menu-subtitle {
+            margin-bottom: 10px;
+        }
+
+        #hero-menu-controls {
+            margin-top: 0;
+            color: #888;
+            font-size: 14px;
         }
 
         .hero-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
-            max-width: 900px;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+            max-width: 860px;
             width: 100%;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
+        }
+
+        .hero-grid-split {
+            display: none;
+            gap: 20px;
+            max-width: 920px;
+            width: 100%;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            min-height: 0;
+        }
+
+        .hero-grid-panel {
+            flex: 1 1 300px;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .hero-grid-panel-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #e6f1ff;
+            text-align: center;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .hero-grid-panel-list {
+            display: grid;
+            grid-template-columns: minmax(210px, 1fr);
+            gap: 14px;
         }
 
         .hero-card {
             background: rgba(255, 255, 255, 0.1);
             border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 15px;
-            padding: 30px;
+            border-radius: 12px;
+            padding: 20px;
             cursor: pointer;
             transition: all 0.3s ease;
-            min-width: 260px;
+            min-width: 220px;
             scroll-margin-top: 120px;
         }
 
@@ -208,28 +416,28 @@
 
         .hero-card h2 {
             color: white;
-            font-size: 32px;
-            margin-bottom: 15px;
+            font-size: 24px;
+            margin-bottom: 10px;
             text-align: center;
         }
 
         .hero-card .hero-desc {
             color: #aaa;
-            font-size: 14px;
-            margin-bottom: 15px;
+            font-size: 12px;
+            margin-bottom: 10px;
             text-align: center;
             font-style: italic;
         }
 
         .hero-card .abilities {
-            margin-top: 15px;
+            margin-top: 10px;
         }
 
         .hero-card .ability {
             color: #ccc;
-            font-size: 13px;
-            margin: 8px 0;
-            padding-left: 10px;
+            font-size: 11px;
+            margin: 6px 0;
+            padding-left: 8px;
         }
 
         .hero-card .ability strong {
@@ -247,21 +455,62 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
-        #coop-toggle.menu-focus {
+        .hero-card.menu-focus-p1 {
+            outline: 3px solid rgba(122, 198, 255, 0.9);
+            box-shadow: 0 0 18px rgba(122, 198, 255, 0.6);
+        }
+
+        .hero-card.menu-focus-p2 {
+            outline: 3px solid rgba(255, 160, 160, 0.9);
+            box-shadow: 0 0 18px rgba(255, 160, 160, 0.6);
+        }
+
+        .hero-card.menu-focus-p3 {
+            outline: 3px solid rgba(120, 230, 170, 0.9);
+            box-shadow: 0 0 18px rgba(120, 230, 170, 0.6);
+        }
+
+        .hero-card.menu-focus-p4 {
+            outline: 3px solid rgba(200, 165, 255, 0.9);
+            box-shadow: 0 0 18px rgba(200, 165, 255, 0.6);
+        }
+
+        .hero-card.selected-p1 {
+            border-color: rgba(122, 198, 255, 0.9);
+            box-shadow: 0 0 18px rgba(122, 198, 255, 0.4);
+        }
+
+        .hero-card.selected-p2 {
+            border-color: rgba(255, 160, 160, 0.9);
+            box-shadow: 0 0 18px rgba(255, 160, 160, 0.4);
+        }
+
+        .hero-card.selected-p3 {
+            border-color: rgba(120, 230, 170, 0.9);
+            box-shadow: 0 0 18px rgba(120, 230, 170, 0.4);
+        }
+
+        .hero-card.selected-p4 {
+            border-color: rgba(200, 165, 255, 0.9);
+            box-shadow: 0 0 18px rgba(200, 165, 255, 0.4);
+        }
+
+        .player-count-button.menu-focus {
             border-color: #ffd966;
             box-shadow: 0 0 12px rgba(255, 217, 102, 0.7);
         }
 
-        .coop-toggle {
+        .player-count-toggle {
             margin: 12px 0 24px;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
-        #coop-toggle {
-            padding: 8px 18px;
+        .player-count-button {
+            padding: 8px 16px;
             background: rgba(255, 255, 255, 0.1);
             border: 2px solid rgba(255, 255, 255, 0.4);
             border-radius: 12px;
@@ -272,13 +521,13 @@
             transition: all 0.2s ease;
         }
 
-        #coop-toggle:hover {
+        .player-count-button:hover {
             transform: translateY(-1px);
             border-color: rgba(255, 255, 255, 0.8);
             background: rgba(255, 255, 255, 0.2);
         }
 
-        #coop-toggle.active {
+        .player-count-button.active {
             border-color: #33cc66;
             box-shadow: 0 0 12px rgba(51, 204, 102, 0.6);
         }
@@ -287,6 +536,188 @@
             color: #9ad2ff;
             font-size: 12px;
             display: none;
+        }
+
+        #hero-menu.coop .hero-grid {
+            display: grid;
+        }
+
+        #hero-menu.coop .hero-grid-split {
+            display: none;
+        }
+
+        #hero-menu.coop {
+            padding: 30px 20px 28px;
+            overflow: hidden;
+        }
+
+        #hero-menu.coop h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        #hero-menu.coop p {
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        #hero-menu.coop .player-count-toggle {
+            margin: 6px 0 14px;
+            gap: 6px;
+        }
+
+        #hero-menu.coop .player-count-button {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        #hero-menu.coop .hero-card {
+            padding: 16px;
+            border-radius: 12px;
+        }
+
+        #hero-menu.coop .hero-card h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+
+        #hero-menu.coop .hero-card .hero-desc {
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        #hero-menu.coop .hero-card .abilities {
+            margin-top: 8px;
+        }
+
+        #hero-menu.coop .hero-card .ability {
+            font-size: 10px;
+            margin: 5px 0;
+            padding-left: 6px;
+            line-height: 1.2;
+        }
+
+        .hero-card.locked-p1 {
+            border-color: rgba(122, 198, 255, 0.95);
+            box-shadow: 0 0 16px rgba(122, 198, 255, 0.5);
+        }
+
+        .hero-card.locked-p2 {
+            border-color: rgba(255, 160, 160, 0.95);
+            box-shadow: 0 0 16px rgba(255, 160, 160, 0.5);
+        }
+
+        .hero-card.locked-p3 {
+            border-color: rgba(120, 230, 170, 0.95);
+            box-shadow: 0 0 16px rgba(120, 230, 170, 0.5);
+        }
+
+        .hero-card.locked-p4 {
+            border-color: rgba(200, 165, 255, 0.95);
+            box-shadow: 0 0 16px rgba(200, 165, 255, 0.5);
+        }
+
+        #ready-menu {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 1100;
+        }
+
+        #ready-menu.active {
+            display: flex;
+        }
+
+        .ready-panel {
+            padding: 24px 28px;
+            border-radius: 16px;
+            background: rgba(20, 24, 32, 0.95);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            min-width: 280px;
+        }
+
+        .ready-panel h2 {
+            color: #ffffff;
+            font-size: 26px;
+            margin-bottom: 10px;
+        }
+
+        .ready-panel p {
+            color: #cfd7e6;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+
+        .ready-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .ready-button {
+            padding: 8px 16px;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+
+        .ready-button:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255, 255, 255, 0.7);
+        }
+
+        .gamepad-assign {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 4px 0 24px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            min-width: 280px;
+        }
+
+        .gamepad-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            color: #cfe7ff;
+            font-size: 13px;
+        }
+
+        .gamepad-label {
+            font-weight: 600;
+        }
+
+        .gamepad-select {
+            flex: 1;
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            background: rgba(0, 0, 0, 0.35);
+            color: #ffffff;
+            font-size: 12px;
+        }
+
+        .gamepad-select:disabled {
+            opacity: 0.5;
+        }
+
+        .gamepad-note {
+            font-size: 11px;
+            color: #9aa9c7;
         }
 
         /* Ability UI (hidden initially) */
@@ -308,6 +739,14 @@
             right: 20px;
         }
 
+        #ability-ui-p3 {
+            left: 20px;
+        }
+
+        #ability-ui-p4 {
+            right: 20px;
+        }
+
         body.split-screen-active #ability-ui {
             left: 25%;
             transform: translateX(-50%);
@@ -317,6 +756,36 @@
             left: 75%;
             right: auto;
             transform: translateX(-50%);
+        }
+
+        body.split-screen-quad #ability-ui,
+        body.split-screen-quad #ability-ui-p2 {
+            top: 50%;
+            bottom: auto;
+            transform: translate(-50%, -100%);
+        }
+
+        body.split-screen-quad #ability-ui {
+            left: 25%;
+        }
+
+        body.split-screen-quad #ability-ui-p2 {
+            left: 75%;
+        }
+
+        body.split-screen-quad #ability-ui-p3,
+        body.split-screen-quad #ability-ui-p4 {
+            top: auto;
+            bottom: 20px;
+            transform: translateX(-50%);
+        }
+
+        body.split-screen-quad #ability-ui-p3 {
+            left: 25%;
+        }
+
+        body.split-screen-quad #ability-ui-p4 {
+            left: 75%;
         }
 
         .ability-ui-label {
@@ -479,6 +948,11 @@
 <body>
     <canvas id="game-canvas"></canvas>
     <div id="split-screen-border" aria-hidden="true"></div>
+    <div id="split-screen-border-horizontal" aria-hidden="true"></div>
+    <div id="menu-split-border" aria-hidden="true">
+        <span class="menu-split-label left">Player 1</span>
+        <span class="menu-split-label right">Player 2</span>
+    </div>
     <div id="team-scoreboard" aria-live="polite">
         <div class="score-card blue">
             <span>Blue</span>
@@ -494,15 +968,37 @@
     <div id="hero-menu">
         <h1 id="hero-menu-title">🎮 SELECT YOUR HERO 🎮</h1>
         <p id="hero-menu-subtitle">Choose your champion and battle enemies!</p>
-        <p id="hero-menu-controls" style="font-size: 14px; color: #888; margin-top: -30px;">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities | Controller: D-pad/Stick + A = Select</p>
-        <div class="coop-toggle">
-            <button id="coop-toggle" type="button">Local Co-op: Off</button>
-            <div id="coop-hint">P2: Controller 1 preferred or arrows/J-L move, Up/I jump, U/O/K/P abilities</div>
+        <p id="hero-menu-controls">Controls: A/D or Arrows = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities | Controller: D-pad/Stick + A = Select | Assign controllers below</p>
+        <button id="controller-toggle" class="controller-toggle" type="button" aria-pressed="true">Controllers: On</button>
+        <div class="player-count-toggle">
+            <button id="two-player-toggle" class="player-count-button" type="button">Two Player</button>
+            <button id="three-player-toggle" class="player-count-button" type="button">Three Player</button>
+            <button id="four-player-toggle" class="player-count-button" type="button">Four Player</button>
+        </div>
+        <div id="coop-hint">P2/P3/P4: Use controller selection below or arrows/J-L move, Up/I jump, U/O/K/P abilities</div>
+        <div class="gamepad-assign" id="gamepad-assign">
+            <div class="gamepad-row">
+                <span class="gamepad-label">P1 Controller</span>
+                <select id="p1-gamepad-select" class="gamepad-select"></select>
+            </div>
+            <div class="gamepad-row" id="p2-gamepad-row">
+                <span class="gamepad-label">P2 Controller</span>
+                <select id="p2-gamepad-select" class="gamepad-select"></select>
+            </div>
+            <div class="gamepad-row" id="p3-gamepad-row">
+                <span class="gamepad-label">P3 Controller</span>
+                <select id="p3-gamepad-select" class="gamepad-select"></select>
+            </div>
+            <div class="gamepad-row" id="p4-gamepad-row">
+                <span class="gamepad-label">P4 Controller</span>
+                <select id="p4-gamepad-select" class="gamepad-select"></select>
+            </div>
+            <div class="gamepad-note">Auto picks the next available controller. Choose "None" for keyboard only.</div>
         </div>
 
-        <div class="hero-grid">
+        <div class="hero-grid" id="hero-grid-single">
             <!-- Warrior -->
-            <div class="hero-card warrior" id="select-warrior">
+            <div class="hero-card warrior" id="select-warrior" data-hero="warrior">
                 <h2>⚔️ WARRIOR</h2>
                 <div class="hero-desc">Melee Tank - Sword & Shield</div>
                 <div class="abilities">
@@ -514,7 +1010,7 @@
             </div>
 
             <!-- Assassin -->
-            <div class="hero-card assassin" id="select-assassin">
+            <div class="hero-card assassin" id="select-assassin" data-hero="assassin">
                 <h2>🗡️ ASSASSIN</h2>
                 <div class="hero-desc">Burst Damage - Dual Daggers</div>
                 <div class="abilities">
@@ -526,7 +1022,7 @@
             </div>
 
             <!-- Cyborg -->
-            <div class="hero-card cyborg" id="select-cyborg">
+            <div class="hero-card cyborg" id="select-cyborg" data-hero="cyborg">
                 <h2>🤖 CYBORG</h2>
                 <div class="hero-desc">Tech Caster - Arm Cannon</div>
                 <div class="abilities">
@@ -538,7 +1034,7 @@
             </div>
 
             <!-- Archer -->
-            <div class="hero-card archer" id="select-archer">
+            <div class="hero-card archer" id="select-archer" data-hero="archer">
                 <h2>🏹 ARCHER</h2>
                 <div class="hero-desc">Ranged Marksman - Bow & Arrow</div>
                 <div class="abilities">
@@ -550,7 +1046,7 @@
             </div>
 
             <!-- Warlock -->
-            <div class="hero-card warlock" id="select-warlock">
+            <div class="hero-card warlock" id="select-warlock" data-hero="warlock">
                 <h2>💀 WARLOCK</h2>
                 <div class="hero-desc">Controller - Dark Staff</div>
                 <div class="abilities">
@@ -561,16 +1057,65 @@
                 </div>
             </div>
         </div>
+        <div class="hero-grid-split" id="hero-grid-split">
+            <div class="hero-grid-panel">
+                <div class="hero-grid-panel-title">Player 1 Hero Select</div>
+                <div class="hero-grid-panel-list" id="hero-grid-p1"></div>
+            </div>
+            <div class="hero-grid-panel">
+                <div class="hero-grid-panel-title">Player 2 Hero Select</div>
+                <div class="hero-grid-panel-list" id="hero-grid-p2"></div>
+            </div>
+        </div>
     </div>
 
     <div id="team-menu">
-        <h2 id="team-menu-title">PICK YOUR TEAM</h2>
-        <p id="team-menu-subtitle">Choose your flag to spawn at.</p>
-        <div class="team-buttons">
-            <button id="team-blue" class="team-button blue" type="button">Blue Team</button>
-            <button id="team-red" class="team-button red" type="button">Red Team</button>
+        <div class="team-menu-panel" id="team-menu-p1">
+            <h2 id="team-menu-title-p1">PLAYER 1: PICK YOUR TEAM</h2>
+            <p id="team-menu-subtitle-p1">Choose your flag to spawn at.</p>
+            <div class="team-buttons">
+                <button id="team-blue-p1" class="team-button blue" type="button">Blue Team</button>
+                <button id="team-red-p1" class="team-button red" type="button">Red Team</button>
+            </div>
+            <p class="team-controls">D-pad/Stick + A to select</p>
         </div>
-        <p style="font-size: 12px; color: #888;">Left/A = Blue, Right/D = Red</p>
+        <div class="team-menu-panel" id="team-menu-p2">
+            <h2 id="team-menu-title-p2">PLAYER 2: PICK YOUR TEAM</h2>
+            <p id="team-menu-subtitle-p2">Choose your flag to spawn at.</p>
+            <div class="team-buttons">
+                <button id="team-blue-p2" class="team-button blue" type="button">Blue Team</button>
+                <button id="team-red-p2" class="team-button red" type="button">Red Team</button>
+            </div>
+            <p class="team-controls">D-pad/Stick + A to select</p>
+        </div>
+        <div class="team-menu-panel" id="team-menu-p3">
+            <h2 id="team-menu-title-p3">PLAYER 3: PICK YOUR TEAM</h2>
+            <p id="team-menu-subtitle-p3">Choose your flag to spawn at.</p>
+            <div class="team-buttons">
+                <button id="team-blue-p3" class="team-button blue" type="button">Blue Team</button>
+                <button id="team-red-p3" class="team-button red" type="button">Red Team</button>
+            </div>
+            <p class="team-controls">D-pad/Stick + A to select</p>
+        </div>
+        <div class="team-menu-panel" id="team-menu-p4">
+            <h2 id="team-menu-title-p4">PLAYER 4: PICK YOUR TEAM</h2>
+            <p id="team-menu-subtitle-p4">Choose your flag to spawn at.</p>
+            <div class="team-buttons">
+                <button id="team-blue-p4" class="team-button blue" type="button">Blue Team</button>
+                <button id="team-red-p4" class="team-button red" type="button">Red Team</button>
+            </div>
+            <p class="team-controls">D-pad/Stick + A to select</p>
+        </div>
+    </div>
+    <div id="ready-menu" aria-hidden="true">
+        <div class="ready-panel">
+            <h2>Ready to Start?</h2>
+            <p>Player 1: Press A/Enter to confirm. B/Esc to go back.</p>
+            <div class="ready-actions">
+                <button id="ready-confirm" class="ready-button" type="button">Start Match</button>
+                <button id="ready-cancel" class="ready-button" type="button">Back</button>
+            </div>
+        </div>
     </div>
 
     <!-- Ability UI -->
@@ -638,6 +1183,74 @@
             <div class="cooldown-text" id="cooldown-text-r-p2"></div>
             <span>P</span>
             <div class="ability-name">P</div>
+        </div>
+    </div>
+
+    <div id="ability-ui-p3" class="ability-ui">
+        <div class="ability-ui-label">P3</div>
+        <div class="ability-slot" id="ability-q-p3">
+            <div class="charge-meter" id="charge-meter-q-p3">
+                <div class="charge-meter-fill" id="charge-meter-fill-q-p3"></div>
+            </div>
+            <div class="cooldown-overlay" id="cooldown-q-p3"></div>
+            <div class="cooldown-text" id="cooldown-text-q-p3"></div>
+            <span>V</span>
+            <div class="ability-name">A1</div>
+        </div>
+        <div class="ability-slot" id="ability-w-p3">
+            <div class="cooldown-overlay" id="cooldown-w-p3"></div>
+            <div class="cooldown-text" id="cooldown-text-w-p3"></div>
+            <span>B</span>
+            <div class="ability-name">A2</div>
+        </div>
+        <div class="ability-slot" id="ability-e-p3">
+            <div class="cooldown-overlay" id="cooldown-e-p3"></div>
+            <div class="cooldown-text" id="cooldown-text-e-p3"></div>
+            <span>N</span>
+            <div class="ability-name">A3</div>
+        </div>
+        <div class="ability-slot ultimate" id="ability-r-p3">
+            <div class="ultimate-charge">
+                <div class="ultimate-charge-fill" id="ultimate-charge-bar-p3"></div>
+            </div>
+            <div class="cooldown-overlay" id="cooldown-r-p3"></div>
+            <div class="cooldown-text" id="cooldown-text-r-p3"></div>
+            <span>M</span>
+            <div class="ability-name">Ult</div>
+        </div>
+    </div>
+
+    <div id="ability-ui-p4" class="ability-ui">
+        <div class="ability-ui-label">P4</div>
+        <div class="ability-slot" id="ability-q-p4">
+            <div class="charge-meter" id="charge-meter-q-p4">
+                <div class="charge-meter-fill" id="charge-meter-fill-q-p4"></div>
+            </div>
+            <div class="cooldown-overlay" id="cooldown-q-p4"></div>
+            <div class="cooldown-text" id="cooldown-text-q-p4"></div>
+            <span>7</span>
+            <div class="ability-name">A1</div>
+        </div>
+        <div class="ability-slot" id="ability-w-p4">
+            <div class="cooldown-overlay" id="cooldown-w-p4"></div>
+            <div class="cooldown-text" id="cooldown-text-w-p4"></div>
+            <span>9</span>
+            <div class="ability-name">A2</div>
+        </div>
+        <div class="ability-slot" id="ability-e-p4">
+            <div class="cooldown-overlay" id="cooldown-e-p4"></div>
+            <div class="cooldown-text" id="cooldown-text-e-p4"></div>
+            <span>5</span>
+            <div class="ability-name">A3</div>
+        </div>
+        <div class="ability-slot ultimate" id="ability-r-p4">
+            <div class="ultimate-charge">
+                <div class="ultimate-charge-fill" id="ultimate-charge-bar-p4"></div>
+            </div>
+            <div class="cooldown-overlay" id="cooldown-r-p4"></div>
+            <div class="cooldown-text" id="cooldown-text-r-p4"></div>
+            <span>0</span>
+            <div class="ability-name">Ult</div>
         </div>
     </div>
 

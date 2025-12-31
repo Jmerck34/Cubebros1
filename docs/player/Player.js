@@ -48,6 +48,7 @@ export class Player {
         this.flagCarryTeam = null;
         this.flagCarryBlocksAbility3 = false;
         this.flagDropWasPressed = false;
+        this.lastDeathWasPit = false;
 
         // Status effects (for hero-vs-hero interactions)
         this.frozenTimer = 0;
@@ -662,6 +663,7 @@ export class Player {
         }
 
         if (this.currentHealth <= 0) {
+            this.lastDeathWasPit = false;
             this.die();
             return;
         }
@@ -710,6 +712,7 @@ export class Player {
 
         // Check death zone
         if (this.position.y < DEATH_Y) {
+            this.lastDeathWasPit = true;
             this.die();
         }
 
@@ -941,6 +944,7 @@ export class Player {
         this.healthBar.takeDamage(damage);
 
         if (this.currentHealth <= 0) {
+            this.lastDeathWasPit = false;
             this.die();
         }
     }
@@ -1076,6 +1080,7 @@ export class Player {
         this.wasGrounded = false;
         this.fallPeakY = this.position.y;
         this.fallDistance = 0;
+        this.lastDeathWasPit = false;
         this.visualBob = 0;
         this.visualScaleY = 1;
         this.visualScaleZ = 1;

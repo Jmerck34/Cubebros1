@@ -19,36 +19,74 @@ import { checkAABBCollision } from './utils/collision.js';
 import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
 import { DebugMenu } from './ui/DebugMenu.js';
+import { DEATH_Y } from './core/constants.js';
 
 // Game state
 let gameStarted = false;
 let scene, camera, camera2, renderer, input, input2, level, environment, player, player2, uiManager, uiManager2, cameraFollow, cameraFollow2, parallaxManager, gameLoop, pauseMenu, debugMenu;
+let players = [];
+let inputs = [];
+let uiManagers = [];
+let cameras = [];
+let cameraFollows = [];
 let flagState = null;
 let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
 const VIEW_SIZE = 10;
 
 // Hero selection
+const MAX_PLAYERS = 4;
 let localMultiplayerEnabled = false;
-let selectedHeroClassP1 = null;
-let pendingHeroClassP1 = null;
-let pendingHeroClassP2 = null;
-let selectedTeamP1 = null;
-let selectedTeamP2 = null;
-let teamSelectionIndex = 0;
-let heroMenuTitle, heroMenuSubtitle, heroMenuControls, coopToggle, coopHint;
-let teamMenu, teamMenuTitle, teamMenuSubtitle, teamButtonBlue, teamButtonRed;
+let localPlayerCount = 1;
+let pendingHeroClasses = Array(MAX_PLAYERS).fill(null);
+let heroLocked = Array(MAX_PLAYERS).fill(false);
+let selectedTeams = Array(MAX_PLAYERS).fill(null);
+let heroMenu, heroMenuTitle, heroMenuSubtitle, heroMenuControls, twoPlayerToggle, threePlayerToggle, fourPlayerToggle, coopHint;
+let heroGridSingle;
+let p1GamepadSelect, p2GamepadSelect, p3GamepadSelect, p4GamepadSelect;
+let p2GamepadRow, p3GamepadRow, p4GamepadRow;
+let controllerToggleButton, gamepadAssign;
+let controllerMenuVisible = true;
+let teamMenu;
+let teamMenuPanels = [];
+let teamMenuTitles = [];
+let teamMenuSubtitles = [];
+let teamButtonBlue = [];
+let teamButtonRed = [];
 let heroMenuTitleDefault = '';
 let heroMenuSubtitleDefault = '';
 let heroMenuControlsDefault = '';
 let menuItems = [];
+let heroCardItems = [];
 let menuFocusIndex = 0;
 let menuLastNavTime = 0;
 let menuSelectLocked = false;
 let menuBackLocked = false;
+let menuFocusIndices = Array(MAX_PLAYERS).fill(0);
+let menuLastNavTimes = Array(MAX_PLAYERS).fill(0);
+let menuSelectLockedByPlayer = Array(MAX_PLAYERS).fill(false);
+let menuBackLockedByPlayer = Array(MAX_PLAYERS).fill(false);
+let readyMenu = null;
+let readyConfirmButton = null;
+let readyCancelButton = null;
+let readyMenuActive = false;
+let readyConfirmLocked = false;
+let readyCancelLocked = false;
+let teamMenuItems = [];
+let teamFocusIndices = Array(MAX_PLAYERS).fill(0);
+let teamLastNavTimes = Array(MAX_PLAYERS).fill(0);
+let teamSelectLocked = Array(MAX_PLAYERS).fill(false);
 
 const MENU_AXIS_DEADZONE = 0.5;
 const MENU_NAV_COOLDOWN_MS = 180;
+const GAMEPAD_REFRESH_INTERVAL_MS = 800;
+
+let p1GamepadPreference = 'auto';
+let p2GamepadPreference = 'auto';
+let p3GamepadPreference = 'auto';
+let p4GamepadPreference = 'auto';
+let lastGamepadSignature = '';
+let lastGamepadRefresh = 0;
 
 const HERO_NAMES = {
     [Warrior.name]: '⚔️ WARRIOR',
@@ -57,6 +95,16 @@ const HERO_NAMES = {
     [Archer.name]: '🏹 ARCHER',
     [Warlock.name]: '💀 WARLOCK'
 };
+
+const HERO_CLASS_MAP = {
+    warrior: Warrior,
+    assassin: Assassin,
+    cyborg: Cyborg,
+    archer: Archer,
+    warlock: Warlock
+};
+
+const HERO_KEY_BY_CLASS = new Map(Object.entries(HERO_CLASS_MAP).map(([key, value]) => [value, key]));
 
 const PLAYER_ONE_COOP_BINDINGS = {
     left: ['KeyA'],
@@ -80,6 +128,28 @@ const PLAYER_TWO_BINDINGS = {
     flagDrop: ['KeyP']
 };
 
+const PLAYER_THREE_BINDINGS = {
+    left: ['KeyZ'],
+    right: ['KeyC'],
+    jump: ['KeyX'],
+    ability1: ['KeyV'],
+    ability2: ['KeyB'],
+    ability3: ['KeyN'],
+    ultimate: ['KeyM'],
+    flagDrop: ['KeyM']
+};
+
+const PLAYER_FOUR_BINDINGS = {
+    left: ['Numpad4'],
+    right: ['Numpad6'],
+    jump: ['Numpad8'],
+    ability1: ['Numpad7'],
+    ability2: ['Numpad9'],
+    ability3: ['Numpad5'],
+    ultimate: ['Numpad0'],
+    flagDrop: ['Numpad0']
+};
+
 // Initialize scene (before game starts)
 function initScene() {
     scene = new THREE.Scene();
@@ -99,10 +169,7 @@ function initScene() {
     // Handle window resize
     window.addEventListener('resize', () => {
         renderer.setSize(window.innerWidth, window.innerHeight);
-        updateCameraFrustum(camera, window.innerWidth, window.innerHeight);
-        if (camera2) {
-            updateCameraFrustum(camera2, window.innerWidth * 0.5, window.innerHeight);
-        }
+        updateAllCameraFrustums(window.innerWidth, window.innerHeight);
     });
 }
 
@@ -114,6 +181,42 @@ function updateCameraFrustum(targetCamera, width, height) {
     targetCamera.top = VIEW_SIZE;
     targetCamera.bottom = -VIEW_SIZE;
     targetCamera.updateProjectionMatrix();
+}
+
+function getViewportForIndex(index, playerCount, fullWidth, fullHeight) {
+    if (playerCount <= 1) {
+        return { x: 0, y: 0, width: fullWidth, height: fullHeight };
+    }
+    if (playerCount === 2) {
+        const halfWidth = Math.floor(fullWidth / 2);
+        return {
+            x: index === 0 ? 0 : halfWidth,
+            y: 0,
+            width: index === 0 ? halfWidth : fullWidth - halfWidth,
+            height: fullHeight
+        };
+    }
+    const halfWidth = Math.floor(fullWidth / 2);
+    const halfHeight = Math.floor(fullHeight / 2);
+    const col = index % 2;
+    const row = index < 2 ? 1 : 0;
+    return {
+        x: col === 0 ? 0 : halfWidth,
+        y: row === 1 ? halfHeight : 0,
+        width: col === 0 ? halfWidth : fullWidth - halfWidth,
+        height: row === 1 ? halfHeight : fullHeight - halfHeight
+    };
+}
+
+function updateAllCameraFrustums(fullWidth, fullHeight) {
+    if (!cameras.length) {
+        updateCameraFrustum(camera, fullWidth, fullHeight);
+        return;
+    }
+    for (let i = 0; i < cameras.length; i += 1) {
+        const viewport = getViewportForIndex(i, localPlayerCount, fullWidth, fullHeight);
+        updateCameraFrustum(cameras[i], viewport.width, viewport.height);
+    }
 }
 
 function initScoreboard() {
@@ -177,6 +280,7 @@ function createFlag(team, base, color) {
         carrier: null,
         isAtBase: true,
         dropped: false,
+        lob: null,
         returnTimer: 0,
         pickupCooldown: 0,
         lastCarrierPosition: { x: base.x, y: base.y }
@@ -237,6 +341,7 @@ function setFlagCarrier(flag, carrier) {
     flag.carrier = carrier;
     flag.isAtBase = false;
     flag.dropped = false;
+    flag.lob = null;
     flag.returnTimer = 0;
     flag.pickupCooldown = 0;
     if (flag.ring) {
@@ -259,6 +364,7 @@ function resetFlag(flag) {
     clearFlagCarrier(flag, flag.carrier);
     flag.isAtBase = true;
     flag.dropped = false;
+    flag.lob = null;
     flag.returnTimer = 0;
     flag.pickupCooldown = 0;
     flag.mesh.position.set(flag.base.x, flag.base.y, 0.45);
@@ -269,17 +375,178 @@ function resetFlag(flag) {
     flag.lastCarrierPosition = { x: flag.base.x, y: flag.base.y };
 }
 
-function dropFlag(flag) {
-    const dropPos = flag.lastCarrierPosition || flag.base;
+function getNearestLedgePosition(position) {
+    if (!level || !level.platforms || !level.platforms.length || !position) {
+        return position;
+    }
+
+    let best = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    level.platforms.forEach((platform) => {
+        if (!platform || !platform.bounds || platform.isLadder || !platform.mesh) {
+            return;
+        }
+        const bounds = platform.bounds;
+        const width = bounds.right - bounds.left;
+        if (!Number.isFinite(width) || width <= 0) {
+            return;
+        }
+        const inset = Math.min(0.4, width * 0.25);
+        const clampedX = Math.min(bounds.right - inset, Math.max(bounds.left + inset, position.x));
+        const candidate = {
+            x: clampedX,
+            y: bounds.top + 0.6
+        };
+        const dx = candidate.x - position.x;
+        const dy = candidate.y - position.y;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDistance) {
+            bestDistance = dist;
+            best = candidate;
+        }
+    });
+
+    return best || position;
+}
+
+function getGroundDropPosition(position) {
+    if (!level || !level.platforms || !level.platforms.length || !position) {
+        return null;
+    }
+
+    const threshold = position.y + 0.5;
+    let best = null;
+    let bestTop = -Infinity;
+
+    level.platforms.forEach((platform) => {
+        if (!platform || !platform.bounds || platform.isLadder || !platform.mesh) {
+            return;
+        }
+        const bounds = platform.bounds;
+        if (bounds.top > threshold) {
+            return;
+        }
+        const width = bounds.right - bounds.left;
+        if (!Number.isFinite(width) || width <= 0) {
+            return;
+        }
+        const inset = Math.min(0.4, width * 0.25);
+        if (position.x < bounds.left + inset || position.x > bounds.right - inset) {
+            return;
+        }
+        if (bounds.top > bestTop) {
+            bestTop = bounds.top;
+            best = {
+                x: position.x,
+                y: bounds.top + 0.6
+            };
+        }
+    });
+
+    return best;
+}
+
+function getFlagLandingPosition(position, velocityY) {
+    if (!level || !level.platforms || !level.platforms.length || !position) {
+        return null;
+    }
+
+    if (velocityY > 0.1) {
+        return null;
+    }
+
+    const flagBounds = {
+        left: position.x - 0.3,
+        right: position.x + 0.3,
+        top: position.y + 0.45,
+        bottom: position.y - 0.35
+    };
+
+    let landingPlatform = null;
+    let bestTop = -Infinity;
+    level.platforms.forEach((platform) => {
+        if (!platform || !platform.bounds || platform.isLadder || !platform.mesh) {
+            return;
+        }
+        if (checkAABBCollision(flagBounds, platform.bounds)) {
+            if (platform.bounds.top > bestTop) {
+                bestTop = platform.bounds.top;
+                landingPlatform = platform;
+            }
+        }
+    });
+
+    if (!landingPlatform) {
+        return null;
+    }
+
+    const bounds = landingPlatform.bounds;
+    const width = bounds.right - bounds.left;
+    const inset = Math.min(0.4, width * 0.25);
+    const clampedX = Math.min(bounds.right - inset, Math.max(bounds.left + inset, position.x));
+    return {
+        x: clampedX,
+        y: bounds.top + 0.6
+    };
+}
+
+function dropFlagAt(flag, dropPos) {
+    const resolvedPos = dropPos || flag.lastCarrierPosition || flag.base;
+    const groundedPos = getGroundDropPosition(resolvedPos);
+    const finalPos = groundedPos || getNearestLedgePosition(resolvedPos) || resolvedPos;
+    flag.lob = null;
     clearFlagCarrier(flag, flag.carrier);
     flag.isAtBase = false;
     flag.dropped = true;
     flag.returnTimer = flagState.returnDelay;
     flag.pickupCooldown = 0.25;
-    flag.mesh.position.set(dropPos.x, dropPos.y, 0.45);
+    flag.mesh.position.set(finalPos.x, finalPos.y, 0.45);
     if (flag.ring) {
         flag.ring.visible = true;
-        flag.ring.position.set(dropPos.x, dropPos.y, 0.05);
+        flag.ring.position.set(finalPos.x, finalPos.y, 0.05);
+    }
+    flag.lastCarrierPosition = { x: finalPos.x, y: finalPos.y };
+}
+
+function dropFlag(flag) {
+    dropFlagAt(flag, flag.lastCarrierPosition || flag.base);
+}
+
+function startFlagLob(flag, carrier) {
+    if (!flag || !carrier) return;
+    const aim = typeof carrier.getAimDirection === 'function' ? carrier.getAimDirection() : null;
+    const useAim = carrier.hasAimInput && aim;
+    const direction = useAim ? aim : { x: carrier.facingDirection || 1, y: 0 };
+    const length = Math.hypot(direction.x, direction.y);
+    const dir = length > 0.001 ? { x: direction.x / length, y: direction.y / length } : { x: 1, y: 0 };
+    const origin = {
+        x: carrier.position.x + dir.x * 0.6,
+        y: carrier.position.y + 0.8
+    };
+
+    const speed = 7.5;
+    let velocityY = useAim ? dir.y * speed : 5.4;
+    if (!Number.isFinite(velocityY) || velocityY < 2.5) {
+        velocityY = 4.8;
+    }
+
+    flag.lob = {
+        x: origin.x,
+        y: origin.y,
+        vx: dir.x * speed,
+        vy: velocityY
+    };
+
+    clearFlagCarrier(flag, carrier);
+    flag.isAtBase = false;
+    flag.dropped = true;
+    flag.returnTimer = flagState.returnDelay;
+    flag.pickupCooldown = 0.25;
+    flag.lastCarrierPosition = { x: origin.x, y: origin.y };
+    flag.mesh.position.set(origin.x, origin.y, 0.45);
+    if (flag.ring) {
+        flag.ring.visible = false;
     }
 }
 
@@ -297,12 +564,12 @@ function isPlayerInBase(player, team) {
     return checkAABBCollision(player.getBounds(), baseBounds);
 }
 
-function updateCTF(deltaTime, inputP1, inputP2) {
+function updateCTF(deltaTime, activePlayers, activeInputs) {
     if (!flagState) return;
-    const players = [
-        { player, input: inputP1 },
-        { player: player2, input: inputP2 }
-    ].filter((entry) => entry.player);
+    const players = (activePlayers || []).map((activePlayer, index) => ({
+        player: activePlayer,
+        input: activeInputs ? activeInputs[index] : null
+    })).filter((entry) => entry.player);
 
     const playerInputs = players.map(({ player: activePlayer, input: activeInput }) => {
         const dropPressed = activeInput?.isFlagDropPressed?.() || false;
@@ -316,7 +583,7 @@ function updateCTF(deltaTime, inputP1, inputP2) {
             const carriedFlag = flagState.flags[activePlayer.flagCarryTeam];
             if (carriedFlag && carriedFlag.carrier === activePlayer) {
                 carriedFlag.lastCarrierPosition = { x: activePlayer.position.x, y: activePlayer.position.y };
-                dropFlag(carriedFlag);
+                startFlagLob(carriedFlag, activePlayer);
             }
         }
     });
@@ -327,7 +594,29 @@ function updateCTF(deltaTime, inputP1, inputP2) {
                 flag.lastCarrierPosition = { x: flag.carrier.position.x, y: flag.carrier.position.y };
                 flag.mesh.position.set(flag.carrier.position.x, flag.carrier.position.y + 1.0, 0.45);
             } else {
-                dropFlag(flag);
+                if (flag.carrier.lastDeathWasPit) {
+                    const fallbackPos = flag.lastCarrierPosition || flag.base;
+                    const ledgePos = getNearestLedgePosition(fallbackPos);
+                    dropFlagAt(flag, ledgePos);
+                } else {
+                    dropFlag(flag);
+                }
+            }
+        } else if (flag.lob) {
+            flag.lob.vy -= 20 * deltaTime;
+            flag.lob.x += flag.lob.vx * deltaTime;
+            flag.lob.y += flag.lob.vy * deltaTime;
+            flag.mesh.position.set(flag.lob.x, flag.lob.y, 0.45);
+
+            const landingPos = getFlagLandingPosition({ x: flag.lob.x, y: flag.lob.y }, flag.lob.vy);
+            if (landingPos) {
+                dropFlagAt(flag, landingPos);
+                return;
+            }
+
+            if (flag.lob.y < DEATH_Y) {
+                dropFlagAt(flag, { x: flag.lob.x, y: flag.lob.y });
+                return;
             }
         } else if (flag.dropped) {
             if (flag.ring) {
@@ -413,25 +702,204 @@ function updateCTF(deltaTime, inputP1, inputP2) {
     });
 }
 
+function getConnectedGamepadInfo() {
+    if (!navigator.getGamepads) return [];
+    const pads = navigator.getGamepads();
+    const connected = [];
+    for (const pad of pads) {
+        if (pad && pad.connected) {
+            connected.push({ index: pad.index, id: pad.id || '' });
+        }
+    }
+    connected.sort((a, b) => a.index - b.index);
+    return connected;
+}
+
+function buildGamepadSelectOptions(selectEl, selectedValue, pads, autoLabel) {
+    if (!selectEl) return selectedValue || 'auto';
+    const options = [
+        { value: 'auto', label: autoLabel || 'Auto (first available)' },
+        { value: 'none', label: 'None (keyboard only)' }
+    ];
+
+    pads.forEach((pad) => {
+        const name = pad.id ? pad.id.trim() : `Gamepad ${pad.index + 1}`;
+        options.push({ value: String(pad.index), label: `Pad ${pad.index + 1}: ${name}` });
+    });
+
+    selectEl.textContent = '';
+    options.forEach((option) => {
+        const element = document.createElement('option');
+        element.value = option.value;
+        element.textContent = option.label;
+        selectEl.appendChild(element);
+    });
+
+    let resolvedValue = selectedValue || 'auto';
+    if (!options.some((option) => option.value === resolvedValue)) {
+        resolvedValue = 'auto';
+    }
+    selectEl.value = resolvedValue;
+    return resolvedValue;
+}
+
+function refreshGamepadSelects(force = false) {
+    if (!p1GamepadSelect || !navigator.getGamepads) return;
+    const pads = getConnectedGamepadInfo();
+    const signature = pads.map((pad) => `${pad.index}:${pad.id}`).join('|');
+    if (!force && signature === lastGamepadSignature) return;
+    lastGamepadSignature = signature;
+
+    const p1Value = p1GamepadSelect.value || p1GamepadPreference;
+    p1GamepadPreference = buildGamepadSelectOptions(p1GamepadSelect, p1Value, pads, 'Auto (first controller)');
+
+    if (p2GamepadSelect) {
+        const p2Value = p2GamepadSelect.value || p2GamepadPreference;
+        p2GamepadPreference = buildGamepadSelectOptions(p2GamepadSelect, p2Value, pads, 'Auto (second controller)');
+    }
+
+    if (p3GamepadSelect) {
+        const p3Value = p3GamepadSelect.value || p3GamepadPreference;
+        p3GamepadPreference = buildGamepadSelectOptions(p3GamepadSelect, p3Value, pads, 'Auto (third controller)');
+    }
+
+    if (p4GamepadSelect) {
+        const p4Value = p4GamepadSelect.value || p4GamepadPreference;
+        p4GamepadPreference = buildGamepadSelectOptions(p4GamepadSelect, p4Value, pads, 'Auto (fourth controller)');
+    }
+}
+
+function updateGamepadSelectVisibility() {
+    if (p2GamepadRow) {
+        p2GamepadRow.style.display = localPlayerCount >= 2 ? 'flex' : 'none';
+    }
+    if (p3GamepadRow) {
+        p3GamepadRow.style.display = localPlayerCount >= 3 ? 'flex' : 'none';
+    }
+    if (p4GamepadRow) {
+        p4GamepadRow.style.display = localPlayerCount >= 4 ? 'flex' : 'none';
+    }
+    if (p2GamepadSelect) {
+        p2GamepadSelect.disabled = localPlayerCount < 2;
+    }
+    if (p3GamepadSelect) {
+        p3GamepadSelect.disabled = localPlayerCount < 3;
+    }
+    if (p4GamepadSelect) {
+        p4GamepadSelect.disabled = localPlayerCount < 4;
+    }
+}
+
+function setControllerMenuVisible(visible) {
+    controllerMenuVisible = visible;
+    if (gamepadAssign) {
+        gamepadAssign.style.display = visible ? 'flex' : 'none';
+    }
+    if (controllerToggleButton) {
+        controllerToggleButton.textContent = visible ? 'Controllers: On' : 'Controllers: Off';
+        controllerToggleButton.setAttribute('aria-pressed', String(visible));
+    }
+}
+
+function resolveGamepadAssignments() {
+    const pads = getConnectedGamepadInfo();
+    const connectedIndices = pads.map((pad) => pad.index);
+    const used = new Set();
+    const preferences = [p1GamepadPreference, p2GamepadPreference, p3GamepadPreference, p4GamepadPreference];
+    const useOrdinalAuto = preferences.slice(0, localPlayerCount).every((pref) => pref === 'auto');
+
+    const resolvePreference = (preference, allowAutoFallback, autoOrdinal = null) => {
+        const normalized = preference || 'auto';
+        if (normalized === 'none') {
+            return { enabled: false, index: null };
+        }
+        if (normalized === 'auto') {
+            if (autoOrdinal !== null) {
+                const ordinalIndex = connectedIndices[autoOrdinal];
+                if (ordinalIndex !== undefined) {
+                    used.add(ordinalIndex);
+                    return { enabled: true, index: ordinalIndex };
+                }
+                return { enabled: allowAutoFallback, index: null };
+            }
+            const available = connectedIndices.find((index) => !used.has(index));
+            if (available !== undefined) {
+                used.add(available);
+                return { enabled: true, index: available };
+            }
+            return { enabled: allowAutoFallback, index: null };
+        }
+        const parsed = parseInt(normalized, 10);
+        if (!Number.isInteger(parsed)) {
+            return { enabled: false, index: null };
+        }
+        used.add(parsed);
+        return { enabled: true, index: parsed };
+    };
+
+    const assignments = [];
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        if (i >= localPlayerCount) {
+            assignments.push({ enabled: false, index: null });
+            continue;
+        }
+        assignments.push(resolvePreference(preferences[i], i === 0, useOrdinalAuto ? i : null));
+    }
+    return assignments;
+}
+
 // Start game with selected hero
-function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red') {
+function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
     // Hide menu
-    document.getElementById('hero-menu').style.display = 'none';
+    if (heroMenu) {
+        heroMenu.style.display = 'none';
+    } else {
+        document.getElementById('hero-menu').style.display = 'none';
+    }
     if (teamMenu) {
         teamMenu.style.display = 'none';
     }
+    hideReadyMenu();
+    updateMenuSplitState();
     document.getElementById('ability-ui').style.display = 'flex';
     const abilityUiP2 = document.getElementById('ability-ui-p2');
+    const abilityUiP3 = document.getElementById('ability-ui-p3');
+    const abilityUiP4 = document.getElementById('ability-ui-p4');
     if (abilityUiP2) {
-        abilityUiP2.style.display = HeroClassP2 ? 'flex' : 'none';
+        abilityUiP2.style.display = localPlayerCount >= 2 ? 'flex' : 'none';
     }
-    document.body.classList.toggle('split-screen-active', Boolean(HeroClassP2));
+    if (abilityUiP3) {
+        abilityUiP3.style.display = localPlayerCount >= 3 ? 'flex' : 'none';
+    }
+    if (abilityUiP4) {
+        abilityUiP4.style.display = localPlayerCount >= 4 ? 'flex' : 'none';
+    }
+    document.body.classList.toggle('split-screen-active', localPlayerCount === 2);
+    document.body.classList.toggle('split-screen-quad', localPlayerCount >= 3);
 
     // Initialize input managers
     const playerOneBindings = localMultiplayerEnabled ? PLAYER_ONE_COOP_BINDINGS : null;
-    input = new InputManager(playerOneBindings ? { bindings: playerOneBindings, gamepadEnabled: false } : {});
-    input2 = HeroClassP2 ? new InputManager({ bindings: PLAYER_TWO_BINDINGS, gamepadIndex: 0 }) : null;
+    const playerBindings = [playerOneBindings, PLAYER_TWO_BINDINGS, PLAYER_THREE_BINDINGS, PLAYER_FOUR_BINDINGS];
+    const gamepadAssignments = resolveGamepadAssignments();
+    inputs = [];
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        const inputOptions = {};
+        const bindings = playerBindings[i];
+        if (bindings) {
+            inputOptions.bindings = bindings;
+        }
+        const assignment = gamepadAssignments[i] || { enabled: true, index: null };
+        if (!assignment.enabled) {
+            inputOptions.gamepadEnabled = false;
+        }
+        if (assignment.index !== null) {
+            inputOptions.gamepadIndex = assignment.index;
+        }
+        inputs[i] = new InputManager(inputOptions);
+    }
+    input = inputs[0] || null;
+    input2 = inputs[1] || null;
 
     // Create environment (background, clouds, particles)
     environment = new Environment(scene);
@@ -464,48 +932,76 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
     const goomba6 = new Goomba(scene, 18, 0);   // Far right ground
     level.addEnemy(goomba6);
 
-    const spawnP1 = getTeamSpawn(level, teamP1);
-    player = new HeroClass(scene, spawnP1.x, spawnP1.y);
-    player.team = teamP1;
-    player.spawnPoint = { x: spawnP1.x, y: spawnP1.y };
-    player.enemies = level.enemies;
-    player.level = level; // Pass level reference for platform detection
-    player.opponents = [];
+    const resolvedHeroes = [];
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        resolvedHeroes[i] = heroClasses[i] || heroClasses[0] || Warrior;
+    }
+    let teamAssignments = null;
+    if (Array.isArray(teamSelectionsOrP1)) {
+        teamAssignments = teamSelectionsOrP1;
+    } else {
+        const primaryTeam = teamSelectionsOrP1 || 'blue';
+        const secondaryTeam = teamP2 || (primaryTeam === 'blue' ? 'red' : 'blue');
+        teamAssignments = [
+            primaryTeam,
+            secondaryTeam,
+            primaryTeam,
+            secondaryTeam
+        ];
+    }
+    const fallbackTeam = teamAssignments[0] || 'blue';
 
-    player2 = null;
-    if (HeroClassP2) {
-        const spawnP2 = getTeamSpawn(level, teamP2);
-        player2 = new HeroClassP2(scene, spawnP2.x, spawnP2.y);
-        player2.team = teamP2;
-        player2.spawnPoint = { x: spawnP2.x, y: spawnP2.y };
-        player2.enemies = level.enemies;
-        player2.level = level;
-        player2.opponents = [];
+    players = [];
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        const HeroClass = resolvedHeroes[i];
+        const team = teamAssignments[i] || fallbackTeam;
+        const spawn = getTeamSpawn(level, team);
+        const hero = new HeroClass(scene, spawn.x, spawn.y);
+        hero.team = team;
+        hero.spawnPoint = { x: spawn.x, y: spawn.y };
+        hero.enemies = level.enemies;
+        hero.level = level;
+        hero.opponents = [];
+        players.push(hero);
     }
 
-    if (player2 && player.team !== player2.team) {
-        player.opponents = [player2];
-        player2.opponents = [player];
-    }
+    players.forEach((hero, index) => {
+        hero.opponents = players.filter((other, otherIndex) => otherIndex !== index && other.team !== hero.team);
+    });
+
+    player = players[0] || null;
+    player2 = players[1] || null;
 
     // Setup UI manager
-    uiManager = new UIManager(player);
-    uiManager2 = player2 ? new UIManager(player2, { suffix: 'p2' }) : null;
+    uiManagers = players.map((hero, index) => {
+        if (index === 0) {
+            return new UIManager(hero);
+        }
+        return new UIManager(hero, { suffix: `p${index + 1}` });
+    });
+    uiManager = uiManagers[0] || null;
+    uiManager2 = uiManagers[1] || null;
 
     // Setup camera follow
+    cameras = [];
+    cameraFollows = [];
+    cameras[0] = camera;
     cameraFollow = new CameraFollow(camera, player);
     cameraFollow.setSmoothing(0.1);
-    camera2 = null;
-    cameraFollow2 = null;
-    if (player2) {
-        camera2 = new THREE.OrthographicCamera(-VIEW_SIZE, VIEW_SIZE, VIEW_SIZE, -VIEW_SIZE, 0.1, 1000);
-        camera2.position.set(0, 0, 10);
-        camera2.lookAt(0, 0, 0);
-        cameraFollow2 = new CameraFollow(camera2, player2);
-        cameraFollow2.setSmoothing(0.1);
-        updateCameraFrustum(camera2, window.innerWidth * 0.5, window.innerHeight);
+    cameraFollows[0] = cameraFollow;
+
+    for (let i = 1; i < localPlayerCount; i += 1) {
+        const cam = new THREE.OrthographicCamera(-VIEW_SIZE, VIEW_SIZE, VIEW_SIZE, -VIEW_SIZE, 0.1, 1000);
+        cam.position.set(0, 0, 10);
+        cam.lookAt(0, 0, 0);
+        cameras[i] = cam;
+        const follow = new CameraFollow(cam, players[i]);
+        follow.setSmoothing(0.1);
+        cameraFollows[i] = follow;
     }
-    updateCameraFrustum(camera, window.innerWidth, window.innerHeight);
+    camera2 = cameras[1] || null;
+    cameraFollow2 = cameraFollows[1] || null;
+    updateAllCameraFrustums(window.innerWidth, window.innerHeight);
 
     // Create pause menu
     pauseMenu = new PauseMenu(
@@ -526,11 +1022,13 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
         debugMenu.setPlayer(player);
     }
 
-    // Apply debug menu physics multipliers to player
-    player.debugPhysics = debugMenu.getPhysicsMultipliers();
-    if (player2) {
-        player2.debugPhysics = debugMenu.getPhysicsMultipliers();
-    }
+    // Apply debug menu physics multipliers to all players
+    const physicsMultipliers = debugMenu.getPhysicsMultipliers();
+    players.forEach((activePlayer) => {
+        if (activePlayer) {
+            activePlayer.debugPhysics = physicsMultipliers;
+        }
+    });
 
     initCTF(level);
 
@@ -542,77 +1040,72 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
                 return;
             }
 
-            input.update();
-            if (input2) {
-                input2.update();
-            }
+            inputs.forEach((activeInput) => {
+                if (activeInput) {
+                    activeInput.update();
+                }
+            });
 
             const size = renderer.getSize(new THREE.Vector2());
             const fullWidth = size.x;
             const fullHeight = size.y;
-            const halfWidth = player2 ? Math.floor(fullWidth / 2) : fullWidth;
-            const aimP1 = getAimDirection({
-                input,
-                camera,
-                renderer,
-                viewport: { x: 0, y: 0, width: halfWidth, height: fullHeight },
-                origin: player.position,
-                useMouse: true
-            });
-            if (typeof player.setAimDirection === 'function') {
-                player.setAimDirection(aimP1);
-            }
 
-            if (player2 && camera2 && input2) {
-                const aimP2 = getAimDirection({
-                    input: input2,
-                    camera: camera2,
+            players.forEach((activePlayer, index) => {
+                const activeCamera = cameras[index] || camera;
+                const viewport = getViewportForIndex(index, localPlayerCount, fullWidth, fullHeight);
+                const aim = getAimDirection({
+                    input: inputs[index],
+                    camera: activeCamera,
                     renderer,
-                    viewport: { x: halfWidth, y: 0, width: fullWidth - halfWidth, height: fullHeight },
-                    origin: player2.position,
-                    useMouse: false
+                    viewport,
+                    origin: activePlayer.position,
+                    useMouse: index === 0
                 });
-                if (typeof player2.setAimDirection === 'function') {
-                    player2.setAimDirection(aimP2);
+                if (typeof activePlayer.setAimDirection === 'function') {
+                    activePlayer.setAimDirection(aim);
                 }
-            }
+            });
 
-            player.update(deltaTime, input);
-            if (player2 && input2) {
-                player2.update(deltaTime, input2);
-            }
+            players.forEach((activePlayer, index) => {
+                const activeInput = inputs[index];
+                if (activeInput) {
+                    activePlayer.update(deltaTime, activeInput);
+                }
+            });
+
             level.update(deltaTime);
-            level.checkCollisions(player);
-            if (player2) {
-                level.checkCollisions(player2);
-            }
-            player.checkEnemyCollisions(level.enemies);
-            if (player2) {
-                player2.checkEnemyCollisions(level.enemies);
-            }
-            level.checkFlagPickup(player);
-            if (player2) {
-                level.checkFlagPickup(player2);
-            }
-            if (player2 && player.team !== player2.team) {
-                const p1Bounds = player.getBounds();
-                const p2Bounds = player2.getBounds();
-                if (checkAABBCollision(p1Bounds, p2Bounds)) {
-                    player.applyEnemyContact(player2);
-                    player2.applyEnemyContact(player);
+            players.forEach((activePlayer) => {
+                level.checkCollisions(activePlayer);
+                activePlayer.checkEnemyCollisions(level.enemies);
+                level.checkFlagPickup(activePlayer);
+            });
+
+            for (let i = 0; i < players.length; i += 1) {
+                for (let j = i + 1; j < players.length; j += 1) {
+                    const a = players[i];
+                    const b = players[j];
+                    if (a.team === b.team) continue;
+                    if (checkAABBCollision(a.getBounds(), b.getBounds())) {
+                        a.applyEnemyContact(b);
+                        b.applyEnemyContact(a);
+                    }
                 }
             }
-            cameraFollow.update();
-            if (cameraFollow2) {
-                cameraFollow2.update();
-            }
-            parallaxManager.update();
-            uiManager.update();
-            if (uiManager2) {
-                uiManager2.update();
-            }
 
-            updateCTF(deltaTime, input, input2);
+            cameraFollows.forEach((follow) => {
+                if (follow) {
+                    follow.update();
+                }
+            });
+
+            parallaxManager.update();
+            uiManagers.forEach((manager) => {
+                if (manager) {
+                    manager.update();
+                }
+            });
+
+            updateCTF(deltaTime, players, inputs);
 
             // Update environment animations
             environment.update(deltaTime);
@@ -622,21 +1115,19 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
             const fullWidth = size.x;
             const fullHeight = size.y;
 
-            if (player2 && camera2) {
-                const halfWidth = Math.floor(fullWidth / 2);
+            if (localPlayerCount > 1) {
                 renderer.autoClear = false;
                 renderer.setScissorTest(true);
                 renderer.clear();
 
-                updateCameraFrustum(camera, halfWidth, fullHeight);
-                renderer.setViewport(0, 0, halfWidth, fullHeight);
-                renderer.setScissor(0, 0, halfWidth, fullHeight);
-                renderer.render(scene, camera);
-
-                updateCameraFrustum(camera2, fullWidth - halfWidth, fullHeight);
-                renderer.setViewport(halfWidth, 0, fullWidth - halfWidth, fullHeight);
-                renderer.setScissor(halfWidth, 0, fullWidth - halfWidth, fullHeight);
-                renderer.render(scene, camera2);
+                for (let i = 0; i < localPlayerCount; i += 1) {
+                    const viewport = getViewportForIndex(i, localPlayerCount, fullWidth, fullHeight);
+                    const activeCamera = cameras[i] || camera;
+                    updateCameraFrustum(activeCamera, viewport.width, viewport.height);
+                    renderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height);
+                    renderer.setScissor(viewport.x, viewport.y, viewport.width, viewport.height);
+                    renderer.render(scene, activeCamera);
+                }
 
                 renderer.setScissorTest(false);
             } else {
@@ -653,13 +1144,19 @@ function startGame(HeroClass, HeroClassP2 = null, teamP1 = 'blue', teamP2 = 'red
     gameStarted = true;
 
     // Log hero info
-    console.log(`${HERO_NAMES[HeroClass.name]} SELECTED!`);
-    if (HeroClassP2) {
-        console.log(`${HERO_NAMES[HeroClassP2.name]} SELECTED FOR PLAYER 2!`);
-    }
-    if (HeroClassP2) {
-        console.log('Player 1: A/D = Move | W/Space = Jump | Q/Left Click = A1 | Right Click = A2 | E = A3 | R = Ultimate');
-        console.log('Player 2: Controller 1 (preferred) | Arrows/J-L = Move | Up/I = Jump | U/O/K/P = Abilities');
+    resolvedHeroes.forEach((HeroClass, index) => {
+        const heroLabel = HERO_NAMES[HeroClass.name] || HeroClass.name;
+        console.log(`P${index + 1}: ${heroLabel} SELECTED!`);
+    });
+    if (localMultiplayerEnabled) {
+        console.log('P1: A/D = Move | W/Space = Jump | Q/Left Click = A1 | Right Click = A2 | E = A3 | R = Ultimate');
+        console.log('P2: Arrows/J-L = Move | Up/I = Jump | U/O/K/P = Abilities');
+        if (localPlayerCount >= 3) {
+            console.log('P3: Z/C = Move | X = Jump | V/B/N/M = Abilities');
+        }
+        if (localPlayerCount >= 4) {
+            console.log('P4: Numpad4/6 = Move | Numpad8 = Jump | Numpad7/9/5/0 = Abilities');
+        }
     } else {
         console.log('Move: Arrow Keys/A/D | Jump: W/Space (double jump!)');
         console.log('Abilities: Q/Left Click = A1 | Right Click = A2 | E = A3 | R = Ultimate');
@@ -676,50 +1173,62 @@ function getTeamSpawn(levelInstance, team) {
     return spawns.blue || fallback;
 }
 
-function showTeamMenu(playerIndex) {
-    teamSelectionIndex = playerIndex;
+function showTeamMenu() {
+    hideReadyMenu();
     if (teamMenu) {
         teamMenu.style.display = 'flex';
+        teamMenu.classList.toggle('split', localMultiplayerEnabled);
     }
-    const heroMenu = document.getElementById('hero-menu');
     if (heroMenu) {
         heroMenu.style.display = 'none';
     }
-    updateTeamMenuCopy();
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        if (teamMenuPanels[i]) {
+            teamMenuPanels[i].style.display = i < localPlayerCount ? 'flex' : 'none';
+        }
+        teamSelectLocked[i] = false;
+        teamLastNavTimes[i] = 0;
+        if (teamMenuTitles[i]) {
+            teamMenuTitles[i].textContent = localMultiplayerEnabled
+                ? `PLAYER ${i + 1}: PICK YOUR TEAM`
+                : 'PICK YOUR TEAM';
+        }
+        if (teamMenuSubtitles[i]) {
+            teamMenuSubtitles[i].textContent = 'Choose your flag to spawn at.';
+        }
+        if (selectedTeams[i]) {
+            teamFocusIndices[i] = selectedTeams[i] === 'blue' ? 0 : 1;
+        }
+        updateTeamMenuFocus(i + 1);
+    }
+    updateTeamSelectionUI();
+    updateMenuSplitState();
 }
 
 function hideTeamMenu() {
     if (teamMenu) {
         teamMenu.style.display = 'none';
     }
+    updateMenuSplitState();
 }
 
-function updateTeamMenuCopy() {
-    const label = teamSelectionIndex === 2 ? 'PLAYER 2' : 'PLAYER 1';
-    if (teamMenuTitle) {
-        teamMenuTitle.textContent = `${label}: PICK YOUR TEAM`;
-    }
-    if (teamMenuSubtitle) {
-        teamMenuSubtitle.textContent = 'Choose your flag to spawn at.';
-    }
-}
-
-function handleTeamSelect(team) {
-    if (teamSelectionIndex === 1) {
-        selectedTeamP1 = team;
-        if (pendingHeroClassP2) {
-            teamSelectionIndex = 2;
-            updateTeamMenuCopy();
-            return;
-        }
+function handleTeamSelect(team, playerIndex = 1) {
+    if (!localMultiplayerEnabled) {
+        selectedTeams[0] = team;
         hideTeamMenu();
-        startGame(pendingHeroClassP1, null, selectedTeamP1, null);
+        startGame(pendingHeroClasses, [team]);
         return;
     }
 
-    selectedTeamP2 = team;
-    hideTeamMenu();
-    startGame(pendingHeroClassP1, pendingHeroClassP2, selectedTeamP1, selectedTeamP2);
+    const index = playerIndex - 1;
+    selectedTeams[index] = team;
+    updateTeamSelectionUI();
+
+    const ready = selectedTeams.slice(0, localPlayerCount).every(Boolean);
+    if (ready) {
+        hideTeamMenu();
+        startGame(pendingHeroClasses, selectedTeams.slice(0, localPlayerCount));
+    }
 }
 
 // Reset game (return to menu)
@@ -736,111 +1245,329 @@ function resetGame() {
 
     // Clear scene
     if (scene) {
-        if (player && typeof player.destroy === 'function') {
-            player.destroy();
-        }
-        if (player2 && typeof player2.destroy === 'function') {
-            player2.destroy();
-        }
+        players.forEach((activePlayer) => {
+            if (activePlayer && typeof activePlayer.destroy === 'function') {
+                activePlayer.destroy();
+            }
+        });
         scene.clear();
     }
     clearCTF();
     parallaxManager = null;
+    players = [];
+    inputs = [];
+    uiManagers = [];
+    cameras = [];
+    cameraFollows = [];
+    player = null;
     player2 = null;
+    input = null;
+    input2 = null;
+    uiManager = null;
+    uiManager2 = null;
     camera2 = null;
     cameraFollow2 = null;
-    pendingHeroClassP1 = null;
-    pendingHeroClassP2 = null;
-    selectedTeamP1 = null;
-    selectedTeamP2 = null;
-    input2 = null;
-    uiManager2 = null;
+    pendingHeroClasses.fill(null);
+    selectedTeams.fill(null);
+    heroLocked.fill(false);
+    hideReadyMenu();
 
     // Show menu again
-    document.getElementById('hero-menu').style.display = 'flex';
+    if (heroMenu) {
+        heroMenu.style.display = 'flex';
+    } else {
+        document.getElementById('hero-menu').style.display = 'flex';
+    }
     document.getElementById('ability-ui').style.display = 'none';
     const abilityUiP2 = document.getElementById('ability-ui-p2');
-    if (abilityUiP2) {
-        abilityUiP2.style.display = 'none';
-    }
+    const abilityUiP3 = document.getElementById('ability-ui-p3');
+    const abilityUiP4 = document.getElementById('ability-ui-p4');
+    [abilityUiP2, abilityUiP3, abilityUiP4].forEach((element) => {
+        if (element) {
+            element.style.display = 'none';
+        }
+    });
     hideTeamMenu();
 
     gameStarted = false;
-    selectedHeroClassP1 = null;
-    document.body.classList.remove('split-screen-active');
-    setCoopEnabled(localMultiplayerEnabled);
+    document.body.classList.remove('split-screen-active', 'split-screen-quad');
+    buildTeamMenuItems();
+    setPlayerCount(localPlayerCount);
 }
 
-function setCoopEnabled(enabled) {
-    localMultiplayerEnabled = enabled;
-    selectedHeroClassP1 = null;
+function setPlayerCount(count) {
+    localPlayerCount = Math.max(1, Math.min(MAX_PLAYERS, count));
+    localMultiplayerEnabled = localPlayerCount > 1;
+    pendingHeroClasses.fill(null);
+    heroLocked.fill(false);
+    selectedTeams.fill(null);
+    hideReadyMenu();
 
-    if (coopToggle) {
-        coopToggle.textContent = enabled ? 'Local Co-op: On' : 'Local Co-op: Off';
-        if (enabled) {
-            coopToggle.classList.add('active');
-        } else {
-            coopToggle.classList.remove('active');
-        }
+    if (twoPlayerToggle) {
+        twoPlayerToggle.classList.toggle('active', localPlayerCount === 2);
+    }
+    if (threePlayerToggle) {
+        threePlayerToggle.classList.toggle('active', localPlayerCount === 3);
+    }
+    if (fourPlayerToggle) {
+        fourPlayerToggle.classList.toggle('active', localPlayerCount === 4);
     }
 
     if (coopHint) {
-        coopHint.style.display = enabled ? 'block' : 'none';
+        coopHint.style.display = localMultiplayerEnabled ? 'block' : 'none';
+        if (localPlayerCount >= 4) {
+            coopHint.textContent = 'P2: Arrows/J-L move, Up/I jump, U/O/K/P abilities | P3: Z/C move, X jump, V/B/N/M abilities | P4: Numpad4/6 move, Numpad8 jump, Numpad7/9/5/0 abilities';
+        } else if (localPlayerCount === 3) {
+            coopHint.textContent = 'P2: Arrows/J-L move, Up/I jump, U/O/K/P abilities | P3: Z/C move, X jump, V/B/N/M abilities';
+        } else if (localPlayerCount === 2) {
+            coopHint.textContent = 'P2: Use controller selection below or arrows/J-L move, Up/I jump, U/O/K/P abilities';
+        }
     }
 
+    updateGamepadSelectVisibility();
+
     if (heroMenuTitle) {
-        heroMenuTitle.textContent = heroMenuTitleDefault;
+        heroMenuTitle.textContent = localMultiplayerEnabled
+            ? `🎮 PLAYER 1-${localPlayerCount}: SELECT YOUR HEROES 🎮`
+            : heroMenuTitleDefault;
     }
     if (heroMenuSubtitle) {
-        heroMenuSubtitle.textContent = heroMenuSubtitleDefault;
+        heroMenuSubtitle.textContent = localMultiplayerEnabled ? 'Choose heroes at the same time.' : heroMenuSubtitleDefault;
     }
     if (heroMenuControls) {
-        heroMenuControls.textContent = enabled
-            ? 'P1: A/D = Move | W/Space = Jump | Left Click/Q, Right Click, E, R = Abilities | Controller: D-pad/Stick + A = Select'
+        heroMenuControls.textContent = localMultiplayerEnabled
+            ? `P1-P${localPlayerCount}: Use D-pad/Stick + A to select | P1 confirms when all selected`
             : heroMenuControlsDefault;
+    }
+    if (heroMenu) {
+        heroMenu.classList.toggle('coop', localMultiplayerEnabled);
+    }
+    refreshGamepadSelects(true);
+    buildMenuItems();
+    if (localMultiplayerEnabled) {
+        initCoopHeroMenu();
+        for (let i = localPlayerCount; i < MAX_PLAYERS; i += 1) {
+            heroCardItems.forEach((item) => {
+                item.classList.remove(`menu-focus-p${i + 1}`);
+            });
+        }
+    } else {
+        heroCardItems.forEach((item) => {
+            item.classList.remove(
+                'menu-focus-p1',
+                'menu-focus-p2',
+                'menu-focus-p3',
+                'menu-focus-p4',
+                'selected-p1',
+                'selected-p2',
+                'selected-p3',
+                'selected-p4',
+                'locked-p1',
+                'locked-p2',
+                'locked-p3',
+                'locked-p4'
+            );
+        });
+    }
+    updateMenuSplitState();
+}
+
+function togglePlayerCount(count) {
+    if (localPlayerCount === count) {
+        setPlayerCount(1);
+    } else {
+        setPlayerCount(count);
     }
 }
 
-function handleHeroSelect(HeroClass) {
+function selectHeroForPlayer(HeroClass, playerIndex = 1) {
     if (!localMultiplayerEnabled) {
-        pendingHeroClassP1 = HeroClass;
-        pendingHeroClassP2 = null;
-        showTeamMenu(1);
+        pendingHeroClasses[0] = HeroClass;
+        showTeamMenu();
         return;
     }
 
-    if (!selectedHeroClassP1) {
-        selectedHeroClassP1 = HeroClass;
-        if (heroMenuTitle) {
-            heroMenuTitle.textContent = 'PLAYER 2: SELECT YOUR HERO';
-        }
-        if (heroMenuSubtitle) {
-            heroMenuSubtitle.textContent = `Player 1 locked in: ${HERO_NAMES[HeroClass.name]}`;
-        }
-        if (heroMenuControls) {
-            heroMenuControls.textContent = 'Player 2 controls: Controller 1 preferred | Arrows/J-L = Move | Up/I = Jump | U/O/K/P = Abilities | Controller: D-pad/Stick + A = Select | B = Back';
-        }
-        return;
-    }
+    const index = playerIndex - 1;
+    pendingHeroClasses[index] = HeroClass;
+    heroLocked[index] = false;
 
-    pendingHeroClassP1 = selectedHeroClassP1;
-    pendingHeroClassP2 = HeroClass;
-    selectedHeroClassP1 = null;
-    showTeamMenu(1);
+    updateCoopHeroSelectionUI();
+    updateReadyMenuState();
+}
+
+function handleHeroSelect(HeroClass) {
+    selectHeroForPlayer(HeroClass, 1);
 }
 
 function buildMenuItems() {
     const items = [];
-    if (coopToggle) {
-        items.push(coopToggle);
+    if (twoPlayerToggle) {
+        items.push(twoPlayerToggle);
     }
-    const cards = Array.from(document.querySelectorAll('.hero-card'));
+    if (threePlayerToggle) {
+        items.push(threePlayerToggle);
+    }
+    if (fourPlayerToggle) {
+        items.push(fourPlayerToggle);
+    }
+    const cards = heroGridSingle ? Array.from(heroGridSingle.querySelectorAll('.hero-card')) : [];
+    heroCardItems = cards;
     items.push(...cards);
     menuItems = items;
     if (menuFocusIndex >= menuItems.length) {
         menuFocusIndex = Math.max(0, menuItems.length - 1);
     }
-    updateMenuFocus();
+    if (!localMultiplayerEnabled) {
+        updateMenuFocus();
+    }
+}
+
+function initCoopHeroMenu() {
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        menuSelectLockedByPlayer[i] = false;
+        menuBackLockedByPlayer[i] = false;
+        menuLastNavTimes[i] = 0;
+        menuFocusIndices[i] = heroCardItems.length ? (i % heroCardItems.length) : 0;
+    }
+    heroCardItems.forEach((item) => {
+        item.classList.remove('menu-focus');
+    });
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        updateCoopHeroFocus(i + 1);
+    }
+    updateCoopHeroSelectionUI();
+}
+
+function updateCoopHeroFocus(playerIndex) {
+    const focusIndex = menuFocusIndices[playerIndex - 1] || 0;
+    const className = `menu-focus-p${playerIndex}`;
+    heroCardItems.forEach((item, index) => {
+        item.classList.toggle(className, index === focusIndex);
+    });
+    const focused = heroCardItems[focusIndex];
+    if (focused && typeof focused.scrollIntoView === 'function') {
+        focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+}
+
+function moveCoopHeroFocus(playerIndex, delta) {
+    if (!heroCardItems.length) return;
+    const index = playerIndex - 1;
+    menuFocusIndices[index] = (menuFocusIndices[index] + delta + heroCardItems.length) % heroCardItems.length;
+    updateCoopHeroFocus(playerIndex);
+}
+
+function updateCoopHeroSelectionUI() {
+    const selectedKeys = pendingHeroClasses.map((hero) => (hero ? HERO_KEY_BY_CLASS.get(hero) : null));
+    heroCardItems.forEach((item) => {
+        for (let i = 0; i < MAX_PLAYERS; i += 1) {
+            const playerNum = i + 1;
+            const selectedKey = selectedKeys[i];
+            item.classList.toggle(`selected-p${playerNum}`, Boolean(selectedKey && item.dataset.hero === selectedKey));
+        }
+    });
+
+    if (heroMenuSubtitle && localMultiplayerEnabled) {
+        const parts = [];
+        for (let i = 0; i < localPlayerCount; i += 1) {
+            const hero = pendingHeroClasses[i];
+            const label = hero ? HERO_NAMES[hero.name] : '...';
+            const status = hero ? ' (Selected)' : '';
+            parts.push(`P${i + 1}: ${label}${status}`);
+        }
+        heroMenuSubtitle.textContent = parts.join(' | ');
+    }
+}
+
+function buildTeamMenuItems() {
+    teamMenuItems = [];
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        teamMenuItems[i] = [teamButtonBlue[i], teamButtonRed[i]].filter(Boolean);
+        teamFocusIndices[i] = 0;
+        updateTeamMenuFocus(i + 1);
+    }
+}
+
+function updateTeamMenuFocus(playerIndex) {
+    const index = playerIndex - 1;
+    const items = teamMenuItems[index] || [];
+    const focusIndex = teamFocusIndices[index] || 0;
+    const className = `menu-focus-p${playerIndex}`;
+    items.forEach((item, index) => {
+        item.classList.toggle(className, index === focusIndex);
+    });
+}
+
+function moveTeamMenuFocus(playerIndex, delta) {
+    const index = playerIndex - 1;
+    const items = teamMenuItems[index] || [];
+    if (!items.length) return;
+    teamFocusIndices[index] = (teamFocusIndices[index] + delta + items.length) % items.length;
+    updateTeamMenuFocus(playerIndex);
+}
+
+function updateTeamSelectionUI() {
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        const blueButton = teamButtonBlue[i];
+        const redButton = teamButtonRed[i];
+        const team = selectedTeams[i];
+        if (blueButton && redButton) {
+            blueButton.classList.toggle(`selected-p${i + 1}`, team === 'blue');
+            redButton.classList.toggle(`selected-p${i + 1}`, team === 'red');
+        }
+    }
+}
+
+function updateMenuSplitState() {
+    if (!heroMenu || !teamMenu) return;
+    const heroVisible = heroMenu.style.display === 'flex';
+    const teamVisible = teamMenu.style.display === 'flex';
+    const shouldShow = localPlayerCount === 2 && !gameStarted && (heroVisible || teamVisible);
+    document.body.classList.toggle('menu-split-active', shouldShow);
+}
+
+function showReadyMenu() {
+    if (!readyMenu) return;
+    readyMenu.classList.add('active');
+    readyMenuActive = true;
+    readyConfirmLocked = false;
+    readyCancelLocked = false;
+}
+
+function hideReadyMenu() {
+    if (!readyMenu) return;
+    readyMenu.classList.remove('active');
+    readyMenuActive = false;
+}
+
+function confirmReadyStart() {
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        if (!pendingHeroClasses[i]) {
+            return;
+        }
+    }
+    hideReadyMenu();
+    showTeamMenu();
+}
+
+function updateReadyMenuState() {
+    if (!localMultiplayerEnabled) {
+        hideReadyMenu();
+        return;
+    }
+    let ready = true;
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        if (!pendingHeroClasses[i]) {
+            ready = false;
+            break;
+        }
+    }
+    const shouldShow = ready;
+    if (shouldShow) {
+        showReadyMenu();
+    } else {
+        hideReadyMenu();
+    }
 }
 
 function updateMenuFocus() {
@@ -875,24 +1602,40 @@ function activateMenuItem() {
 }
 
 function handleMenuBack() {
-    if (localMultiplayerEnabled && selectedHeroClassP1) {
-        setCoopEnabled(localMultiplayerEnabled);
-        return true;
+    if (!localMultiplayerEnabled) {
+        return false;
     }
-    return false;
+    const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
+    if (!hasSelection) {
+        return false;
+    }
+    pendingHeroClasses.fill(null);
+    heroLocked.fill(false);
+    hideReadyMenu();
+    updateCoopHeroSelectionUI();
+    return true;
 }
 
-function pollMenuGamepad() {
-    if (gameStarted || !navigator.getGamepads) return;
-
-    const pads = navigator.getGamepads();
-    let pad = null;
+function getFirstConnectedPad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const candidate of pads) {
         if (candidate && candidate.connected) {
-            pad = candidate;
-            break;
+            return candidate;
         }
     }
+    return null;
+}
+
+function getAssignedPadForPlayer(playerIndex) {
+    const assignments = resolveGamepadAssignments();
+    const entry = assignments[playerIndex - 1];
+    if (!entry.enabled || entry.index === null || !navigator.getGamepads) return null;
+    const pads = navigator.getGamepads();
+    return pads[entry.index] || null;
+}
+
+function pollSingleMenuGamepad() {
+    const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
     if (!pad) return;
 
     const now = performance.now();
@@ -927,21 +1670,199 @@ function pollMenuGamepad() {
     }
 }
 
+function pollHeroMenuGamepadForPlayer(pad, playerIndex) {
+    if (!pad) return;
+    const now = performance.now();
+    const axisX = pad.axes[0] || 0;
+    const axisY = pad.axes[1] || 0;
+
+    const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
+    const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
+    const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
+    const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+
+    if ((up || down || left || right)) {
+        const index = playerIndex - 1;
+        const lastNav = menuLastNavTimes[index] || 0;
+        if (now - lastNav > MENU_NAV_COOLDOWN_MS) {
+            const delta = (down || right) ? 1 : -1;
+            moveCoopHeroFocus(playerIndex, delta);
+            menuLastNavTimes[index] = now;
+        }
+    }
+
+    const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    const selectIndex = playerIndex - 1;
+    if (selectPressed && !menuSelectLockedByPlayer[selectIndex]) {
+        const heroKey = heroCardItems[menuFocusIndices[selectIndex]]?.dataset.hero;
+        const heroClass = HERO_CLASS_MAP[heroKey];
+        if (heroClass) {
+            selectHeroForPlayer(heroClass, playerIndex);
+        }
+        menuSelectLockedByPlayer[selectIndex] = true;
+    } else if (!selectPressed) {
+        menuSelectLockedByPlayer[selectIndex] = false;
+    }
+
+    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+    if (backPressed && !menuBackLockedByPlayer[selectIndex]) {
+        pendingHeroClasses[selectIndex] = null;
+        heroLocked[selectIndex] = false;
+        updateCoopHeroSelectionUI();
+        updateReadyMenuState();
+        menuBackLockedByPlayer[selectIndex] = true;
+    } else if (!backPressed) {
+        menuBackLockedByPlayer[selectIndex] = false;
+    }
+}
+
+function pollCoopHeroMenuGamepads() {
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        const playerIndex = i + 1;
+        pollHeroMenuGamepadForPlayer(getAssignedPadForPlayer(playerIndex), playerIndex);
+    }
+}
+
+function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
+    if (!pad) return;
+    const now = performance.now();
+    const axisX = pad.axes[0] || 0;
+
+    const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
+    const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+
+    const index = playerIndex - 1;
+    if (left || right) {
+        const lastNav = teamLastNavTimes[index] || 0;
+        if (now - lastNav > MENU_NAV_COOLDOWN_MS) {
+            const delta = right ? 1 : -1;
+            moveTeamMenuFocus(playerIndex, delta);
+            teamLastNavTimes[index] = now;
+        }
+    }
+
+    const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    if (selectPressed && !teamSelectLocked[index]) {
+        const team = (teamFocusIndices[index] || 0) === 0 ? 'blue' : 'red';
+        handleTeamSelect(team, playerIndex);
+        teamSelectLocked[index] = true;
+    } else if (!selectPressed) {
+        teamSelectLocked[index] = false;
+    }
+}
+
+function pollSingleTeamMenuGamepad() {
+    pollTeamMenuGamepadForPlayer(getAssignedPadForPlayer(1) || getFirstConnectedPad(), 1);
+}
+
+function pollCoopTeamMenuGamepads() {
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        const playerIndex = i + 1;
+        pollTeamMenuGamepadForPlayer(getAssignedPadForPlayer(playerIndex), playerIndex);
+    }
+}
+
+function pollMenuGamepad() {
+    if (gameStarted || !navigator.getGamepads) return;
+    if (readyMenuActive) {
+        pollReadyMenuGamepad();
+        return;
+    }
+    if (teamMenu && teamMenu.style.display === 'flex') {
+        if (localMultiplayerEnabled) {
+            pollCoopTeamMenuGamepads();
+        } else {
+            pollSingleTeamMenuGamepad();
+        }
+        return;
+    }
+
+    if (localMultiplayerEnabled) {
+        pollCoopHeroMenuGamepads();
+        return;
+    }
+
+    pollSingleMenuGamepad();
+}
+
+function pollReadyMenuGamepad() {
+    const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
+    if (!pad) return;
+
+    const confirmPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    if (confirmPressed && !readyConfirmLocked) {
+        confirmReadyStart();
+        readyConfirmLocked = true;
+    } else if (!confirmPressed) {
+        readyConfirmLocked = false;
+    }
+
+    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+    if (backPressed && !readyCancelLocked) {
+        hideReadyMenu();
+        readyCancelLocked = true;
+    } else if (!backPressed) {
+        readyCancelLocked = false;
+    }
+}
+
 // Initialize scene on load
 window.addEventListener('load', () => {
     initScene();
     initScoreboard();
 
+    heroMenu = document.getElementById('hero-menu');
     heroMenuTitle = document.getElementById('hero-menu-title');
     heroMenuSubtitle = document.getElementById('hero-menu-subtitle');
     heroMenuControls = document.getElementById('hero-menu-controls');
-    coopToggle = document.getElementById('coop-toggle');
+    twoPlayerToggle = document.getElementById('two-player-toggle');
+    threePlayerToggle = document.getElementById('three-player-toggle');
+    fourPlayerToggle = document.getElementById('four-player-toggle');
     coopHint = document.getElementById('coop-hint');
+    heroGridSingle = document.getElementById('hero-grid-single');
+    controllerToggleButton = document.getElementById('controller-toggle');
+    gamepadAssign = document.getElementById('gamepad-assign');
+    readyMenu = document.getElementById('ready-menu');
+    readyConfirmButton = document.getElementById('ready-confirm');
+    readyCancelButton = document.getElementById('ready-cancel');
+    p1GamepadSelect = document.getElementById('p1-gamepad-select');
+    p2GamepadSelect = document.getElementById('p2-gamepad-select');
+    p3GamepadSelect = document.getElementById('p3-gamepad-select');
+    p4GamepadSelect = document.getElementById('p4-gamepad-select');
+    p2GamepadRow = document.getElementById('p2-gamepad-row');
+    p3GamepadRow = document.getElementById('p3-gamepad-row');
+    p4GamepadRow = document.getElementById('p4-gamepad-row');
     teamMenu = document.getElementById('team-menu');
-    teamMenuTitle = document.getElementById('team-menu-title');
-    teamMenuSubtitle = document.getElementById('team-menu-subtitle');
-    teamButtonBlue = document.getElementById('team-blue');
-    teamButtonRed = document.getElementById('team-red');
+    teamMenuPanels = [
+        document.getElementById('team-menu-p1'),
+        document.getElementById('team-menu-p2'),
+        document.getElementById('team-menu-p3'),
+        document.getElementById('team-menu-p4')
+    ];
+    teamMenuTitles = [
+        document.getElementById('team-menu-title-p1'),
+        document.getElementById('team-menu-title-p2'),
+        document.getElementById('team-menu-title-p3'),
+        document.getElementById('team-menu-title-p4')
+    ];
+    teamMenuSubtitles = [
+        document.getElementById('team-menu-subtitle-p1'),
+        document.getElementById('team-menu-subtitle-p2'),
+        document.getElementById('team-menu-subtitle-p3'),
+        document.getElementById('team-menu-subtitle-p4')
+    ];
+    teamButtonBlue = [
+        document.getElementById('team-blue-p1'),
+        document.getElementById('team-blue-p2'),
+        document.getElementById('team-blue-p3'),
+        document.getElementById('team-blue-p4')
+    ];
+    teamButtonRed = [
+        document.getElementById('team-red-p1'),
+        document.getElementById('team-red-p2'),
+        document.getElementById('team-red-p3'),
+        document.getElementById('team-red-p4')
+    ];
 
     if (heroMenuTitle) {
         heroMenuTitleDefault = heroMenuTitle.textContent;
@@ -953,29 +1874,108 @@ window.addEventListener('load', () => {
         heroMenuControlsDefault = heroMenuControls.textContent;
     }
 
-    if (coopToggle) {
-        coopToggle.addEventListener('click', () => {
-            setCoopEnabled(!localMultiplayerEnabled);
+    if (twoPlayerToggle) {
+        twoPlayerToggle.addEventListener('click', () => {
+            togglePlayerCount(2);
         });
     }
-
-    if (teamButtonBlue) {
-        teamButtonBlue.addEventListener('click', () => handleTeamSelect('blue'));
+    if (threePlayerToggle) {
+        threePlayerToggle.addEventListener('click', () => {
+            togglePlayerCount(3);
+        });
     }
-    if (teamButtonRed) {
-        teamButtonRed.addEventListener('click', () => handleTeamSelect('red'));
+    if (fourPlayerToggle) {
+        fourPlayerToggle.addEventListener('click', () => {
+            togglePlayerCount(4);
+        });
+    }
+    if (controllerToggleButton) {
+        controllerToggleButton.addEventListener('click', () => {
+            setControllerMenuVisible(!controllerMenuVisible);
+        });
+    }
+    if (p1GamepadSelect) {
+        p1GamepadSelect.addEventListener('change', () => {
+            p1GamepadPreference = p1GamepadSelect.value;
+        });
+    }
+    if (p2GamepadSelect) {
+        p2GamepadSelect.addEventListener('change', () => {
+            p2GamepadPreference = p2GamepadSelect.value;
+        });
+    }
+    if (p3GamepadSelect) {
+        p3GamepadSelect.addEventListener('change', () => {
+            p3GamepadPreference = p3GamepadSelect.value;
+        });
+    }
+    if (p4GamepadSelect) {
+        p4GamepadSelect.addEventListener('change', () => {
+            p4GamepadPreference = p4GamepadSelect.value;
+        });
+    }
+    if (readyConfirmButton) {
+        readyConfirmButton.addEventListener('click', () => confirmReadyStart());
+    }
+    if (readyCancelButton) {
+        readyCancelButton.addEventListener('click', () => hideReadyMenu());
+    }
+
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        const playerIndex = i + 1;
+        if (teamButtonBlue[i]) {
+            teamButtonBlue[i].addEventListener('click', () => handleTeamSelect('blue', playerIndex));
+        }
+        if (teamButtonRed[i]) {
+            teamButtonRed[i].addEventListener('click', () => handleTeamSelect('red', playerIndex));
+        }
     }
 
     document.addEventListener('keydown', (event) => {
+        if (readyMenuActive) {
+            if (event.code === 'Enter' || event.code === 'Space') {
+                confirmReadyStart();
+            } else if (event.code === 'Escape' || event.code === 'Backspace') {
+                hideReadyMenu();
+            }
+            return;
+        }
         if (!teamMenu || teamMenu.style.display !== 'flex') return;
-        if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
-            handleTeamSelect('blue');
-        } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
-            handleTeamSelect('red');
+        if (!localMultiplayerEnabled) {
+            if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
+                handleTeamSelect('blue', 1);
+            } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
+                handleTeamSelect('red', 1);
+            }
+            return;
+        }
+        const keyMap = [
+            { left: 'KeyA', right: 'KeyD' },
+            { left: 'ArrowLeft', right: 'ArrowRight' },
+            { left: 'KeyZ', right: 'KeyC' },
+            { left: 'Numpad4', right: 'Numpad6' }
+        ];
+        for (let i = 0; i < localPlayerCount; i += 1) {
+            const map = keyMap[i];
+            if (!map) continue;
+            if (event.code === map.left) {
+                handleTeamSelect('blue', i + 1);
+                return;
+            }
+            if (event.code === map.right) {
+                handleTeamSelect('red', i + 1);
+                return;
+            }
         }
     });
 
-    setCoopEnabled(localMultiplayerEnabled);
+    window.addEventListener('gamepadconnected', () => refreshGamepadSelects(true));
+    window.addEventListener('gamepaddisconnected', () => refreshGamepadSelects(true));
+
+    refreshGamepadSelects(true);
+    setPlayerCount(localPlayerCount);
+    setControllerMenuVisible(controllerMenuVisible);
+    buildTeamMenuItems();
 
     // Setup hero selection buttons
     document.getElementById('select-warrior').addEventListener('click', () => {
@@ -998,11 +1998,14 @@ window.addEventListener('load', () => {
         handleHeroSelect(Archer);
     });
 
-    buildMenuItems();
-
     // Render empty scene while in menu
     function menuRender() {
         if (!gameStarted) {
+            const now = performance.now();
+            if (now - lastGamepadRefresh > GAMEPAD_REFRESH_INTERVAL_MS) {
+                refreshGamepadSelects();
+                lastGamepadRefresh = now;
+            }
             pollMenuGamepad();
             renderer.render(scene, camera);
             requestAnimationFrame(menuRender);

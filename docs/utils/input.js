@@ -37,7 +37,8 @@ export class InputManager {
             ability1: ['Button2'],
             ability2: ['Button1'],
             ability3: ['Button3'],
-            ultimate: ['Button5', 'Button7']
+            ultimate: ['Button5', 'Button7'],
+            flagDrop: ['DPadDown']
         };
         this.gamepadBindings = {};
         Object.keys(defaultGamepadBindings).forEach((action) => {
