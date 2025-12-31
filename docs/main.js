@@ -18,6 +18,8 @@ scene.background = new THREE.Color(0x5c94fc); // Mario sky blue
 // Orthographic camera for clean 2D look
 const aspect = window.innerWidth / window.innerHeight;
 const viewSize = 10;
+const FIXED_DT = 1 / 60;
+const MAX_SUBSTEPS = 5;
 const camera = new THREE.OrthographicCamera(
     -viewSize * aspect,
     viewSize * aspect,
@@ -115,7 +117,8 @@ const gameLoop = new GameLoop(
     // Render callback
     () => {
         renderer.render(scene, camera);
-    }
+    },
+    { fixedDt: FIXED_DT, maxSubSteps: MAX_SUBSTEPS }
 );
 
 // Start the game loop

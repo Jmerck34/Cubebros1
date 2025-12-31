@@ -3,12 +3,18 @@
  * @class GameLoop
  */
 export class GameLoop {
-    constructor(updateCallback, renderCallback) {
+    constructor(updateCallback, renderCallback, options = {}) {
         this.updateCallback = updateCallback;
         this.renderCallback = renderCallback;
         this.lastTime = 0;
         this.isRunning = false;
         this.loop = this.loop.bind(this);
+
+        // Fixed-step simulation support (optional)
+        this.fixedDt = Number.isFinite(options.fixedDt) ? options.fixedDt : null;
+        this.maxSubSteps = Number.isFinite(options.maxSubSteps) ? options.maxSubSteps : 5;
+        this.accumulator = 0;
+        this.onSubSteps = typeof options.onSubSteps === 'function' ? options.onSubSteps : null;
     }
 
     /**
@@ -41,7 +47,20 @@ export class GameLoop {
         deltaTime = Math.min(deltaTime, 0.1);
 
         // Update game logic
-        this.updateCallback(deltaTime);
+        if (this.fixedDt) {
+            this.accumulator += deltaTime;
+            let steps = 0;
+            while (this.accumulator >= this.fixedDt && steps < this.maxSubSteps) {
+                this.updateCallback(this.fixedDt);
+                this.accumulator -= this.fixedDt;
+                steps++;
+            }
+            if (this.onSubSteps) {
+                this.onSubSteps(steps);
+            }
+        } else {
+            this.updateCallback(deltaTime);
+        }
 
         // Render frame
         this.renderCallback();

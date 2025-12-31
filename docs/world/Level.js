@@ -14,6 +14,8 @@ export class Level {
         this.enemies = [];
         this.movingPlatforms = [];
         this.flags = [];
+        this.useAuthoritativeEnemies = false;
+        this.useAuthoritativeMovingPlatforms = false;
     }
 
     /**
@@ -418,8 +420,12 @@ export class Level {
      * @param {number} deltaTime - Time since last frame
      */
     update(deltaTime) {
-        this.updateEnemies(deltaTime);
-        this.updateMovingPlatforms(deltaTime);
+        if (!this.useAuthoritativeEnemies) {
+            this.updateEnemies(deltaTime);
+        }
+        if (!this.useAuthoritativeMovingPlatforms) {
+            this.updateMovingPlatforms(deltaTime);
+        }
         this.updateFlags();
     }
 

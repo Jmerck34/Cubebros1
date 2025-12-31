@@ -31,6 +31,16 @@ export class Cyborg extends Hero {
 
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
+        this.timedActions = [];
+        this.activeFireballs = [];
+        this.activeFreezeWaves = [];
+        this.activeBurstEffects = [];
+        this.bubblePulse = null;
+        this.bubbleShieldTimer = 0;
+        this.activeChargeEffect = null;
+        this.kameChargeTimer = 0;
+        this.activeBeam = null;
+        this.activeExplosions = [];
 
         // Set cyborg abilities
         this.initializeAbilities();
@@ -166,6 +176,7 @@ export class Cyborg extends Hero {
         if (this.isChargingBeam) {
             this.updateStatusEffects(deltaTime);
             this.beamChargeTime += deltaTime;
+            this.updateCyborgTimers(deltaTime);
             // Don't update position or process input while charging
             return;
         }
@@ -181,6 +192,7 @@ export class Cyborg extends Hero {
         }
 
         super.update(deltaTime, input);
+        this.updateCyborgTimers(deltaTime);
     }
 
     /**
@@ -201,7 +213,7 @@ export class Cyborg extends Hero {
 
         // Animate gear
         this.cyborgRig.rotation.y = -0.3;
-        setTimeout(() => { this.cyborgRig.rotation.y = 0.3; }, 200);
+        this.scheduleAction(0.2, () => { this.cyborgRig.rotation.y = 0.3; });
 
         // Create fire missile group
         const fireballGroup = new THREE.Group();
@@ -247,112 +259,19 @@ export class Cyborg extends Hero {
         );
         this.mesh.parent.add(fireballGroup);
 
-        // Trail particles array
-        const trailParticles = [];
-
         // Fire direction based on aim
         const speed = 12;
-        const fireballPos = { x: fireballGroup.position.x, y: fireballGroup.position.y };
-        let rotationAngle = 0;
         const maxDistance = 12;
-
-        // Animate fireball
-        const fireballInterval = setInterval(() => {
-            fireballPos.x += direction.x * speed * 0.016;
-            fireballPos.y += direction.y * speed * 0.016;
-            fireballGroup.position.set(fireballPos.x, fireballPos.y, 0.2);
-
-            // Spin the fire missile
-            rotationAngle += 0.2;
-            fireballGroup.rotation.z = rotationAngle;
-
-            // Create trailing particles at fireball position
-            if (Math.random() > 0.3) {
-                const trailSize = 0.1 + Math.random() * 0.15;
-                const trailGeometry = new THREE.CircleGeometry(trailSize, 8);
-                const trailColor = Math.random() > 0.5 ? 0xff6600 : 0xff3300; // Mix orange and red
-                const trailMaterial = new THREE.MeshBasicMaterial({
-                    color: trailColor,
-                    transparent: true,
-                    opacity: 0.8
-                });
-                const trail = new THREE.Mesh(trailGeometry, trailMaterial);
-                trail.position.set(
-                    fireballGroup.position.x + (Math.random() - 0.5) * 0.2,
-                    fireballGroup.position.y + (Math.random() - 0.5) * 0.3,
-                    0.15
-                );
-                this.mesh.parent.add(trail);
-
-                // Store particle with initial opacity
-                const particle = { mesh: trail, opacity: 0.8, life: 0 };
-                trailParticles.push(particle);
-
-                // Quick fade out trail
-                const fadeInterval = setInterval(() => {
-                    particle.life += 0.016; // Track lifetime
-                    particle.opacity -= 0.15; // Faster fade
-                    particle.mesh.material.opacity = Math.max(0, particle.opacity);
-                    particle.mesh.scale.set(
-                        Math.max(0.1, 1 - particle.life * 2),
-                        Math.max(0.1, 1 - particle.life * 2),
-                        1
-                    );
-
-                    if (particle.opacity <= 0 || particle.life > 0.5) {
-                        clearInterval(fadeInterval);
-                        if (particle.mesh.parent) {
-                            this.mesh.parent.remove(particle.mesh);
-                        }
-                        // Remove from array
-                        const index = trailParticles.indexOf(particle);
-                        if (index > -1) {
-                            trailParticles.splice(index, 1);
-                        }
-                    }
-                }, 16); // Run every frame
-            }
-
-            // Check collision with enemies (use fireball's actual position)
-            const fireballBounds = {
-                left: fireballGroup.position.x - 0.28,
-                right: fireballGroup.position.x + 0.28,
-                top: fireballGroup.position.y + 0.28,
-                bottom: fireballGroup.position.y - 0.28
-            };
-
-            let hit = false;
-            for (const enemy of this.getDamageTargets()) {
-                if (!enemy.isAlive) continue;
-
-                const enemyBounds = enemy.getBounds();
-                if (checkAABBCollision(fireballBounds, enemyBounds)) {
-                    this.applyAbilityDamage(this.abilities.q, enemy, 2);
-                    if (enemy.type !== 'player') {
-                        this.addUltimateCharge(this.ultimateChargePerKill);
-                    }
-                    console.log('ðŸ”¥ Fireball hit!');
-                    hit = true;
-                    break;
-                }
-            }
-
-            const traveled = Math.hypot(fireballPos.x - this.position.x, fireballPos.y - this.position.y);
-            // Remove if hit or out of range
-            if (hit || traveled > maxDistance) {
-                clearInterval(fireballInterval);
-                this.mesh.parent.remove(fireballGroup);
-
-                // Clean up any remaining trail particles
-                trailParticles.forEach(particle => {
-                    if (particle.mesh.parent) {
-                        this.mesh.parent.remove(particle.mesh);
-                    }
-                });
-
-                this.createExplosion(fireballGroup.position.x, fireballGroup.position.y, 0xff4500);
-            }
-        }, 16);
+        this.activeFireballs.push({
+            group: fireballGroup,
+            direction,
+            speed,
+            maxDistance,
+            position: { x: fireballGroup.position.x, y: fireballGroup.position.y },
+            rotation: 0,
+            trailParticles: [],
+            owner: this
+        });
     }
 
     /**
@@ -363,7 +282,7 @@ export class Cyborg extends Hero {
 
         // Animate gear
         this.cyborgRig.scale.set(1.3, 1.3, 1.3);
-        setTimeout(() => { this.cyborgRig.scale.set(1, 1, 1); }, 300);
+        this.scheduleAction(0.3, () => { this.cyborgRig.scale.set(1, 1, 1); });
 
         const aim = this.getAimDirection();
         const useAim = this.hasAimInput;
@@ -404,43 +323,13 @@ export class Cyborg extends Hero {
             });
         }
 
-        // Animate swirling particles
-        let waveTime = 0;
-        const waveInterval = setInterval(() => {
-            waveTime += 0.016;
-
-            // Animate icy shards
-            windParticles.forEach((particle) => {
-                particle.life += 0.016;
-                particle.angle += particle.speed * 0.1;
-
-                // Swirl outward in spiral
-                const currentRadius = particle.radius * (1 + particle.life * 1.6);
-                const spiralX = Math.cos(particle.angle) * currentRadius;
-                const spiralY = Math.sin(particle.angle) * currentRadius * 0.5;
-
-                particle.centerX += direction.x * particle.speed * 0.1;
-                particle.centerY += direction.y * particle.speed * 0.1;
-                particle.mesh.position.x = particle.centerX + perpendicular.x * spiralY;
-                particle.mesh.position.y = particle.centerY + perpendicular.y * spiralY;
-                particle.mesh.rotation.z += 0.2;
-
-                // Fade out
-                particle.opacity -= 0.025;
-                particle.mesh.material.opacity = Math.max(0, particle.opacity);
-                particle.mesh.scale.set(1 - particle.life * 0.5, 1 - particle.life * 0.5, 1);
-            });
-
-            // Clean up after 500ms
-            if (waveTime > 0.5) {
-                clearInterval(waveInterval);
-                windParticles.forEach(particle => {
-                    if (particle.mesh.parent) {
-                        this.mesh.parent.remove(particle.mesh);
-                    }
-                });
-            }
-        }, 16);
+        this.activeFreezeWaves.push({
+            particles: windParticles,
+            direction,
+            perpendicular,
+            elapsed: 0,
+            duration: 0.5
+        });
 
         // Freeze enemies in cone
         const startX = this.position.x;
@@ -482,7 +371,7 @@ export class Cyborg extends Hero {
 
         // Animate gear
         this.cyborgRig.scale.set(1.2, 1.2, 1.2);
-        setTimeout(() => { this.cyborgRig.scale.set(1, 1, 1); }, 200);
+        this.scheduleAction(0.2, () => { this.cyborgRig.scale.set(1, 1, 1); });
 
         // Create burst particles
         const burstParticles = [];
@@ -506,28 +395,11 @@ export class Cyborg extends Hero {
             });
         }
 
-        // Animate burst expansion
-        const burstInterval = setInterval(() => {
-            let allDead = true;
-            burstParticles.forEach(particle => {
-                particle.life += 0.016;
-                const distance = particle.speed * particle.life;
-
-                particle.mesh.position.x = this.position.x + Math.cos(particle.angle) * distance;
-                particle.mesh.position.y = this.position.y + Math.sin(particle.angle) * distance;
-                particle.mesh.material.opacity = Math.max(0, 0.8 - particle.life * 2);
-                particle.mesh.scale.set(1 - particle.life, 1 - particle.life, 1);
-
-                if (particle.life < 0.4) allDead = false;
-            });
-
-            if (allDead) {
-                clearInterval(burstInterval);
-                burstParticles.forEach(p => {
-                    if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
-                });
-            }
-        }, 16);
+        this.activeBurstEffects.push({
+            particles: burstParticles,
+            elapsed: 0,
+            duration: 0.4
+        });
 
         const shieldDuration = 2;
         const bonusPercent = 0.3;
@@ -573,31 +445,12 @@ export class Cyborg extends Hero {
         // Set invincibility flag
         this.bubbleShield = true;
         this.bubbleShieldTime = 0;
-
-        // Pulse animation
-        let pulseScale = 1;
-        let pulseDirection = 1;
-        this.bubblePulseInterval = setInterval(() => {
-            if (!this.bubbleBorder) {
-                clearInterval(this.bubblePulseInterval);
-                return;
-            }
-
-            pulseScale += pulseDirection * 0.05;
-            if (pulseScale > 1.2) pulseDirection = -1;
-            if (pulseScale < 0.9) pulseDirection = 1;
-
-            this.bubbleBorder.scale.set(pulseScale, pulseScale, 1);
-
-            // Flash opacity
-            const opacity = 0.4 + Math.sin(Date.now() * 0.01) * 0.2;
-            this.bubbleBorder.material.opacity = opacity;
-        }, 50);
-
-        // Remove after 2 seconds
-        setTimeout(() => {
-            this.removeProtectiveBubble();
-        }, 2000);
+        this.bubbleShieldTimer = 2;
+        this.bubblePulse = {
+            scale: 1,
+            direction: 1,
+            time: 0
+        };
     }
 
     /**
@@ -608,10 +461,8 @@ export class Cyborg extends Hero {
             this.mesh.remove(this.bubbleBorder);
             this.bubbleBorder = null;
         }
-        if (this.bubblePulseInterval) {
-            clearInterval(this.bubblePulseInterval);
-            this.bubblePulseInterval = null;
-        }
+        this.bubblePulse = null;
+        this.bubbleShieldTimer = 0;
         this.bubbleShield = false;
         console.log('Bubble shield expired');
     }
@@ -646,11 +497,7 @@ export class Cyborg extends Hero {
         // Start charging (freezes character)
         this.isChargingBeam = true;
         this.beamChargeTime = 0;
-
-        // Charge for 0.8 seconds then fire
-        setTimeout(() => {
-            this.fireKameHameHa();
-        }, 800);
+        this.kameChargeTimer = 0.8;
 
         // Create energy ball group with multiple layers
         const energyBall = new THREE.Group();
@@ -731,41 +578,13 @@ export class Cyborg extends Hero {
             });
         }
 
-        // Animate growing energy ball
-        let growthTime = 0;
-        const growthInterval = setInterval(() => {
-            growthTime += 0.016;
-
-            // Grow from 0.2 to 1.0 scale over 0.8 seconds
-            const growthScale = 0.2 + (growthTime / 0.8) * 0.8;
-            energyBall.scale.set(growthScale, growthScale, growthScale);
-
-            // Update energy ball position to follow cyborg
-            energyBall.position.x = this.position.x + (0.7 * this.beamAimDirection.x);
-            energyBall.position.y = this.position.y + (0.7 * this.beamAimDirection.y);
-
-            // Animate particles spiraling inward
-            chargeParticles.forEach(p => {
-                p.angle += p.speed * 0.05;
-                p.radius -= 0.008; // Spiral inward
-
-                p.mesh.position.x = energyBall.position.x + Math.cos(p.angle) * p.radius;
-                p.mesh.position.y = energyBall.position.y + Math.sin(p.angle) * p.radius;
-            });
-
-            if (growthTime >= 0.8) {
-                clearInterval(growthInterval);
-            }
-        }, 16);
-
-        // Clean up charging effects
-        setTimeout(() => {
-            clearInterval(growthInterval);
-            this.mesh.parent.remove(energyBall);
-            chargeParticles.forEach(p => {
-                if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
-            });
-        }, 800);
+        this.clearChargeEffect();
+        this.activeChargeEffect = {
+            energyBall,
+            chargeParticles,
+            elapsed: 0,
+            duration: 0.8
+        };
     }
 
     /**
@@ -863,64 +682,19 @@ export class Cyborg extends Hero {
             });
         }
 
-        const hitEnemies = new Set();
-        let traveled = 0;
-
-        // Animate flowing particles + move beam
-        const particleInterval = setInterval(() => {
-            const step = beamSpeed * 0.016;
-            traveled += step;
-            beamPos.x += direction.x * step;
-            beamPos.y += direction.y * step;
-            beamGroup.position.set(beamPos.x, beamPos.y, 0.2);
-
-            beamParticles.forEach(p => {
-                p.life += 0.016;
-                p.offsetX += p.speed * 0.016;
-
-                p.mesh.position.x = beamPos.x + direction.x * p.offsetX + perpendicular.x * p.offsetY;
-                p.mesh.position.y = beamPos.y + direction.y * p.offsetX + perpendicular.y * p.offsetY;
-
-                // Fade out particles as they travel
-                p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
-            });
-
-            // Beam damage area
-            const halfLength = beamLength * 0.5;
-            const startX = beamPos.x - direction.x * halfLength;
-            const startY = beamPos.y - direction.y * halfLength;
-            const endX = beamPos.x + direction.x * halfLength;
-            const endY = beamPos.y + direction.y * halfLength;
-            const thickness = 0.7;
-            const beamBounds = {
-                left: Math.min(startX, endX) - thickness,
-                right: Math.max(startX, endX) + thickness,
-                top: Math.max(startY, endY) + thickness,
-                bottom: Math.min(startY, endY) - thickness
-            };
-
-            // Damage enemies in beam (once per enemy)
-            for (const enemy of this.getDamageTargets()) {
-                if (!enemy.isAlive || hitEnemies.has(enemy)) continue;
-                const enemyBounds = enemy.getBounds();
-                if (checkAABBCollision(beamBounds, enemyBounds)) {
-                    this.applyAbilityDamage(this.abilities.r, enemy, damage);
-                    hitEnemies.add(enemy);
-                    if (enemy.type !== 'player') {
-                        this.addUltimateCharge(this.ultimateChargePerKill);
-                    }
-                    console.log(`KAME HAME HA hit for ${damage} damage!`);
-                }
-            }
-
-            if (traveled >= maxTravel) {
-                clearInterval(particleInterval);
-                this.mesh.parent.remove(beamGroup);
-                beamParticles.forEach(p => {
-                    if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
-                });
-            }
-        }, 16);
+        this.activeBeam = {
+            group: beamGroup,
+            particles: beamParticles,
+            direction,
+            perpendicular,
+            beamLength,
+            beamSpeed,
+            maxTravel,
+            traveled: 0,
+            beamPos,
+            hitEnemies: new Set(),
+            damage
+        };
         // Consume ultimate charge
         this.ultimateCharge = 0;
     }
@@ -939,18 +713,349 @@ export class Cyborg extends Hero {
         explosion.position.set(x, y, 0.3);
         this.mesh.parent.add(explosion);
 
-        let scale = 1;
-        let opacity = 0.8;
-        const explodeInterval = setInterval(() => {
-            scale += 0.3;
-            opacity -= 0.1;
-            explosion.scale.set(scale, scale, 1);
-            explosion.material.opacity = opacity;
+        this.activeExplosions.push({
+            mesh: explosion,
+            scale: 1,
+            opacity: 0.8,
+            scaleRate: 0.3 / 0.03,
+            fadeRate: 0.1 / 0.03
+        });
+    }
 
-            if (opacity <= 0) {
-                clearInterval(explodeInterval);
-                this.mesh.parent.remove(explosion);
+    scheduleAction(delaySeconds, action) {
+        if (delaySeconds <= 0) {
+            action();
+            return;
+        }
+        this.timedActions.push({ remaining: delaySeconds, action });
+    }
+
+    updateTimedActions(deltaTime) {
+        if (!this.timedActions.length) return;
+        for (let i = this.timedActions.length - 1; i >= 0; i--) {
+            const item = this.timedActions[i];
+            item.remaining -= deltaTime;
+            if (item.remaining <= 0) {
+                this.timedActions.splice(i, 1);
+                item.action();
             }
-        }, 30);
+        }
+    }
+
+    updateCyborgTimers(deltaTime) {
+        this.updateTimedActions(deltaTime);
+        this.updateFireballs(deltaTime);
+        this.updateFreezeWaves(deltaTime);
+        this.updateBurstEffects(deltaTime);
+        this.updateBubbleShieldPulse(deltaTime);
+        this.updateChargeEffect(deltaTime);
+        this.updateBeam(deltaTime);
+        this.updateExplosions(deltaTime);
+        this.updateKameChargeTimer(deltaTime);
+    }
+
+    updateFireballs(deltaTime) {
+        if (!this.activeFireballs.length) return;
+        const rotationRate = 0.2 / 0.016;
+        const trailFadeRate = 0.15 / 0.016;
+        const remaining = [];
+
+        for (const fireball of this.activeFireballs) {
+            if (!fireball || !fireball.group) continue;
+            fireball.position.x += fireball.direction.x * fireball.speed * deltaTime;
+            fireball.position.y += fireball.direction.y * fireball.speed * deltaTime;
+            fireball.group.position.set(fireball.position.x, fireball.position.y, 0.2);
+
+            fireball.rotation += rotationRate * deltaTime;
+            fireball.group.rotation.z = fireball.rotation;
+
+            if (Math.random() > 0.3) {
+                this.spawnFireballTrail(fireball);
+            }
+
+            for (let i = fireball.trailParticles.length - 1; i >= 0; i--) {
+                const particle = fireball.trailParticles[i];
+                particle.life += deltaTime;
+                particle.opacity -= trailFadeRate * deltaTime;
+                if (particle.mesh && particle.mesh.material) {
+                    particle.mesh.material.opacity = Math.max(0, particle.opacity);
+                    const scale = Math.max(0.1, 1 - particle.life * 2);
+                    particle.mesh.scale.set(scale, scale, 1);
+                }
+                if (particle.opacity <= 0 || particle.life > 0.5) {
+                    if (particle.mesh && particle.mesh.parent) {
+                        particle.mesh.parent.remove(particle.mesh);
+                    }
+                    fireball.trailParticles.splice(i, 1);
+                }
+            }
+
+            const fireballBounds = {
+                left: fireball.group.position.x - 0.28,
+                right: fireball.group.position.x + 0.28,
+                top: fireball.group.position.y + 0.28,
+                bottom: fireball.group.position.y - 0.28
+            };
+
+            let hit = false;
+            for (const enemy of this.getDamageTargets()) {
+                if (!enemy.isAlive) continue;
+                const enemyBounds = enemy.getBounds();
+                if (checkAABBCollision(fireballBounds, enemyBounds)) {
+                    this.applyAbilityDamage(this.abilities.q, enemy, 2);
+                    if (enemy.type !== 'player') {
+                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    }
+                    console.log('ðŸ”¥ Fireball hit!');
+                    hit = true;
+                    break;
+                }
+            }
+
+            const origin = fireball.owner ? fireball.owner.position : this.position;
+            const traveled = Math.hypot(fireball.position.x - origin.x, fireball.position.y - origin.y);
+            if (hit || traveled > fireball.maxDistance) {
+                if (fireball.group.parent) {
+                    fireball.group.parent.remove(fireball.group);
+                }
+                fireball.trailParticles.forEach(particle => {
+                    if (particle.mesh && particle.mesh.parent) {
+                        particle.mesh.parent.remove(particle.mesh);
+                    }
+                });
+                this.createExplosion(fireball.group.position.x, fireball.group.position.y, 0xff4500);
+                continue;
+            }
+
+            remaining.push(fireball);
+        }
+
+        this.activeFireballs = remaining;
+    }
+
+    spawnFireballTrail(fireball) {
+        const trailSize = 0.1 + Math.random() * 0.15;
+        const trailGeometry = new THREE.CircleGeometry(trailSize, 8);
+        const trailColor = Math.random() > 0.5 ? 0xff6600 : 0xff3300;
+        const trailMaterial = new THREE.MeshBasicMaterial({
+            color: trailColor,
+            transparent: true,
+            opacity: 0.8
+        });
+        const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+        trail.position.set(
+            fireball.group.position.x + (Math.random() - 0.5) * 0.2,
+            fireball.group.position.y + (Math.random() - 0.5) * 0.3,
+            0.15
+        );
+        this.mesh.parent.add(trail);
+        fireball.trailParticles.push({ mesh: trail, opacity: 0.8, life: 0 });
+    }
+
+    updateFreezeWaves(deltaTime) {
+        if (!this.activeFreezeWaves.length) return;
+        const angleRateFactor = 0.1 / 0.016;
+        const moveRateFactor = 0.1 / 0.016;
+        const rotationRate = 0.2 / 0.016;
+        const fadeRate = 0.025 / 0.016;
+        for (let i = this.activeFreezeWaves.length - 1; i >= 0; i--) {
+            const wave = this.activeFreezeWaves[i];
+            wave.elapsed += deltaTime;
+
+            wave.particles.forEach((particle) => {
+                particle.life += deltaTime;
+                particle.angle += particle.speed * angleRateFactor * deltaTime;
+
+                const currentRadius = particle.radius * (1 + particle.life * 1.6);
+                const spiralX = Math.cos(particle.angle) * currentRadius;
+                const spiralY = Math.sin(particle.angle) * currentRadius * 0.5;
+
+                particle.centerX += wave.direction.x * particle.speed * moveRateFactor * deltaTime;
+                particle.centerY += wave.direction.y * particle.speed * moveRateFactor * deltaTime;
+                particle.mesh.position.x = particle.centerX + wave.perpendicular.x * spiralY;
+                particle.mesh.position.y = particle.centerY + wave.perpendicular.y * spiralY;
+                particle.mesh.rotation.z += rotationRate * deltaTime;
+
+                particle.opacity -= fadeRate * deltaTime;
+                particle.mesh.material.opacity = Math.max(0, particle.opacity);
+                particle.mesh.scale.set(1 - particle.life * 0.5, 1 - particle.life * 0.5, 1);
+            });
+
+            if (wave.elapsed >= wave.duration) {
+                wave.particles.forEach(particle => {
+                    if (particle.mesh.parent) {
+                        this.mesh.parent.remove(particle.mesh);
+                    }
+                });
+                this.activeFreezeWaves.splice(i, 1);
+            }
+        }
+    }
+
+    updateBurstEffects(deltaTime) {
+        if (!this.activeBurstEffects.length) return;
+        for (let i = this.activeBurstEffects.length - 1; i >= 0; i--) {
+            const burst = this.activeBurstEffects[i];
+            burst.elapsed += deltaTime;
+            let allDead = true;
+
+            burst.particles.forEach(particle => {
+                particle.life += deltaTime;
+                const distance = particle.speed * particle.life;
+                particle.mesh.position.x = this.position.x + Math.cos(particle.angle) * distance;
+                particle.mesh.position.y = this.position.y + Math.sin(particle.angle) * distance;
+                particle.mesh.material.opacity = Math.max(0, 0.8 - particle.life * 2);
+                particle.mesh.scale.set(1 - particle.life, 1 - particle.life, 1);
+
+                if (particle.life < burst.duration) allDead = false;
+            });
+
+            if (allDead || burst.elapsed >= burst.duration) {
+                burst.particles.forEach(p => {
+                    if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+                });
+                this.activeBurstEffects.splice(i, 1);
+            }
+        }
+    }
+
+    updateBubbleShieldPulse(deltaTime) {
+        if (!this.bubbleBorder || !this.bubbleShield) return;
+        if (this.bubblePulse) {
+            this.bubblePulse.scale += this.bubblePulse.direction * deltaTime;
+            if (this.bubblePulse.scale > 1.2) this.bubblePulse.direction = -1;
+            if (this.bubblePulse.scale < 0.9) this.bubblePulse.direction = 1;
+            this.bubbleBorder.scale.set(this.bubblePulse.scale, this.bubblePulse.scale, 1);
+
+            this.bubblePulse.time += deltaTime;
+            const opacity = 0.4 + Math.sin(this.bubblePulse.time * 10) * 0.2;
+            this.bubbleBorder.material.opacity = opacity;
+        }
+
+        if (this.bubbleShieldTimer > 0) {
+            this.bubbleShieldTimer -= deltaTime;
+            if (this.bubbleShieldTimer <= 0) {
+                this.removeProtectiveBubble();
+            }
+        }
+    }
+
+    updateChargeEffect(deltaTime) {
+        if (!this.activeChargeEffect) return;
+        const effect = this.activeChargeEffect;
+        effect.elapsed += deltaTime;
+        const t = Math.min(1, effect.elapsed / effect.duration);
+        const growthScale = 0.2 + t * 0.8;
+        effect.energyBall.scale.set(growthScale, growthScale, growthScale);
+        effect.energyBall.position.x = this.position.x + (0.7 * this.beamAimDirection.x);
+        effect.energyBall.position.y = this.position.y + (0.7 * this.beamAimDirection.y);
+
+        const angleRateFactor = 0.05 / 0.016;
+        const radiusRate = 0.008 / 0.016;
+        effect.chargeParticles.forEach(p => {
+            p.angle += p.speed * angleRateFactor * deltaTime;
+            p.radius -= radiusRate * deltaTime;
+
+            p.mesh.position.x = effect.energyBall.position.x + Math.cos(p.angle) * p.radius;
+            p.mesh.position.y = effect.energyBall.position.y + Math.sin(p.angle) * p.radius;
+        });
+
+        if (effect.elapsed >= effect.duration && !this.isChargingBeam) {
+            this.clearChargeEffect();
+        }
+    }
+
+    updateBeam(deltaTime) {
+        if (!this.activeBeam) return;
+        const beam = this.activeBeam;
+        const step = beam.beamSpeed * deltaTime;
+        beam.traveled += step;
+        beam.beamPos.x += beam.direction.x * step;
+        beam.beamPos.y += beam.direction.y * step;
+        beam.group.position.set(beam.beamPos.x, beam.beamPos.y, 0.2);
+
+        beam.particles.forEach(p => {
+            p.life += deltaTime;
+            p.offsetX += p.speed * deltaTime;
+            p.mesh.position.x = beam.beamPos.x + beam.direction.x * p.offsetX + beam.perpendicular.x * p.offsetY;
+            p.mesh.position.y = beam.beamPos.y + beam.direction.y * p.offsetX + beam.perpendicular.y * p.offsetY;
+            p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
+        });
+
+        const halfLength = beam.beamLength * 0.5;
+        const startX = beam.beamPos.x - beam.direction.x * halfLength;
+        const startY = beam.beamPos.y - beam.direction.y * halfLength;
+        const endX = beam.beamPos.x + beam.direction.x * halfLength;
+        const endY = beam.beamPos.y + beam.direction.y * halfLength;
+        const thickness = 0.7;
+        const beamBounds = {
+            left: Math.min(startX, endX) - thickness,
+            right: Math.max(startX, endX) + thickness,
+            top: Math.max(startY, endY) + thickness,
+            bottom: Math.min(startY, endY) - thickness
+        };
+
+        for (const enemy of this.getDamageTargets()) {
+            if (!enemy.isAlive || beam.hitEnemies.has(enemy)) continue;
+            const enemyBounds = enemy.getBounds();
+            if (checkAABBCollision(beamBounds, enemyBounds)) {
+                this.applyAbilityDamage(this.abilities.r, enemy, beam.damage);
+                beam.hitEnemies.add(enemy);
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
+                console.log(`KAME HAME HA hit for ${beam.damage} damage!`);
+            }
+        }
+
+        if (beam.traveled >= beam.maxTravel) {
+            if (beam.group.parent) {
+                beam.group.parent.remove(beam.group);
+            }
+            beam.particles.forEach(p => {
+                if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+            });
+            this.activeBeam = null;
+        }
+    }
+
+    updateExplosions(deltaTime) {
+        if (!this.activeExplosions.length) return;
+        for (let i = this.activeExplosions.length - 1; i >= 0; i--) {
+            const explosion = this.activeExplosions[i];
+            explosion.scale += explosion.scaleRate * deltaTime;
+            explosion.opacity -= explosion.fadeRate * deltaTime;
+            explosion.mesh.scale.set(explosion.scale, explosion.scale, 1);
+            explosion.mesh.material.opacity = explosion.opacity;
+
+            if (explosion.opacity <= 0) {
+                if (explosion.mesh.parent) {
+                    explosion.mesh.parent.remove(explosion.mesh);
+                }
+                this.activeExplosions.splice(i, 1);
+            }
+        }
+    }
+
+    updateKameChargeTimer(deltaTime) {
+        if (!this.isChargingBeam || this.kameChargeTimer <= 0) return;
+        this.kameChargeTimer -= deltaTime;
+        if (this.kameChargeTimer <= 0) {
+            this.kameChargeTimer = 0;
+            this.fireKameHameHa();
+            this.clearChargeEffect();
+        }
+    }
+
+    clearChargeEffect() {
+        if (!this.activeChargeEffect) return;
+        const effect = this.activeChargeEffect;
+        if (effect.energyBall && effect.energyBall.parent) {
+            effect.energyBall.parent.remove(effect.energyBall);
+        }
+        effect.chargeParticles.forEach(p => {
+            if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+        });
+        this.activeChargeEffect = null;
     }
 }

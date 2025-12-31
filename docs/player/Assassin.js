@@ -24,10 +24,28 @@ export class Assassin extends Hero {
         // Shadow walk state
         this.isShadowWalking = false;
         this.shadowWalkTimer = 0;
+        this.activeBombs = [];
 
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
         this.isTornadoSpinning = false;
+        this.tornadoSpinRemaining = 0;
+        this.tornadoSpinRateY = (Math.PI / 4) / 0.03;
+        this.tornadoSpinRateX = (Math.PI / 10) / 0.03;
+        this.flipOnceActive = false;
+        this.flipOnceElapsed = 0;
+        this.flipOnceDuration = 0;
+        this.flipLoopRemaining = 0;
+        this.daggerSlashHitsRemaining = 0;
+        this.daggerSlashTimer = 0;
+        this.daggerSlashInterval = 0.15;
+        this.daggerSlashResetTimer = 0;
+        this.daggerSlashResetDuration = 0.08;
+        this.activeSlashEffects = [];
+        this.activePoisonClouds = [];
+        this.activeAssassinateEffects = [];
+        this.activeTeleportTrails = [];
+        this.activeBleeds = [];
 
         // Set assassin abilities
         this.initializeAbilities();
@@ -156,24 +174,19 @@ export class Assassin extends Hero {
 
     playFlipLoop(durationMs = 280) {
         if (!this.flipAudio) return;
-        if (this.flipAudioTimer) {
-            clearTimeout(this.flipAudioTimer);
-            this.flipAudioTimer = null;
-        }
         this.flipAudio.pause();
         this.flipAudio.currentTime = 0;
         this.flipAudio.volume = this.flipSoundVolume;
         this.flipAudio.loop = true;
         this.flipAudio.play().catch(() => {});
-        this.flipAudioTimer = setTimeout(() => {
-            this.stopFlipLoop();
-        }, durationMs);
+        this.flipLoopRemaining = Math.max(0, durationMs) / 1000;
     }
 
     stopFlipLoop() {
         if (!this.flipAudio) return;
         this.flipAudio.pause();
         this.flipAudio.currentTime = 0;
+        this.flipLoopRemaining = 0;
     }
 
     initPoisonThrowAudio() {
@@ -231,6 +244,9 @@ export class Assassin extends Hero {
         }
 
         super.update(deltaTime, input);
+
+        this.updateAssassinTimers(deltaTime);
+        this.updatePoisonBombs(deltaTime);
 
         // Update shadow walk timer and shadow position
         if (this.isShadowWalking) {
@@ -294,36 +310,7 @@ export class Assassin extends Hero {
         this.createDualCrescentSlashEffect();
 
         // Quick slashes - 3 hits hitting both sides at once
-        for (let i = 0; i < 3; i++) {
-            setTimeout(() => {
-                // Both daggers slash simultaneously
-                this.leftDagger.rotation.z = Math.PI / 4 - 1.0; // Slash animation left
-                this.rightDagger.rotation.z = -Math.PI / 4 + 1.0; // Slash animation right
-
-                setTimeout(() => {
-                    this.leftDagger.rotation.z = Math.PI / 4; // Reset left
-                    this.rightDagger.rotation.z = -Math.PI / 4; // Reset right
-                }, 80);
-
-                // Deal damage on LEFT side
-                const leftSlashBounds = {
-                    left: this.position.x - 1.5,
-                    right: this.position.x - 0.2,
-                    top: this.position.y + 1.2,
-                    bottom: this.position.y - 1.2
-                };
-                this.damageEnemiesInArea(leftSlashBounds, this.abilities.q, true);
-
-                // Deal damage on RIGHT side
-                const rightSlashBounds = {
-                    left: this.position.x + 0.2,
-                    right: this.position.x + 1.5,
-                    top: this.position.y + 1.2,
-                    bottom: this.position.y - 1.2
-                };
-                this.damageEnemiesInArea(rightSlashBounds, this.abilities.q, true);
-            }, i * 150);
-        }
+        this.startDaggerSlashCombo();
     }
 
     /**
@@ -332,18 +319,7 @@ export class Assassin extends Hero {
      */
     playTornadoSpin(durationMs = 500) {
         this.isTornadoSpinning = true;
-        const startTime = performance.now();
-        const spinInterval = setInterval(() => {
-            const elapsed = performance.now() - startTime;
-            if (elapsed >= durationMs) {
-                clearInterval(spinInterval);
-                this.mesh.rotation.z = 0;
-                this.isTornadoSpinning = false;
-                return;
-            }
-            this.mesh.rotation.y += Math.PI / 4;
-            this.mesh.rotation.x += Math.PI / 10;
-        }, 30);
+        this.tornadoSpinRemaining = Math.max(0, durationMs) / 1000;
     }
 
     /**
@@ -351,18 +327,9 @@ export class Assassin extends Hero {
      * @param {number} durationMs
      */
     playFlipOnce(durationMs = 280) {
-        const startTime = performance.now();
-        const flipInterval = setInterval(() => {
-            const t = (performance.now() - startTime) / durationMs;
-            if (t >= 1) {
-                clearInterval(flipInterval);
-                if (!this.isTornadoSpinning) {
-                    this.mesh.rotation.x = 0;
-                }
-                return;
-            }
-            this.mesh.rotation.x = t * Math.PI;
-        }, 16);
+        this.flipOnceDuration = Math.max(0, durationMs) / 1000;
+        this.flipOnceElapsed = 0;
+        this.flipOnceActive = true;
     }
 
     /**
@@ -431,20 +398,11 @@ export class Assassin extends Hero {
         slashGroup.position.set(0, 0, 0.1); // Relative to hero position
         this.mesh.add(slashGroup);
 
-        // Fade out effect
-        let opacity = 0.7;
-        const fadeInterval = setInterval(() => {
-            opacity -= 0.1;
-
-            slashGroup.children.forEach(child => {
-                child.material.opacity = opacity;
-            });
-
-            if (opacity <= 0) {
-                clearInterval(fadeInterval);
-                this.mesh.remove(slashGroup);
-            }
-        }, 50);
+        this.activeSlashEffects.push({
+            group: slashGroup,
+            opacity: 0.7,
+            fadeRate: 0.1 / 0.05
+        });
     }
 
     /**
@@ -492,25 +450,39 @@ export class Assassin extends Hero {
 
         // Throw direction based on facing or aim
         const throwDirection = direction;
-        let bombX = bombGroup.position.x;
-        let bombY = bombGroup.position.y;
-        let velocityY = useAim ? throwDirection.y * 8 : 5;
+        const velocityY = useAim ? throwDirection.y * 8 : 5;
         const velocityX = throwDirection.x * 8;
 
         // Get level reference (stored when enemy reference is set)
         const level = this.level || { platforms: [] };
 
-        // Animate bomb trajectory
-        const bombInterval = setInterval(() => {
-            bombX += velocityX * 0.016;
-            velocityY -= 20 * 0.016; // Gravity
-            bombY += velocityY * 0.016;
+        this.activeBombs.push({
+            mesh: bombGroup,
+            velocityX,
+            velocityY,
+            gravity: -20,
+            level,
+            owner: this
+        });
+    }
 
-            bombGroup.position.x = bombX;
-            bombGroup.position.y = bombY;
-            bombGroup.rotation.z += 0.2;
+    /**
+     * Update poison bombs (tick-driven).
+     * @param {number} deltaTime
+     */
+    updatePoisonBombs(deltaTime) {
+        if (!this.activeBombs.length) return;
+        const remaining = [];
+        for (const bomb of this.activeBombs) {
+            if (!bomb || !bomb.mesh) continue;
 
-            // Create bomb bounds for collision detection
+            bomb.mesh.position.x += bomb.velocityX * deltaTime;
+            bomb.velocityY += bomb.gravity * deltaTime;
+            bomb.mesh.position.y += bomb.velocityY * deltaTime;
+            bomb.mesh.rotation.z += 0.2;
+
+            const bombX = bomb.mesh.position.x;
+            const bombY = bomb.mesh.position.y;
             const bombBounds = {
                 left: bombX - 0.15,
                 right: bombX + 0.15,
@@ -518,10 +490,9 @@ export class Assassin extends Hero {
                 bottom: bombY - 0.15
             };
 
-            // Check collision with platforms
             let hitPlatform = false;
-            if (level.platforms) {
-                for (const platform of level.platforms) {
+            if (bomb.level.platforms) {
+                for (const platform of bomb.level.platforms) {
                     if (checkAABBCollision(bombBounds, platform.bounds)) {
                         hitPlatform = true;
                         break;
@@ -530,20 +501,23 @@ export class Assassin extends Hero {
             }
 
             const hitGround = bombY < -2;
-            const outOfRange = Math.abs(bombX - this.position.x) > 10;
+            const outOfRange = Math.abs(bombX - bomb.owner.position.x) > 10;
 
-            // Check if hit ground, platform, or went off screen
             if (hitPlatform || hitGround || outOfRange) {
-                clearInterval(bombInterval);
-                this.mesh.parent.remove(bombGroup);
+                if (bomb.mesh.parent) {
+                    bomb.mesh.parent.remove(bomb.mesh);
+                }
                 if (hitPlatform || hitGround) {
                     this.playPoisonImpactSound();
                 }
-
-                // Create poison cloud at impact location
                 this.createPoisonCloud(bombX, bombY);
+                continue;
             }
-        }, 16);
+
+            remaining.push(bomb);
+        }
+
+        this.activeBombs = remaining;
     }
 
     /**
@@ -570,37 +544,18 @@ export class Assassin extends Hero {
         }
         this.mesh.parent.add(cloudGroup);
 
-        // Damage enemies in cloud over time
-        let cloudDuration = 3; // 3 seconds
-        const damageInterval = setInterval(() => {
-            cloudDuration -= 0.5;
-
-            const cloudBounds = {
-                left: x - 1.6,
-                right: x + 1.6,
-                top: y + 1.2,
-                bottom: y - 1.2
-            };
-            this.damageEnemiesInArea(cloudBounds, this.abilities.w, false, true);
-
-            if (cloudDuration <= 0) {
-                clearInterval(damageInterval);
-                // Dissipate
-                let fade = 0.45;
-                const dissipate = setInterval(() => {
-                    fade -= 0.07;
-                    cloudGroup.children.forEach((puff) => {
-                        puff.material.opacity = Math.max(0, fade);
-                        puff.scale.set(1 + (0.45 - fade), 1 + (0.45 - fade), 1);
-                        puff.position.y += 0.02;
-                    });
-                    if (fade <= 0) {
-                        clearInterval(dissipate);
-                        this.mesh.parent.remove(cloudGroup);
-                    }
-                }, 40);
-            }
-        }, 500);
+        this.activePoisonClouds.push({
+            group: cloudGroup,
+            x,
+            y,
+            duration: 3,
+            damageTimer: 0,
+            damageInterval: 0.5,
+            opacity: 0.45,
+            dissipating: false,
+            fadeRate: 0.07 / 0.04,
+            riseRate: 0.02 / 0.04
+        });
     }
 
     /**
@@ -791,22 +746,17 @@ export class Assassin extends Hero {
         group.position.set(x, y, 0.3);
         this.mesh.parent.add(group);
 
-        let opacity = 0.9;
-        let scale = 1;
-        const fadeInterval = setInterval(() => {
-            opacity -= 0.08;
-            scale += 0.25;
-            group.scale.set(scale, scale, 1);
-            ring.material.opacity = opacity * 0.6;
-            slash1.material.opacity = opacity;
-            slash2.material.opacity = opacity;
-            core.material.opacity = opacity;
-
-            if (opacity <= 0) {
-                clearInterval(fadeInterval);
-                this.mesh.parent.remove(group);
-            }
-        }, 30);
+        this.activeAssassinateEffects.push({
+            group,
+            ring,
+            slash1,
+            slash2,
+            core,
+            opacity: 0.9,
+            scale: 1,
+            fadeRate: 0.08 / 0.03,
+            scaleRate: 0.25 / 0.03
+        });
     }
 
     /**
@@ -844,22 +794,16 @@ export class Assassin extends Hero {
      * Apply bleed damage over time
      */
     applyBleed(enemy, ability = null) {
-        let bleedTicks = 3;
         if (typeof enemy.setBleeding === 'function') {
-            enemy.setBleeding(bleedTicks);
+            enemy.setBleeding(3);
         }
-        const bleedInterval = setInterval(() => {
-            if (enemy.isAlive && bleedTicks > 0) {
-                this.applyAbilityDamage(ability, enemy, 1);
-                if (typeof enemy.flashBleed === 'function') {
-                    enemy.flashBleed();
-                }
-                console.log('ðŸ©¸ Bleed damage!');
-                bleedTicks--;
-            } else {
-                clearInterval(bleedInterval);
-            }
-        }, 1000);
+        this.activeBleeds.push({
+            enemy,
+            ability,
+            ticksRemaining: 3,
+            timer: 0,
+            interval: 1
+        });
     }
 
     /**
@@ -890,21 +834,242 @@ export class Assassin extends Hero {
 
         this.mesh.parent.add(group);
 
-        let opacity = 0.7;
-        let scale = 1;
-        const fadeInterval = setInterval(() => {
-            opacity -= 0.08;
-            scale += 0.18;
-            group.scale.set(scale, scale, 1);
-            group.children.forEach((streak, idx) => {
-                streak.material.opacity = opacity;
-                streak.position.x += (idx % 2 === 0 ? 1 : -1) * 0.05;
-                streak.position.y += 0.03;
-            });
-            if (opacity <= 0) {
-                clearInterval(fadeInterval);
-                this.mesh.parent.remove(group);
+        this.activeTeleportTrails.push({
+            group,
+            opacity: 0.7,
+            scale: 1,
+            fadeRate: 0.08 / 0.03,
+            scaleRate: 0.18 / 0.03,
+            driftRateX: 0.05 / 0.03,
+            driftRateY: 0.03 / 0.03
+        });
+    }
+
+    startDaggerSlashCombo() {
+        this.daggerSlashHitsRemaining = 3;
+        this.performDaggerSlashHit();
+        this.daggerSlashHitsRemaining = 2;
+        this.daggerSlashTimer = this.daggerSlashInterval;
+    }
+
+    performDaggerSlashHit() {
+        if (this.leftDagger && this.rightDagger) {
+            this.leftDagger.rotation.z = Math.PI / 4 - 1.0;
+            this.rightDagger.rotation.z = -Math.PI / 4 + 1.0;
+            this.daggerSlashResetTimer = this.daggerSlashResetDuration;
+        }
+
+        const leftSlashBounds = {
+            left: this.position.x - 1.5,
+            right: this.position.x - 0.2,
+            top: this.position.y + 1.2,
+            bottom: this.position.y - 1.2
+        };
+        this.damageEnemiesInArea(leftSlashBounds, this.abilities.q, true);
+
+        const rightSlashBounds = {
+            left: this.position.x + 0.2,
+            right: this.position.x + 1.5,
+            top: this.position.y + 1.2,
+            bottom: this.position.y - 1.2
+        };
+        this.damageEnemiesInArea(rightSlashBounds, this.abilities.q, true);
+    }
+
+    updateAssassinTimers(deltaTime) {
+        this.updateFlipLoop(deltaTime);
+        this.updateDaggerSlashCombo(deltaTime);
+        this.updateDaggerSlashReset(deltaTime);
+        this.updateTornadoSpin(deltaTime);
+        this.updateFlipOnce(deltaTime);
+        this.updateSlashEffects(deltaTime);
+        this.updatePoisonClouds(deltaTime);
+        this.updateAssassinateEffects(deltaTime);
+        this.updateTeleportTrails(deltaTime);
+        this.updateBleeds(deltaTime);
+    }
+
+    updateFlipLoop(deltaTime) {
+        if (this.flipLoopRemaining <= 0) return;
+        this.flipLoopRemaining -= deltaTime;
+        if (this.flipLoopRemaining <= 0) {
+            this.stopFlipLoop();
+        }
+    }
+
+    updateDaggerSlashCombo(deltaTime) {
+        if (this.daggerSlashHitsRemaining <= 0) return;
+        this.daggerSlashTimer -= deltaTime;
+        while (this.daggerSlashHitsRemaining > 0 && this.daggerSlashTimer <= 0) {
+            this.performDaggerSlashHit();
+            this.daggerSlashHitsRemaining -= 1;
+            this.daggerSlashTimer += this.daggerSlashInterval;
+        }
+    }
+
+    updateDaggerSlashReset(deltaTime) {
+        if (this.daggerSlashResetTimer <= 0) return;
+        this.daggerSlashResetTimer -= deltaTime;
+        if (this.daggerSlashResetTimer <= 0) {
+            if (this.leftDagger && this.rightDagger) {
+                this.leftDagger.rotation.z = Math.PI / 4;
+                this.rightDagger.rotation.z = -Math.PI / 4;
             }
-        }, 30);
+        }
+    }
+
+    updateTornadoSpin(deltaTime) {
+        if (this.tornadoSpinRemaining <= 0) return;
+        this.tornadoSpinRemaining -= deltaTime;
+        this.mesh.rotation.y += this.tornadoSpinRateY * deltaTime;
+        this.mesh.rotation.x += this.tornadoSpinRateX * deltaTime;
+        if (this.tornadoSpinRemaining <= 0) {
+            this.isTornadoSpinning = false;
+            this.mesh.rotation.z = 0;
+        }
+    }
+
+    updateFlipOnce(deltaTime) {
+        if (!this.flipOnceActive || this.flipOnceDuration <= 0) return;
+        this.flipOnceElapsed += deltaTime;
+        const t = Math.min(1, this.flipOnceElapsed / this.flipOnceDuration);
+        this.mesh.rotation.x = t * Math.PI;
+        if (t >= 1) {
+            this.flipOnceActive = false;
+            if (!this.isTornadoSpinning) {
+                this.mesh.rotation.x = 0;
+            }
+        }
+    }
+
+    updateSlashEffects(deltaTime) {
+        if (!this.activeSlashEffects.length) return;
+        for (let i = this.activeSlashEffects.length - 1; i >= 0; i--) {
+            const effect = this.activeSlashEffects[i];
+            effect.opacity -= effect.fadeRate * deltaTime;
+            effect.group.children.forEach(child => {
+                if (child.material) {
+                    child.material.opacity = effect.opacity;
+                }
+            });
+            if (effect.opacity <= 0) {
+                this.mesh.remove(effect.group);
+                this.activeSlashEffects.splice(i, 1);
+            }
+        }
+    }
+
+    updatePoisonClouds(deltaTime) {
+        if (!this.activePoisonClouds.length) return;
+        for (let i = this.activePoisonClouds.length - 1; i >= 0; i--) {
+            const cloud = this.activePoisonClouds[i];
+            if (!cloud || !cloud.group) {
+                this.activePoisonClouds.splice(i, 1);
+                continue;
+            }
+
+            if (!cloud.dissipating) {
+                cloud.duration -= deltaTime;
+                cloud.damageTimer += deltaTime;
+                while (cloud.damageTimer >= cloud.damageInterval) {
+                    cloud.damageTimer -= cloud.damageInterval;
+                    const cloudBounds = {
+                        left: cloud.x - 1.6,
+                        right: cloud.x + 1.6,
+                        top: cloud.y + 1.2,
+                        bottom: cloud.y - 1.2
+                    };
+                    this.damageEnemiesInArea(cloudBounds, this.abilities.w, false, true);
+                }
+
+                if (cloud.duration <= 0) {
+                    cloud.dissipating = true;
+                }
+            } else {
+                cloud.opacity -= cloud.fadeRate * deltaTime;
+                cloud.group.children.forEach((puff) => {
+                    if (puff.material) {
+                        puff.material.opacity = Math.max(0, cloud.opacity);
+                    }
+                    const scale = 1 + (0.45 - cloud.opacity);
+                    puff.scale.set(scale, scale, 1);
+                    puff.position.y += cloud.riseRate * deltaTime;
+                });
+                if (cloud.opacity <= 0) {
+                    if (cloud.group.parent) {
+                        cloud.group.parent.remove(cloud.group);
+                    }
+                    this.activePoisonClouds.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    updateAssassinateEffects(deltaTime) {
+        if (!this.activeAssassinateEffects.length) return;
+        for (let i = this.activeAssassinateEffects.length - 1; i >= 0; i--) {
+            const effect = this.activeAssassinateEffects[i];
+            effect.opacity -= effect.fadeRate * deltaTime;
+            effect.scale += effect.scaleRate * deltaTime;
+            effect.group.scale.set(effect.scale, effect.scale, 1);
+            effect.ring.material.opacity = effect.opacity * 0.6;
+            effect.slash1.material.opacity = effect.opacity;
+            effect.slash2.material.opacity = effect.opacity;
+            effect.core.material.opacity = effect.opacity;
+
+            if (effect.opacity <= 0) {
+                if (effect.group.parent) {
+                    effect.group.parent.remove(effect.group);
+                }
+                this.activeAssassinateEffects.splice(i, 1);
+            }
+        }
+    }
+
+    updateTeleportTrails(deltaTime) {
+        if (!this.activeTeleportTrails.length) return;
+        for (let i = this.activeTeleportTrails.length - 1; i >= 0; i--) {
+            const trail = this.activeTeleportTrails[i];
+            trail.opacity -= trail.fadeRate * deltaTime;
+            trail.scale += trail.scaleRate * deltaTime;
+            trail.group.scale.set(trail.scale, trail.scale, 1);
+            trail.group.children.forEach((streak, idx) => {
+                if (streak.material) {
+                    streak.material.opacity = trail.opacity;
+                }
+                streak.position.x += (idx % 2 === 0 ? 1 : -1) * trail.driftRateX * deltaTime;
+                streak.position.y += trail.driftRateY * deltaTime;
+            });
+            if (trail.opacity <= 0) {
+                if (trail.group.parent) {
+                    trail.group.parent.remove(trail.group);
+                }
+                this.activeTeleportTrails.splice(i, 1);
+            }
+        }
+    }
+
+    updateBleeds(deltaTime) {
+        if (!this.activeBleeds.length) return;
+        for (let i = this.activeBleeds.length - 1; i >= 0; i--) {
+            const bleed = this.activeBleeds[i];
+            if (!bleed.enemy || !bleed.enemy.isAlive || bleed.ticksRemaining <= 0) {
+                this.activeBleeds.splice(i, 1);
+                continue;
+            }
+            bleed.timer += deltaTime;
+            while (bleed.timer >= bleed.interval && bleed.ticksRemaining > 0) {
+                bleed.timer -= bleed.interval;
+                this.applyAbilityDamage(bleed.ability, bleed.enemy, 1);
+                if (typeof bleed.enemy.flashBleed === 'function') {
+                    bleed.enemy.flashBleed();
+                }
+                console.log('ðŸ©¸ Bleed damage!');
+                bleed.ticksRemaining -= 1;
+            }
+            if (bleed.ticksRemaining <= 0) {
+                this.activeBleeds.splice(i, 1);
+            }
+        }
     }
 }

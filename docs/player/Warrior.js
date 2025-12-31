@@ -27,6 +27,16 @@ export class Warrior extends Hero {
         this.dashResetCount = 0;
         this.shieldBashInvuln = 0;
         this.isSpinningUltimate = false;
+        this.timedActions = [];
+        this.shieldAnim = null;
+        this.swordAnim = null;
+        this.activeCrescentSlashes = [];
+        this.activeDashTrails = [];
+        this.activeWhirlwindEffects = [];
+        this.whirlwindSpin = null;
+        this.activeShockwaves = [];
+        this.activeShieldBashWinds = [];
+        this.activeEnemyPushes = [];
 
         // Set warrior abilities
         this.initializeAbilities();
@@ -308,22 +318,26 @@ export class Warrior extends Hero {
         ];
 
         swings.forEach((swing, index) => {
-            setTimeout(() => {
+            this.scheduleAction(swing.delay / 1000, () => {
+                if (!this.sword) return;
                 // Wind up
                 this.sword.rotation.z = swing.start;
 
-                setTimeout(() => {
+                this.scheduleAction(0.08, () => {
+                    if (!this.sword) return;
                     // Slash
                     this.sword.rotation.z = swing.end;
                     this.playSwordSwingSound();
                     this.createCrescentSlash(true, swing.start, swing.end, index, swing.offsetY, swing.tint);
-                }, 80);
-            }, swing.delay);
+                });
+            });
         });
 
-        setTimeout(() => {
-            this.sword.rotation.z = originalRot;
-        }, 600);
+        this.scheduleAction(0.6, () => {
+            if (this.sword) {
+                this.sword.rotation.z = originalRot;
+            }
+        });
     }
 
     /**
@@ -393,24 +407,14 @@ export class Warrior extends Hero {
         }
 
         // Animate - fade out and scale up (faster fade)
-        let opacity = 0.5;
-        let scale = 1.0;
-        const animInterval = setInterval(() => {
-            opacity -= 0.2; // Increased from 0.12 for faster fade
-            scale += 0.2;
-
-            // Update all segments
-            slashGroup.children.forEach(segment => {
-                segment.material.opacity = opacity;
-            });
-            // Preserve the facing direction while scaling
-            slashGroup.scale.set(scale * this.facingDirection, scale, 1);
-
-            if (opacity <= 0) {
-                clearInterval(animInterval);
-                this.mesh.parent.remove(slashGroup);
-            }
-        }, 30); // Reduced from 40ms for faster animation
+        this.activeCrescentSlashes.push({
+            group: slashGroup,
+            opacity: 0.5,
+            scale: 1.0,
+            fadeRate: 0.2 / 0.03,
+            scaleRate: 0.2 / 0.03,
+            facing: this.facingDirection
+        });
     }
 
     /**
@@ -435,10 +439,10 @@ export class Warrior extends Hero {
         this.sword.position.y = 0.2;
         this.sword.rotation.z = 0.2;
 
-        setTimeout(() => {
+        this.scheduleAction(0.1, () => {
             // Bash forward with force
-            this.animateShieldTo(-1.0, -0.1, 0.3, 1.2, 120);
-            this.animateSwordTo(1.0, -0.1, -0.3, 1.2, 120);
+            this.startShieldAnimation(-1.0, -0.1, 0.3, 1.2, 0.12);
+            this.startSwordAnimation(1.0, -0.1, -0.3, 1.2, 0.12);
             this.shieldBashInvuln = 0.25;
             this.createShieldBashWind(-this.facingDirection);
             this.createShieldBashWind(this.facingDirection);
@@ -456,13 +460,13 @@ export class Warrior extends Hero {
                 bottom: this.position.y - 1
             };
             this.shieldBashKnockback(bashBounds);
-        }, 100);
+        });
 
-        setTimeout(() => {
+        this.scheduleAction(0.35, () => {
             // Return to original position
-            this.animateShieldTo(originalX, originalY, originalRot, 1, 140);
-            this.animateSwordTo(swordOriginalX, swordOriginalY, swordOriginalRot, 1, 140);
-        }, 350);
+            this.startShieldAnimation(originalX, originalY, originalRot, 1, 0.14);
+            this.startSwordAnimation(swordOriginalX, swordOriginalY, swordOriginalRot, 1, 0.14);
+        });
     }
 
     /**
@@ -501,9 +505,9 @@ export class Warrior extends Hero {
         // Visual effect - scale horizontally (preserve facing direction)
         const currentFacing = this.facingDirection;
         this.mesh.scale.x = currentFacing * 1.5;
-        setTimeout(() => {
+        this.scheduleAction(0.1, () => {
             this.mesh.scale.x = currentFacing;
-        }, 100);
+        });
 
         // Create dash trail effect
         this.createDashTrail();
@@ -524,16 +528,11 @@ export class Warrior extends Hero {
         this.mesh.parent.add(trail);
 
         // Fade out trail
-        let opacity = 0.5;
-        const fadeInterval = setInterval(() => {
-            opacity -= 0.1;
-            trail.material.opacity = opacity;
-
-            if (opacity <= 0) {
-                clearInterval(fadeInterval);
-                this.mesh.parent.remove(trail);
-            }
-        }, 30);
+        this.activeDashTrails.push({
+            mesh: trail,
+            opacity: 0.5,
+            fadeRate: 0.1 / 0.03
+        });
     }
 
     /**
@@ -550,27 +549,13 @@ export class Warrior extends Hero {
         this.createWhirlwindEffect(whirlwindRange, whirlDurationMs);
 
         // Spin animation
-        let spinCount = 0;
         this.isSpinningUltimate = true;
-        const spinInterval = setInterval(() => {
-            this.mesh.rotation.z += Math.PI / 4;
-            spinCount++;
-
-            // Damage enemies nearby during spin
-            const whirlwindBounds = {
-                left: this.position.x - whirlwindRange,
-                right: this.position.x + whirlwindRange,
-                top: this.position.y + whirlwindRange,
-                bottom: this.position.y - whirlwindRange
-            };
-            this.damageEnemiesInArea(whirlwindBounds, this.abilities.r);
-
-            if (spinCount >= 16) { // 2 full rotations
-                clearInterval(spinInterval);
-                this.mesh.rotation.z = 0; // Reset rotation
-                this.isSpinningUltimate = false;
-            }
-        }, 50);
+        this.whirlwindSpin = {
+            ticksRemaining: 16,
+            tickTimer: 0,
+            interval: 0.05,
+            range: whirlwindRange
+        };
     }
 
     /**
@@ -598,12 +583,13 @@ export class Warrior extends Hero {
                 // Smaller segments at the center, larger at the edge
                 const segmentSize = 0.15 + (t * 0.2);
                 const segmentGeometry = new THREE.BoxGeometry(segmentSize, segmentSize * 0.6, 0.05);
-                const segmentMaterial = new THREE.MeshBasicMaterial({
-                    color: 0xccffff, // Light cyan wind color
-                    transparent: true,
-                    opacity: 0.4 * (1 - t * 0.3) // Fade slightly toward edges
-                });
-                const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+            const segmentMaterial = new THREE.MeshBasicMaterial({
+                color: 0xccffff, // Light cyan wind color
+                transparent: true,
+                opacity: 0.4 * (1 - t * 0.3) // Fade slightly toward edges
+            });
+            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+            segment.userData.opacityFactor = segmentMaterial.opacity / 0.4;
 
                 segment.position.set(x, y, 0);
                 segment.rotation.z = spiralAngle + Math.PI / 2; // Perpendicular to spiral
@@ -617,30 +603,16 @@ export class Warrior extends Hero {
         this.mesh.add(whirlwindGroup);
 
         // Animate - spin and fade out over duration
-        let rotation = 0;
-        const baseOpacity = 0.4;
-        let scale = 1.0;
-        const startTime = performance.now();
-        const animInterval = setInterval(() => {
-            const elapsed = performance.now() - startTime;
-            const t = Math.min(1, elapsed / Math.max(1, durationMs));
-            rotation += 0.4; // Faster spin
-            const opacity = baseOpacity * (1 - t);
-            scale = 1.0 + t * 0.8;
-
-            whirlwindGroup.rotation.z = rotation;
-            whirlwindGroup.scale.set(scale, scale, 1);
-
-            // Update opacity for all segments
-            whirlwindGroup.children.forEach(segment => {
-                segment.material.opacity = opacity * (segment.material.opacity / baseOpacity);
-            });
-
-            if (t >= 1) {
-                clearInterval(animInterval);
-                this.mesh.remove(whirlwindGroup);
-            }
-        }, 50);
+        this.activeWhirlwindEffects.push({
+            group: whirlwindGroup,
+            duration: Math.max(0.001, durationMs / 1000),
+            elapsed: 0,
+            rotation: 0,
+            rotateRate: 0.4 / 0.05,
+            baseOpacity: 0.4,
+            scale: 1.0,
+            scaleRate: 0.8
+        });
     }
 
     /**
@@ -659,6 +631,7 @@ export class Warrior extends Hero {
         if (this.shieldBashInvuln > 0) {
             this.shieldBashInvuln -= deltaTime;
         }
+        this.updateWarriorTimers(deltaTime);
 
     }
 
@@ -769,23 +742,14 @@ export class Warrior extends Hero {
                 const knockDir = enemy.position.x >= this.position.x ? 1 : -1;
                 const startX = enemy.position.x;
                 const targetX = enemy.position.x + knockDir * 2.2;
-                const pushDuration = 120;
-                const startTime = performance.now();
-
-                const pushInterval = setInterval(() => {
-                    const t = (performance.now() - startTime) / pushDuration;
-                    if (t >= 1) {
-                        clearInterval(pushInterval);
-                        enemy.position.x = targetX;
-                        enemy.mesh.position.x = targetX;
-                        enemy.direction = knockDir;
-                        return;
-                    }
-                    const eased = t * (2 - t);
-                    const nextX = startX + (targetX - startX) * eased;
-                    enemy.position.x = nextX;
-                    enemy.mesh.position.x = nextX;
-                }, 16);
+                this.activeEnemyPushes.push({
+                    enemy,
+                    startX,
+                    targetX,
+                    elapsed: 0,
+                    duration: 0.12,
+                    direction: knockDir
+                });
                 hitEnemies.push(enemy);
             }
         }
@@ -821,24 +785,15 @@ export class Warrior extends Hero {
         this.mesh.parent.add(leftWave);
         this.mesh.parent.add(rightWave);
 
-        let opacity = 0.6;
-        let scale = 1;
-        const waveInterval = setInterval(() => {
-            opacity -= 0.08;
-            scale += 0.25;
-            leftWave.material.opacity = opacity;
-            rightWave.material.opacity = opacity;
-            leftWave.scale.set(scale, 1, 1);
-            rightWave.scale.set(scale, 1, 1);
-            leftWave.position.x -= 0.4;
-            rightWave.position.x += 0.4;
-
-            if (opacity <= 0) {
-                clearInterval(waveInterval);
-                this.mesh.parent.remove(leftWave);
-                this.mesh.parent.remove(rightWave);
-            }
-        }, 30);
+        this.activeShockwaves.push({
+            leftWave,
+            rightWave,
+            opacity: 0.6,
+            scale: 1,
+            fadeRate: 0.08 / 0.03,
+            scaleRate: 0.25 / 0.03,
+            driftRate: 0.4 / 0.03
+        });
     }
 
     /**
@@ -876,85 +831,294 @@ export class Warrior extends Hero {
 
         this.mesh.parent.add(windGroup);
 
-        let opacity = 0.75;
-        let drift = 0;
-        const windInterval = setInterval(() => {
-            opacity -= 0.08;
-            drift += 0.18;
-            windGroup.children.forEach((seg, index) => {
-                seg.material.opacity = opacity;
-                seg.position.x += direction * (0.18 + index * 0.01);
-                seg.position.y += 0.01 * Math.sin(index);
-                seg.scale.x = 1 + drift * 0.03;
-            });
-
-            if (opacity <= 0) {
-                clearInterval(windInterval);
-                this.mesh.parent.remove(windGroup);
-            }
-        }, 30);
+        this.activeShieldBashWinds.push({
+            group: windGroup,
+            opacity: 0.75,
+            drift: 0,
+            fadeRate: 0.08 / 0.03,
+            driftRate: 0.18 / 0.03,
+            direction
+        });
     }
 
     /**
      * Smooth shield animation helper
      */
     animateShieldTo(x, y, rotZ, scale, durationMs) {
-        const startX = this.shield.position.x;
-        const startY = this.shield.position.y;
-        const startRot = this.shield.rotation.z;
-        const startScale = this.shield.scale.x;
-        const startTime = performance.now();
-
-        const animInterval = setInterval(() => {
-            const t = (performance.now() - startTime) / durationMs;
-            if (t >= 1) {
-                clearInterval(animInterval);
-                this.shield.position.x = x;
-                this.shield.position.y = y;
-                this.shield.rotation.z = rotZ;
-                this.shield.scale.set(scale, scale, scale);
-                return;
-            }
-
-            const eased = t * (2 - t);
-            this.shield.position.x = startX + (x - startX) * eased;
-            this.shield.position.y = startY + (y - startY) * eased;
-            this.shield.rotation.z = startRot + (rotZ - startRot) * eased;
-            const nextScale = startScale + (scale - startScale) * eased;
-            this.shield.scale.set(nextScale, nextScale, nextScale);
-        }, 16);
+        this.startShieldAnimation(x, y, rotZ, scale, durationMs / 1000);
     }
 
     /**
      * Smooth sword animation helper (mirrors shield bash).
      */
     animateSwordTo(x, y, rotZ, scale, durationMs) {
-        if (!this.sword) {
+        this.startSwordAnimation(x, y, rotZ, scale, durationMs / 1000);
+    }
+
+    scheduleAction(delaySeconds, action) {
+        if (delaySeconds <= 0) {
+            action();
             return;
         }
-        const startX = this.sword.position.x;
-        const startY = this.sword.position.y;
-        const startRot = this.sword.rotation.z;
-        const startScale = this.sword.scale.x;
-        const startTime = performance.now();
+        this.timedActions.push({ remaining: delaySeconds, action });
+    }
 
-        const animInterval = setInterval(() => {
-            const t = (performance.now() - startTime) / durationMs;
-            if (t >= 1) {
-                clearInterval(animInterval);
-                this.sword.position.x = x;
-                this.sword.position.y = y;
-                this.sword.rotation.z = rotZ;
-                this.sword.scale.set(scale, scale, scale);
-                return;
+    updateTimedActions(deltaTime) {
+        if (!this.timedActions.length) return;
+        for (let i = this.timedActions.length - 1; i >= 0; i--) {
+            const item = this.timedActions[i];
+            item.remaining -= deltaTime;
+            if (item.remaining <= 0) {
+                this.timedActions.splice(i, 1);
+                item.action();
             }
+        }
+    }
 
+    startShieldAnimation(x, y, rotZ, scale, durationSeconds) {
+        if (!this.shield) return;
+        const duration = Math.max(0.001, durationSeconds || 0);
+        if (durationSeconds <= 0) {
+            this.shield.position.set(x, y, this.shield.position.z);
+            this.shield.rotation.z = rotZ;
+            this.shield.scale.set(scale, scale, scale);
+            this.shieldAnim = null;
+            return;
+        }
+        this.shieldAnim = {
+            mesh: this.shield,
+            startX: this.shield.position.x,
+            startY: this.shield.position.y,
+            startRot: this.shield.rotation.z,
+            startScale: this.shield.scale.x,
+            targetX: x,
+            targetY: y,
+            targetRot: rotZ,
+            targetScale: scale,
+            duration,
+            elapsed: 0
+        };
+    }
+
+    startSwordAnimation(x, y, rotZ, scale, durationSeconds) {
+        if (!this.sword) return;
+        const duration = Math.max(0.001, durationSeconds || 0);
+        if (durationSeconds <= 0) {
+            this.sword.position.set(x, y, this.sword.position.z);
+            this.sword.rotation.z = rotZ;
+            this.sword.scale.set(scale, scale, scale);
+            this.swordAnim = null;
+            return;
+        }
+        this.swordAnim = {
+            mesh: this.sword,
+            startX: this.sword.position.x,
+            startY: this.sword.position.y,
+            startRot: this.sword.rotation.z,
+            startScale: this.sword.scale.x,
+            targetX: x,
+            targetY: y,
+            targetRot: rotZ,
+            targetScale: scale,
+            duration,
+            elapsed: 0
+        };
+    }
+
+    updateTransformAnimation(anim, deltaTime) {
+        if (!anim || !anim.mesh) return true;
+        anim.elapsed += deltaTime;
+        const t = Math.min(1, anim.elapsed / anim.duration);
+        const eased = t * (2 - t);
+        anim.mesh.position.x = anim.startX + (anim.targetX - anim.startX) * eased;
+        anim.mesh.position.y = anim.startY + (anim.targetY - anim.startY) * eased;
+        anim.mesh.rotation.z = anim.startRot + (anim.targetRot - anim.startRot) * eased;
+        const nextScale = anim.startScale + (anim.targetScale - anim.startScale) * eased;
+        anim.mesh.scale.set(nextScale, nextScale, nextScale);
+        return t >= 1;
+    }
+
+    updateCrescentSlashes(deltaTime) {
+        if (!this.activeCrescentSlashes.length) return;
+        for (let i = this.activeCrescentSlashes.length - 1; i >= 0; i--) {
+            const effect = this.activeCrescentSlashes[i];
+            effect.opacity -= effect.fadeRate * deltaTime;
+            effect.scale += effect.scaleRate * deltaTime;
+            effect.group.children.forEach(segment => {
+                if (segment.material) {
+                    segment.material.opacity = effect.opacity;
+                }
+            });
+            effect.group.scale.set(effect.scale * effect.facing, effect.scale, 1);
+            if (effect.opacity <= 0) {
+                if (effect.group.parent) {
+                    effect.group.parent.remove(effect.group);
+                }
+                this.activeCrescentSlashes.splice(i, 1);
+            }
+        }
+    }
+
+    updateDashTrails(deltaTime) {
+        if (!this.activeDashTrails.length) return;
+        for (let i = this.activeDashTrails.length - 1; i >= 0; i--) {
+            const trail = this.activeDashTrails[i];
+            trail.opacity -= trail.fadeRate * deltaTime;
+            if (trail.mesh && trail.mesh.material) {
+                trail.mesh.material.opacity = trail.opacity;
+            }
+            if (trail.opacity <= 0) {
+                if (trail.mesh && trail.mesh.parent) {
+                    trail.mesh.parent.remove(trail.mesh);
+                }
+                this.activeDashTrails.splice(i, 1);
+            }
+        }
+    }
+
+    updateWhirlwindSpin(deltaTime) {
+        if (!this.whirlwindSpin) return;
+        const spin = this.whirlwindSpin;
+        spin.tickTimer += deltaTime;
+        while (spin.tickTimer >= spin.interval && spin.ticksRemaining > 0) {
+            spin.tickTimer -= spin.interval;
+            this.mesh.rotation.z += Math.PI / 4;
+            spin.ticksRemaining -= 1;
+
+            const whirlwindBounds = {
+                left: this.position.x - spin.range,
+                right: this.position.x + spin.range,
+                top: this.position.y + spin.range,
+                bottom: this.position.y - spin.range
+            };
+            this.damageEnemiesInArea(whirlwindBounds, this.abilities.r);
+        }
+
+        if (spin.ticksRemaining <= 0) {
+            this.mesh.rotation.z = 0;
+            this.isSpinningUltimate = false;
+            this.whirlwindSpin = null;
+        }
+    }
+
+    updateWhirlwindEffects(deltaTime) {
+        if (!this.activeWhirlwindEffects.length) return;
+        for (let i = this.activeWhirlwindEffects.length - 1; i >= 0; i--) {
+            const effect = this.activeWhirlwindEffects[i];
+            effect.elapsed += deltaTime;
+            const t = Math.min(1, effect.elapsed / effect.duration);
+            effect.rotation += effect.rotateRate * deltaTime;
+            effect.group.rotation.z = effect.rotation;
+            const opacity = effect.baseOpacity * (1 - t);
+            effect.scale = 1 + t * effect.scaleRate;
+            effect.group.scale.set(effect.scale, effect.scale, 1);
+            effect.group.children.forEach(segment => {
+                if (segment.material) {
+                    const factor = segment.userData.opacityFactor || 1;
+                    segment.material.opacity = opacity * factor;
+                }
+            });
+
+            if (t >= 1) {
+                if (effect.group.parent) {
+                    effect.group.parent.remove(effect.group);
+                }
+                this.activeWhirlwindEffects.splice(i, 1);
+            }
+        }
+    }
+
+    updateShockwaves(deltaTime) {
+        if (!this.activeShockwaves.length) return;
+        for (let i = this.activeShockwaves.length - 1; i >= 0; i--) {
+            const wave = this.activeShockwaves[i];
+            wave.opacity -= wave.fadeRate * deltaTime;
+            wave.scale += wave.scaleRate * deltaTime;
+            if (wave.leftWave && wave.rightWave) {
+                wave.leftWave.material.opacity = wave.opacity;
+                wave.rightWave.material.opacity = wave.opacity;
+                wave.leftWave.scale.set(wave.scale, 1, 1);
+                wave.rightWave.scale.set(wave.scale, 1, 1);
+                wave.leftWave.position.x -= wave.driftRate * deltaTime;
+                wave.rightWave.position.x += wave.driftRate * deltaTime;
+            }
+            if (wave.opacity <= 0) {
+                if (wave.leftWave && wave.leftWave.parent) {
+                    wave.leftWave.parent.remove(wave.leftWave);
+                }
+                if (wave.rightWave && wave.rightWave.parent) {
+                    wave.rightWave.parent.remove(wave.rightWave);
+                }
+                this.activeShockwaves.splice(i, 1);
+            }
+        }
+    }
+
+    updateShieldBashWinds(deltaTime) {
+        if (!this.activeShieldBashWinds.length) return;
+        const baseMoveRate = 0.18 / 0.03;
+        const indexMoveRate = 0.01 / 0.03;
+        const yMoveRate = 0.01 / 0.03;
+        for (let i = this.activeShieldBashWinds.length - 1; i >= 0; i--) {
+            const wind = this.activeShieldBashWinds[i];
+            wind.opacity -= wind.fadeRate * deltaTime;
+            wind.drift += wind.driftRate * deltaTime;
+            wind.group.children.forEach((seg, index) => {
+                if (seg.material) {
+                    seg.material.opacity = wind.opacity;
+                }
+                seg.position.x += wind.direction * (baseMoveRate + index * indexMoveRate) * deltaTime;
+                seg.position.y += yMoveRate * Math.sin(index) * deltaTime;
+                seg.scale.x = 1 + wind.drift * 0.03;
+            });
+
+            if (wind.opacity <= 0) {
+                if (wind.group.parent) {
+                    wind.group.parent.remove(wind.group);
+                }
+                this.activeShieldBashWinds.splice(i, 1);
+            }
+        }
+    }
+
+    updateEnemyPushes(deltaTime) {
+        if (!this.activeEnemyPushes.length) return;
+        for (let i = this.activeEnemyPushes.length - 1; i >= 0; i--) {
+            const push = this.activeEnemyPushes[i];
+            const enemy = push.enemy;
+            if (!enemy || !enemy.isAlive) {
+                this.activeEnemyPushes.splice(i, 1);
+                continue;
+            }
+            push.elapsed += deltaTime;
+            const t = Math.min(1, push.elapsed / push.duration);
             const eased = t * (2 - t);
-            this.sword.position.x = startX + (x - startX) * eased;
-            this.sword.position.y = startY + (y - startY) * eased;
-            this.sword.rotation.z = startRot + (rotZ - startRot) * eased;
-            const nextScale = startScale + (scale - startScale) * eased;
-            this.sword.scale.set(nextScale, nextScale, nextScale);
-        }, 16);
+            const nextX = push.startX + (push.targetX - push.startX) * eased;
+            enemy.position.x = nextX;
+            if (enemy.mesh) {
+                enemy.mesh.position.x = nextX;
+            }
+            if (t >= 1) {
+                enemy.direction = push.direction;
+                this.activeEnemyPushes.splice(i, 1);
+            }
+        }
+    }
+
+    updateWarriorTimers(deltaTime) {
+        this.updateTimedActions(deltaTime);
+        if (this.shieldAnim && this.updateTransformAnimation(this.shieldAnim, deltaTime)) {
+            this.shieldAnim = null;
+        }
+        if (this.swordAnim && this.updateTransformAnimation(this.swordAnim, deltaTime)) {
+            this.swordAnim = null;
+        }
+        this.updateCrescentSlashes(deltaTime);
+        this.updateDashTrails(deltaTime);
+        this.updateWhirlwindSpin(deltaTime);
+        this.updateWhirlwindEffects(deltaTime);
+        this.updateShockwaves(deltaTime);
+        this.updateShieldBashWinds(deltaTime);
+        this.updateEnemyPushes(deltaTime);
     }
 }

@@ -119,9 +119,7 @@ export class PauseMenu {
             if (confirm('Are you sure you want to quit?')) {
                 window.close();
                 // If window.close() doesn't work, redirect to blank page
-                setTimeout(() => {
-                    window.location.href = 'about:blank';
-                }, 100);
+                window.location.href = 'about:blank';
             }
         });
         this.quitButton.style.marginTop = '15px';

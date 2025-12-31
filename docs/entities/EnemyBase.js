@@ -41,6 +41,8 @@ export class EnemyBase {
         this.bleedEffect = null;
         this.bleedDrops = [];
         this.bleedDropTimer = 0;
+        this.bleedFlashTimer = 0;
+        this.bleedFlashColor = null;
         this.baseColor = color;
         this.hitboxScale = { x: 1, y: 1 };
         this.debugHitboxVisible = false;
@@ -117,6 +119,7 @@ export class EnemyBase {
         } else {
             this.updateBleedEffect(deltaTime, false);
         }
+        this.updateBleedFlash(deltaTime);
 
         // Apply gravity
         this.velocity.y += GRAVITY * deltaTime;
@@ -414,16 +417,24 @@ export class EnemyBase {
      * Brief red flash on bleed tick
      */
     flashBleed() {
-        const original = this.mesh.material.color.getHex();
+        if (!this.mesh || !this.mesh.material || !this.mesh.material.color) return;
+        this.bleedFlashColor = this.mesh.material.color.getHex();
+        this.bleedFlashTimer = 0.12;
         this.mesh.material.color.set(0xff6666);
-        setTimeout(() => {
-            // Preserve frozen tint if still frozen
+    }
+
+    updateBleedFlash(deltaTime) {
+        if (this.bleedFlashTimer <= 0) return;
+        this.bleedFlashTimer -= deltaTime;
+        if (this.bleedFlashTimer <= 0) {
+            if (!this.mesh || !this.mesh.material || !this.mesh.material.color) return;
             if (this.frozenTimer > 0) {
                 this.mesh.material.color.set(0x88ddff);
             } else {
-                this.mesh.material.color.set(original || this.baseColor);
+                this.mesh.material.color.set(this.bleedFlashColor || this.baseColor);
             }
-        }, 120);
+            this.bleedFlashColor = null;
+        }
     }
 
     /**
@@ -456,5 +467,3 @@ export class EnemyBase {
         this.debugHitbox.scale.set(width, height, 1);
     }
 }
-
-

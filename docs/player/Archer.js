@@ -27,6 +27,7 @@ export class Archer extends Hero {
         this.isCharging = false;
         this.chargeTime = 0;
         this.maxChargeTime = 1.5;
+        this.activeArrows = [];
 
         // Teleport arrow flag
         this.teleportArrowQueued = false;
@@ -143,6 +144,9 @@ export class Archer extends Hero {
         this.updateMachineBow(deltaTime);
 
         super.update(deltaTime, input);
+
+        // Update arrows with fixed tick
+        this.updateArrows(deltaTime);
     }
 
 
@@ -270,47 +274,89 @@ export class Archer extends Hero {
         const gravity = -14;
         const velocityX = direction.x * speed;
 
-        const arrowInterval = setInterval(() => {
-            arrowGroup.position.x += velocityX * 0.016;
-            velocityY += gravity * 0.016;
-            arrowGroup.position.y += velocityY * 0.016;
-            const targetRotation = Math.atan2(velocityY, velocityX);
-            arrowGroup.rotation.z = targetRotation;
+        this.activeArrows.push({
+            mesh: arrowGroup,
+            velocityX,
+            velocityY,
+            gravity,
+            teleportOnHit,
+            piercing,
+            ability,
+            damageHits,
+            hitEnemies,
+            level,
+            stuck: false,
+            stuckTimer: 0
+        });
+    }
+
+    /**
+     * Update active arrows (tick-driven).
+     * @param {number} deltaTime
+     */
+    updateArrows(deltaTime) {
+        if (!this.activeArrows.length) return;
+
+        const remaining = [];
+        for (const arrow of this.activeArrows) {
+            if (!arrow || !arrow.mesh) continue;
+
+            if (arrow.stuck) {
+                arrow.stuckTimer -= deltaTime;
+                if (arrow.stuckTimer <= 0) {
+                    if (arrow.mesh.parent) {
+                        arrow.mesh.parent.remove(arrow.mesh);
+                    }
+                    continue;
+                }
+                remaining.push(arrow);
+                continue;
+            }
+
+            arrow.mesh.position.x += arrow.velocityX * deltaTime;
+            arrow.velocityY += arrow.gravity * deltaTime;
+            arrow.mesh.position.y += arrow.velocityY * deltaTime;
+            arrow.mesh.rotation.z = Math.atan2(arrow.velocityY, arrow.velocityX);
 
             const arrowBounds = {
-                left: arrowGroup.position.x - 0.25,
-                right: arrowGroup.position.x + 0.25,
-                top: arrowGroup.position.y + 0.08,
-                bottom: arrowGroup.position.y - 0.08
+                left: arrow.mesh.position.x - 0.25,
+                right: arrow.mesh.position.x + 0.25,
+                top: arrow.mesh.position.y + 0.08,
+                bottom: arrow.mesh.position.y - 0.08
             };
 
+            let removed = false;
             for (const enemy of this.getDamageTargets()) {
                 if (!enemy.isAlive) continue;
-                if (hitEnemies.has(enemy)) continue;
+                if (arrow.hitEnemies.has(enemy)) continue;
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(arrowBounds, enemyBounds)) {
-                    this.applyAbilityDamage(ability, enemy, damageHits);
+                    this.applyAbilityDamage(arrow.ability, enemy, arrow.damageHits);
                     if (enemy.type !== 'player') {
                         this.addUltimateCharge(this.ultimateChargePerKill);
                     }
-                    hitEnemies.add(enemy);
+                    arrow.hitEnemies.add(enemy);
 
-                    if (!piercing) {
-                        if (teleportOnHit) {
-                            this.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
+                    if (!arrow.piercing) {
+                        if (arrow.teleportOnHit) {
+                            this.teleportToArrow(arrow.mesh.position.x, arrow.mesh.position.y);
                         }
-                        clearInterval(arrowInterval);
-                        this.mesh.parent.remove(arrowGroup);
-                        return;
+                        if (arrow.mesh.parent) {
+                            arrow.mesh.parent.remove(arrow.mesh);
+                        }
+                        removed = true;
+                        break;
                     }
                 }
             }
+            if (removed) {
+                continue;
+            }
 
-            // Check collision with platforms
             let hitPlatform = false;
-            if (level.platforms) {
-                for (const platform of level.platforms) {
+            if (arrow.level.platforms) {
+                for (const platform of arrow.level.platforms) {
                     if (checkAABBCollision(arrowBounds, platform.bounds)) {
                         hitPlatform = true;
                         break;
@@ -319,23 +365,19 @@ export class Archer extends Hero {
             }
 
             if (hitPlatform) {
-                if (teleportOnHit) {
-                    this.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
+                if (arrow.teleportOnHit) {
+                    this.teleportToArrow(arrow.mesh.position.x, arrow.mesh.position.y);
                 }
-                clearInterval(arrowInterval);
-                if (hitPlatform) {
-                    // Stick arrow briefly into platform
-                    const stickTime = 600;
-                    const stuck = arrowGroup;
-                    stuck.rotation.z = Math.atan2(velocityY, velocityX);
-                    setTimeout(() => {
-                        if (stuck.parent) {
-                            stuck.parent.remove(stuck);
-                        }
-                    }, stickTime);
-                }
+                arrow.stuck = true;
+                arrow.stuckTimer = 0.6;
+                remaining.push(arrow);
+                continue;
             }
-        }, 16);
+
+            remaining.push(arrow);
+        }
+
+        this.activeArrows = remaining;
     }
 
     /**
