@@ -546,7 +546,7 @@ export class Warrior extends Hero {
         // Create whirlwind visual effect to show hitbox
         const baseWhirlwindRange = 2.5;
         const whirlwindRange = baseWhirlwindRange * 1.35;
-        const whirlDurationMs = 1200;
+        const whirlDurationMs = 650;
         this.createWhirlwindEffect(whirlwindRange, whirlDurationMs);
 
         // Spin animation
@@ -565,7 +565,7 @@ export class Warrior extends Hero {
             };
             this.damageEnemiesInArea(whirlwindBounds, this.abilities.r);
 
-            if (spinCount >= 16) { // 2 full rotations
+            if (spinCount >= 10) { // shorter burst
                 clearInterval(spinInterval);
                 this.mesh.rotation.z = 0; // Reset rotation
                 this.isSpinningUltimate = false;

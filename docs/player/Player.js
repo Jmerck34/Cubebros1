@@ -3,6 +3,59 @@ import { PLAYER_SPEED, DEATH_Y, JUMP_VELOCITY } from '../core/constants.js';
 import { applyGravity, handleJump } from './playerPhysics.js';
 import { checkAABBCollision } from '../utils/collision.js';
 import { HealthBar } from '../ui/HealthBar.js';
+import { spawnDamageNumber } from '../utils/damageNumbers.js';
+
+function createTextSprite(text, options = {}) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const spriteMaterial = new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(canvas),
+        transparent: true,
+        depthTest: false
+    });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.userData = {
+        canvas,
+        ctx,
+        options
+    };
+    updateTextSprite(sprite, text);
+    return sprite;
+}
+
+function updateTextSprite(sprite, text) {
+    const { canvas, ctx, options } = sprite.userData || {};
+    if (!canvas || !ctx) return;
+
+    const fontSize = options?.fontSize ?? 32;
+    const padding = options?.padding ?? 10;
+    const font = `700 ${fontSize}px Arial`;
+    ctx.font = font;
+    const metrics = ctx.measureText(text);
+    const textWidth = Math.ceil(metrics.width);
+    const textHeight = Math.ceil(fontSize * 1.2);
+
+    canvas.width = textWidth + padding * 2;
+    canvas.height = textHeight + padding * 2;
+    ctx.font = font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const x = canvas.width / 2;
+    const y = canvas.height / 2;
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = options?.stroke || 'rgba(0, 0, 0, 0.8)';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = options?.color || '#ffffff';
+    ctx.fillText(text, x, y);
+
+    if (sprite.material?.map) {
+        sprite.material.map.needsUpdate = true;
+    }
+
+    const scale = options?.scale ?? 0.01;
+    sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
+}
 
 /**
  * Player Entity - Handles player movement, physics, and state
@@ -42,7 +95,7 @@ export class Player {
         this.isAlive = true;
         this.team = null;
         this.type = 'player';
-        this.respawnDelay = 1.2;
+        this.respawnDelay = 3.0;
         this.respawnTimer = 0;
         this.isCarryingFlag = false;
         this.flagCarryTeam = null;
@@ -65,11 +118,14 @@ export class Player {
         this.fearTimer = 0;
         this.fearDirection = 0;
         this.mindControlTimer = 0;
+        this.slowTimer = 0;
+        this.slowMultiplier = 1;
         this.controlsInverted = false;
         this.controlsLocked = false;
 
         // Jump state for double jump
-        this.jumpsRemaining = 2; // Allow 2 jumps (ground + air)
+        this.maxJumps = 2;
+        this.jumpsRemaining = this.maxJumps; // Allow 2 jumps (ground + air)
         this.jumpKeyWasPressed = false; // Track key state to prevent spam
 
         // Health system
@@ -116,6 +172,7 @@ export class Player {
         this.fallDistance = 0;
         this.initJumpAudio();
         this.initLandAudio();
+        this.initRespawnIndicator();
 
         // Sync mesh position
         this.syncMeshPosition();
@@ -260,6 +317,12 @@ export class Player {
         }
         if (this.poisonTimer > 0) {
             this.poisonTimer = Math.max(0, this.poisonTimer - deltaTime);
+        }
+        if (this.slowTimer > 0) {
+            this.slowTimer = Math.max(0, this.slowTimer - deltaTime);
+            if (this.slowTimer === 0) {
+                this.slowMultiplier = 1;
+            }
         }
         if (this.bleedTimer > 0) {
             this.bleedTimer = Math.max(0, this.bleedTimer - deltaTime);
@@ -406,6 +469,17 @@ export class Player {
     }
 
     /**
+     * Apply slow effect.
+     * @param {number} durationSeconds
+     * @param {number} multiplier
+     */
+    setSlowed(durationSeconds = 1.2, multiplier = 0.7) {
+        if (!this.isAlive) return;
+        this.slowTimer = Math.max(this.slowTimer, durationSeconds);
+        this.slowMultiplier = Math.min(this.slowMultiplier, multiplier);
+    }
+
+    /**
      * Update poison ring animation.
      */
     updatePoisonEffect() {
@@ -533,6 +607,8 @@ export class Player {
         this.bleedFlashTimer = 0;
         this.fearTimer = 0;
         this.mindControlTimer = 0;
+        this.slowTimer = 0;
+        this.slowMultiplier = 1;
         this.controlsLocked = false;
         this.controlsInverted = false;
         this.fearDirection = 0;
@@ -648,6 +724,7 @@ export class Player {
 
         if (!this.isAlive) {
             this.respawnTimer = Math.max(0, this.respawnTimer - deltaTime);
+            this.updateRespawnIndicator();
             if (this.respawnTimer === 0) {
                 this.respawn();
             }
@@ -675,7 +752,7 @@ export class Player {
 
         // Apply debug speed multiplier if available
         const debugMultiplier = this.debugPhysics ? this.debugPhysics.moveSpeedMultiplier : 1.0;
-        const speedMultiplier = debugMultiplier * (this.moveSpeedMultiplier || 1);
+        const speedMultiplier = debugMultiplier * (this.moveSpeedMultiplier || 1) * (this.slowMultiplier || 1);
         let leftPressed = input.isLeftPressed();
         let rightPressed = input.isRightPressed();
         if (this.controlsInverted) {
@@ -724,6 +801,7 @@ export class Player {
 
         // Update health bar
         this.healthBar.update(deltaTime);
+        this.updateRespawnIndicator();
 
         // Sync mesh with internal position
         this.syncMeshPosition();
@@ -936,6 +1014,11 @@ export class Player {
             return;
         }
 
+        spawnDamageNumber(this.scene, this.position, damage, {
+            color: '#ff7a7a',
+            stroke: 'rgba(20, 0, 0, 0.9)'
+        });
+
         if (!Number.isFinite(this.currentHealth)) {
             this.currentHealth = this.maxHealth;
         }
@@ -1059,8 +1142,9 @@ export class Player {
         this.velocity.x = 0;
         this.velocity.y = 0;
         this.isGrounded = false;
-        this.jumpsRemaining = 2;
+        this.jumpsRemaining = this.maxJumps;
         this.enemyContactCooldown = 0;
+        this.updateRespawnIndicator();
     }
 
     /**
@@ -1087,6 +1171,78 @@ export class Player {
         this.visualTiltZ = 0;
         this.syncMeshPosition();
         this.healthBar.update(0);
+        this.updateRespawnIndicator();
+    }
+
+    /**
+     * Create respawn timer indicator (bar + text)
+     */
+    initRespawnIndicator() {
+        const group = new THREE.Group();
+        const width = 1.3;
+        const height = 0.16;
+        const back = new THREE.Mesh(
+            new THREE.PlaneGeometry(width, height),
+            new THREE.MeshBasicMaterial({ color: 0x0c0c0c, transparent: true, opacity: 0.75 })
+        );
+        back.position.z = 0.6;
+        group.add(back);
+
+        const fill = new THREE.Mesh(
+            new THREE.PlaneGeometry(width, height),
+            new THREE.MeshBasicMaterial({ color: 0x7ad1ff, transparent: true, opacity: 0.9 })
+        );
+        fill.position.z = 0.61;
+        fill.scale.x = 0;
+        fill.visible = false;
+        group.add(fill);
+
+        const textSprite = createTextSprite('3', {
+            fontSize: 36,
+            color: '#ffffff',
+            stroke: 'rgba(0, 0, 0, 0.85)',
+            scale: 0.01
+        });
+        textSprite.position.set(0, 0.28, 0.62);
+        group.add(textSprite);
+
+        group.visible = false;
+        this.scene.add(group);
+
+        this.respawnIndicator = {
+            group,
+            fill,
+            width,
+            textSprite,
+            lastSeconds: null
+        };
+    }
+
+    /**
+     * Update respawn timer indicator state.
+     */
+    updateRespawnIndicator() {
+        if (!this.respawnIndicator) return;
+        const { group, fill, width, textSprite } = this.respawnIndicator;
+        group.visible = !this.isAlive;
+        if (!group.visible) {
+            return;
+        }
+
+        const progress = this.respawnDelay > 0 ? 1 - (this.respawnTimer / this.respawnDelay) : 1;
+        const clamped = Math.max(0, Math.min(1, progress));
+        fill.visible = clamped > 0.01;
+        fill.scale.x = clamped;
+        fill.position.x = -width / 2 + (width * clamped) / 2;
+
+        const playerPos = this.getPosition();
+        group.position.set(playerPos.x, playerPos.y + 1.2, 0);
+
+        const secondsLeft = Math.max(0, Math.ceil(this.respawnTimer));
+        if (secondsLeft !== this.respawnIndicator.lastSeconds) {
+            updateTextSprite(textSprite, `Respawn ${secondsLeft}`);
+            this.respawnIndicator.lastSeconds = secondsLeft;
+        }
     }
 
     /**

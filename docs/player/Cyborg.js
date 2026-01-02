@@ -25,6 +25,9 @@ export class Cyborg extends Hero {
         this.isChargingBeam = false;
         this.beamChargeTime = 0;
         this.beamAimDirection = { x: 1, y: 0 };
+        this.aimIndicator = null;
+        this.aimIndicatorLine = null;
+        this.aimIndicatorTip = null;
 
         // Bubble shield state
         this.bubbleShield = null;
@@ -34,6 +37,7 @@ export class Cyborg extends Hero {
 
         // Set cyborg abilities
         this.initializeAbilities();
+        this.createAimIndicator();
     }
 
     /**
@@ -166,6 +170,8 @@ export class Cyborg extends Hero {
         if (this.isChargingBeam) {
             this.updateStatusEffects(deltaTime);
             this.beamChargeTime += deltaTime;
+            this.updateBeamAim(input);
+            this.updateAimIndicator(this.beamAimDirection, true);
             // Don't update position or process input while charging
             return;
         }
@@ -181,6 +187,118 @@ export class Cyborg extends Hero {
         }
 
         super.update(deltaTime, input);
+        const idleAim = this.hasAimInput ? this.getAimDirection() : { x: this.facingDirection, y: 0 };
+        this.updateAimIndicator(idleAim, false);
+    }
+
+    createAimIndicator() {
+        if (!this.scene) return;
+        const group = new THREE.Group();
+
+        const glowColor = 0x63dbff;
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: glowColor,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+        });
+
+        const ringSegments = 4;
+        const ringRadiusInner = 0.55;
+        const ringRadiusOuter = 0.64;
+        const ringGap = (Math.PI * 2) / ringSegments;
+        for (let i = 0; i < ringSegments; i += 1) {
+            const start = i * ringGap + 0.15;
+            const end = start + ringGap - 0.3;
+            const arc = new THREE.RingGeometry(ringRadiusInner, ringRadiusOuter, 24, 1, start, end - start);
+            const arcMesh = new THREE.Mesh(arc, glowMaterial.clone());
+            arcMesh.material.opacity = 0.65;
+            group.add(arcMesh);
+        }
+
+        const triangleSize = 0.28;
+        const triangleGeometry = new THREE.ShapeGeometry(
+            new THREE.Shape([
+                new THREE.Vector2(0, triangleSize),
+                new THREE.Vector2(triangleSize * 0.75, -triangleSize * 0.6),
+                new THREE.Vector2(-triangleSize * 0.75, -triangleSize * 0.6)
+            ])
+        );
+        const triPositions = [
+            { x: 0, y: ringRadiusOuter + 0.18, rot: 0 },
+            { x: ringRadiusOuter + 0.18, y: 0, rot: Math.PI / 2 },
+            { x: 0, y: -(ringRadiusOuter + 0.18), rot: Math.PI },
+            { x: -(ringRadiusOuter + 0.18), y: 0, rot: -Math.PI / 2 }
+        ];
+        triPositions.forEach((pos) => {
+            const tri = new THREE.Mesh(triangleGeometry, glowMaterial.clone());
+            tri.position.set(pos.x, pos.y, 0);
+            tri.rotation.z = pos.rot;
+            tri.material.opacity = 0.9;
+            group.add(tri);
+        });
+
+        const crossMaterial = glowMaterial.clone();
+        crossMaterial.opacity = 0.85;
+        const cross = new THREE.Group();
+        const crossBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.02), crossMaterial);
+        const crossBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.02), crossMaterial);
+        cross.add(crossBar, crossBar2);
+        group.add(cross);
+
+        group.visible = false;
+        this.scene.add(group);
+        this.aimIndicator = group;
+        this.aimIndicatorLine = null;
+        this.aimIndicatorTip = null;
+    }
+
+    updateAimIndicator(direction, forceVisible) {
+        if (!this.aimIndicator) return;
+        const length = Math.hypot(direction.x, direction.y);
+        if (!Number.isFinite(length) || length < 0.001) {
+            this.aimIndicator.visible = false;
+            return;
+        }
+
+        if (!forceVisible && !this.isAlive) {
+            this.aimIndicator.visible = false;
+            return;
+        }
+
+        const nx = direction.x / length;
+        const ny = direction.y / length;
+        const angle = Math.atan2(ny, nx);
+        const indicatorRadius = 1.6;
+        const floatOffset = Math.sin(performance.now() * 0.004) * 0.08;
+
+        this.aimIndicator.visible = true;
+        this.aimIndicator.position.set(
+            this.position.x + nx * indicatorRadius,
+            this.position.y + ny * indicatorRadius + floatOffset,
+            0.45
+        );
+        this.aimIndicator.rotation.z = angle;
+        this.aimIndicator.scale.set(0.2, 0.2, 1);
+    }
+
+    updateBeamAim(input) {
+        const aim = this.getAimDirection();
+        if (this.hasAimInput && (Math.abs(aim.x) > 0.05 || Math.abs(aim.y) > 0.05)) {
+            const length = Math.hypot(aim.x, aim.y) || 1;
+            this.beamAimDirection = { x: aim.x / length, y: aim.y / length };
+            if (Math.abs(aim.x) > 0.15) {
+                this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+            }
+            return;
+        }
+
+        if (input.isLeftPressed()) {
+            this.setFacingDirection(-1);
+        } else if (input.isRightPressed()) {
+            this.setFacingDirection(1);
+        }
+        this.beamAimDirection = { x: this.facingDirection, y: 0 };
     }
 
     /**
@@ -777,7 +895,7 @@ export class Cyborg extends Hero {
         const direction = this.beamAimDirection || { x: this.facingDirection, y: 0 };
         const perpendicular = { x: -direction.y, y: direction.x };
         const angle = Math.atan2(direction.y, direction.x);
-        const damage = Math.floor(this.beamChargeTime * 2); // More charge = more damage
+        const damage = 50;
         const beamLength = 10;
         const beamSpeed = 12;
         const maxTravel = 80;
@@ -904,7 +1022,10 @@ export class Cyborg extends Hero {
                 if (!enemy.isAlive || hitEnemies.has(enemy)) continue;
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(beamBounds, enemyBounds)) {
-                    this.applyAbilityDamage(this.abilities.r, enemy, damage);
+                    const adjustedDamage = this.abilities.r && typeof this.abilities.r.getAdjustedDamage === 'function'
+                        ? this.abilities.r.getAdjustedDamage(damage)
+                        : damage;
+                    enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)));
                     hitEnemies.add(enemy);
                     if (enemy.type !== 'player') {
                         this.addUltimateCharge(this.ultimateChargePerKill);
@@ -952,5 +1073,15 @@ export class Cyborg extends Hero {
                 this.mesh.parent.remove(explosion);
             }
         }, 30);
+    }
+
+    destroy() {
+        if (this.aimIndicator && this.aimIndicator.parent) {
+            this.aimIndicator.parent.remove(this.aimIndicator);
+        }
+        this.aimIndicator = null;
+        this.aimIndicatorLine = null;
+        this.aimIndicatorTip = null;
+        super.destroy();
     }
 }

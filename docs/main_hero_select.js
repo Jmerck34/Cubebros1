@@ -20,6 +20,7 @@ import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
 import { DebugMenu } from './ui/DebugMenu.js';
 import { DEATH_Y } from './core/constants.js';
+import { updateDamageNumbers, clearDamageNumbers } from './utils/damageNumbers.js';
 
 // Game state
 let gameStarted = false;
@@ -33,6 +34,9 @@ let flagState = null;
 let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
 const VIEW_SIZE = 10;
+let healthPotion = null;
+let menuRenderActive = false;
+let menuRenderHandle = null;
 
 // Hero selection
 const MAX_PLAYERS = 4;
@@ -43,6 +47,10 @@ let heroLocked = Array(MAX_PLAYERS).fill(false);
 let selectedTeams = Array(MAX_PLAYERS).fill(null);
 let heroMenu, heroMenuTitle, heroMenuSubtitle, heroMenuControls, twoPlayerToggle, threePlayerToggle, fourPlayerToggle, coopHint;
 let heroGridSingle;
+let heroFocusLayer = null;
+let heroFocusTags = [];
+let heroFocusEnterOrder = Array(MAX_PLAYERS).fill(0);
+let heroFocusOrderCounter = 0;
 let p1GamepadSelect, p2GamepadSelect, p3GamepadSelect, p4GamepadSelect;
 let p2GamepadRow, p3GamepadRow, p4GamepadRow;
 let controllerToggleButton, gamepadAssign;
@@ -68,7 +76,6 @@ let menuSelectLockedByPlayer = Array(MAX_PLAYERS).fill(false);
 let menuBackLockedByPlayer = Array(MAX_PLAYERS).fill(false);
 let readyMenu = null;
 let readyConfirmButton = null;
-let readyCancelButton = null;
 let readyMenuActive = false;
 let readyConfirmLocked = false;
 let readyCancelLocked = false;
@@ -87,6 +94,7 @@ let p3GamepadPreference = 'auto';
 let p4GamepadPreference = 'auto';
 let lastGamepadSignature = '';
 let lastGamepadRefresh = 0;
+let lastPauseStartPressed = Array(MAX_PLAYERS).fill(false);
 
 const HERO_NAMES = {
     [Warrior.name]: '⚔️ WARRIOR',
@@ -272,15 +280,38 @@ function createFlag(team, base, color) {
     ring.visible = false;
     scene.add(ring);
 
+    const chargeGroup = new THREE.Group();
+    const chargeWidth = 1.4;
+    const chargeHeight = 0.16;
+    const chargeBack = new THREE.Mesh(
+        new THREE.PlaneGeometry(chargeWidth, chargeHeight),
+        new THREE.MeshBasicMaterial({ color: 0x0c0c0c, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+    );
+    const chargeFill = new THREE.Mesh(
+        new THREE.PlaneGeometry(chargeWidth, chargeHeight),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    );
+    chargeGroup.add(chargeBack);
+    chargeGroup.add(chargeFill);
+    chargeGroup.position.set(base.x, base.y + 1.5, 0.5);
+    chargeGroup.visible = false;
+    chargeFill.scale.x = 0;
+    chargeFill.visible = false;
+    scene.add(chargeGroup);
+
     return {
         team,
         base,
         mesh: flagGroup,
         ring,
+        chargeGroup,
+        chargeFill,
+        chargeWidth,
         carrier: null,
         isAtBase: true,
         dropped: false,
         lob: null,
+        returnProgress: 0,
         returnTimer: 0,
         pickupCooldown: 0,
         lastCarrierPosition: { x: base.x, y: base.y }
@@ -342,10 +373,14 @@ function setFlagCarrier(flag, carrier) {
     flag.isAtBase = false;
     flag.dropped = false;
     flag.lob = null;
+    flag.returnProgress = 0;
     flag.returnTimer = 0;
     flag.pickupCooldown = 0;
     if (flag.ring) {
         flag.ring.visible = false;
+    }
+    if (flag.chargeGroup) {
+        flag.chargeGroup.visible = false;
     }
     flag.lastCarrierPosition = { x: carrier.position.x, y: carrier.position.y };
     carrier.isCarryingFlag = true;
@@ -365,12 +400,17 @@ function resetFlag(flag) {
     flag.isAtBase = true;
     flag.dropped = false;
     flag.lob = null;
+    flag.returnProgress = 0;
     flag.returnTimer = 0;
     flag.pickupCooldown = 0;
     flag.mesh.position.set(flag.base.x, flag.base.y, 0.45);
     if (flag.ring) {
         flag.ring.visible = false;
         flag.ring.position.set(flag.base.x, flag.base.y, 0.05);
+    }
+    if (flag.chargeGroup) {
+        flag.chargeGroup.visible = false;
+        flag.chargeGroup.position.set(flag.base.x, flag.base.y + 1.5, 0.5);
     }
     flag.lastCarrierPosition = { x: flag.base.x, y: flag.base.y };
 }
@@ -408,6 +448,43 @@ function getNearestLedgePosition(position) {
     });
 
     return best || position;
+}
+
+function getCastleWallBounds(baseX) {
+    if (!level || !level.platforms || !level.platforms.length || !Number.isFinite(baseX)) {
+        return null;
+    }
+    let closest = null;
+    let closestDist = Number.POSITIVE_INFINITY;
+    level.platforms.forEach((platform) => {
+        if (!platform || platform.type !== 'wall' || !platform.bounds || !platform.mesh) {
+            return;
+        }
+        const centerX = (platform.bounds.left + platform.bounds.right) / 2;
+        const dist = Math.abs(centerX - baseX);
+        if (dist < closestDist) {
+            closestDist = dist;
+            closest = platform.bounds;
+        }
+    });
+    return closest;
+}
+
+function clampFlagOutsideCastle(flag, position) {
+    if (!flag || !position) return position;
+    const baseX = flag.base?.x;
+    if (!Number.isFinite(baseX)) return position;
+    const bounds = getCastleWallBounds(baseX);
+    if (!bounds) return position;
+    const isLeftCastle = baseX < 0;
+    const outside = isLeftCastle ? position.x < bounds.left : position.x > bounds.right;
+    if (!outside) return position;
+    const inset = 0.6;
+    const innerEdgeX = isLeftCastle ? bounds.right - inset : bounds.left + inset;
+    return {
+        x: innerEdgeX,
+        y: bounds.top + 0.6
+    };
 }
 
 function getGroundDropPosition(position) {
@@ -494,7 +571,8 @@ function getFlagLandingPosition(position, velocityY) {
 function dropFlagAt(flag, dropPos) {
     const resolvedPos = dropPos || flag.lastCarrierPosition || flag.base;
     const groundedPos = getGroundDropPosition(resolvedPos);
-    const finalPos = groundedPos || getNearestLedgePosition(resolvedPos) || resolvedPos;
+    const initialPos = groundedPos || getNearestLedgePosition(resolvedPos) || resolvedPos;
+    const finalPos = clampFlagOutsideCastle(flag, initialPos);
     flag.lob = null;
     clearFlagCarrier(flag, flag.carrier);
     flag.isAtBase = false;
@@ -505,6 +583,10 @@ function dropFlagAt(flag, dropPos) {
     if (flag.ring) {
         flag.ring.visible = true;
         flag.ring.position.set(finalPos.x, finalPos.y, 0.05);
+    }
+    if (flag.chargeGroup) {
+        flag.chargeGroup.visible = true;
+        flag.chargeGroup.position.set(finalPos.x, finalPos.y + 1.5, 0.5);
     }
     flag.lastCarrierPosition = { x: finalPos.x, y: finalPos.y };
 }
@@ -537,6 +619,7 @@ function startFlagLob(flag, carrier) {
         vx: dir.x * speed,
         vy: velocityY
     };
+    flag.returnProgress = 0;
 
     clearFlagCarrier(flag, carrier);
     flag.isAtBase = false;
@@ -547,6 +630,9 @@ function startFlagLob(flag, carrier) {
     flag.mesh.position.set(origin.x, origin.y, 0.45);
     if (flag.ring) {
         flag.ring.visible = false;
+    }
+    if (flag.chargeGroup) {
+        flag.chargeGroup.visible = false;
     }
 }
 
@@ -597,8 +683,10 @@ function updateCTF(deltaTime, activePlayers, activeInputs) {
                 if (flag.carrier.lastDeathWasPit) {
                     const fallbackPos = flag.lastCarrierPosition || flag.base;
                     const ledgePos = getNearestLedgePosition(fallbackPos);
+                    flag.returnProgress = 0;
                     dropFlagAt(flag, ledgePos);
                 } else {
+                    flag.returnProgress = 0;
                     dropFlag(flag);
                 }
             }
@@ -621,6 +709,9 @@ function updateCTF(deltaTime, activePlayers, activeInputs) {
         } else if (flag.dropped) {
             if (flag.ring) {
                 flag.ring.position.set(flag.mesh.position.x, flag.mesh.position.y, 0.05);
+            }
+            if (flag.chargeGroup) {
+                flag.chargeGroup.position.set(flag.mesh.position.x, flag.mesh.position.y + 1.5, 0.5);
             }
             if (flag.pickupCooldown > 0) {
                 flag.pickupCooldown -= deltaTime;
@@ -650,7 +741,12 @@ function updateCTF(deltaTime, activePlayers, activeInputs) {
     });
 
     Object.values(flagState.flags).forEach((flag) => {
-        if (!flag.dropped) return;
+        if (!flag.dropped || flag.carrier || flag.lob) {
+            if (flag.chargeGroup) {
+                flag.chargeGroup.visible = false;
+            }
+            return;
+        }
         const radius = flagState.returnRadius;
         const ringBounds = {
             left: flag.mesh.position.x - radius,
@@ -672,13 +768,24 @@ function updateCTF(deltaTime, activePlayers, activeInputs) {
             }
         });
 
+        const rate = 1 / flagState.returnDelay;
         if (friendlyInRing && !enemyInRing) {
-            flag.returnTimer -= deltaTime;
-            if (flag.returnTimer <= 0) {
-                resetFlag(flag);
-            }
-        } else {
-            flag.returnTimer = flagState.returnDelay;
+            flag.returnProgress = Math.min(1, (flag.returnProgress || 0) + deltaTime * rate);
+        } else if (!friendlyInRing && !enemyInRing) {
+            const decay = rate * 0.6;
+            flag.returnProgress = Math.max(0, (flag.returnProgress || 0) - deltaTime * decay);
+        }
+
+        if (flag.chargeGroup && flag.chargeFill) {
+            const progress = Math.max(0, Math.min(1, flag.returnProgress || 0));
+            flag.chargeGroup.visible = true;
+            flag.chargeFill.visible = progress > 0.01;
+            flag.chargeFill.scale.x = progress;
+            flag.chargeFill.position.x = (-flag.chargeWidth / 2) + (flag.chargeWidth * progress) / 2;
+        }
+
+        if (flag.returnProgress >= 1) {
+            resetFlag(flag);
         }
     });
 
@@ -908,6 +1015,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     // Create level with platforms
     level = new Level(scene);
     level.createTestLevel({ includeInteractiveFlags: false });
+    healthPotion = createHealthPotion(level);
 
     // Setup parallax manager (foreground/midground/background)
     parallaxManager = new ParallaxManager(camera);
@@ -1035,16 +1143,21 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     // Game Loop
     gameLoop = new GameLoop(
         (deltaTime) => {
-            // Skip game updates if paused or debug menu is open
-            if ((pauseMenu && pauseMenu.isPaused()) || (debugMenu && debugMenu.isPaused())) {
-                return;
-            }
-
             inputs.forEach((activeInput) => {
                 if (activeInput) {
                     activeInput.update();
                 }
             });
+
+            handlePauseGamepadToggle();
+            if (pauseMenu) {
+                pauseMenu.handleGamepad(inputs);
+            }
+
+            // Skip game updates if paused or debug menu is open
+            if ((pauseMenu && pauseMenu.isPaused()) || (debugMenu && debugMenu.isPaused())) {
+                return;
+            }
 
             const size = renderer.getSize(new THREE.Vector2());
             const fullWidth = size.x;
@@ -1105,7 +1218,9 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
                 }
             });
 
+            updateDamageNumbers(deltaTime);
             updateCTF(deltaTime, players, inputs);
+            updateHealthPotion(deltaTime, players);
 
             // Update environment animations
             environment.update(deltaTime);
@@ -1140,6 +1255,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
         }
     );
 
+    stopMenuRender();
     gameLoop.start();
     gameStarted = true;
 
@@ -1253,6 +1369,8 @@ function resetGame() {
         scene.clear();
     }
     clearCTF();
+    clearDamageNumbers();
+    removeHealthPotion();
     parallaxManager = null;
     players = [];
     inputs = [];
@@ -1290,9 +1408,10 @@ function resetGame() {
     hideTeamMenu();
 
     gameStarted = false;
-    document.body.classList.remove('split-screen-active', 'split-screen-quad');
+    document.body.classList.remove('split-screen-active', 'split-screen-quad', 'menu-split-active');
     buildTeamMenuItems();
-    setPlayerCount(localPlayerCount);
+    setPlayerCount(1);
+    startMenuRender();
 }
 
 function setPlayerCount(count) {
@@ -1352,6 +1471,7 @@ function setPlayerCount(count) {
             });
         }
     } else {
+        updateAllHeroFocusTags();
         heroCardItems.forEach((item) => {
             item.classList.remove(
                 'menu-focus-p1',
@@ -1365,7 +1485,8 @@ function setPlayerCount(count) {
                 'locked-p1',
                 'locked-p2',
                 'locked-p3',
-                'locked-p4'
+                'locked-p4',
+                'hero-select-pop'
             );
         });
     }
@@ -1388,8 +1509,14 @@ function selectHeroForPlayer(HeroClass, playerIndex = 1) {
     }
 
     const index = playerIndex - 1;
+    const previousHero = pendingHeroClasses[index];
     pendingHeroClasses[index] = HeroClass;
     heroLocked[index] = false;
+
+    if (previousHero !== HeroClass) {
+        const heroKey = HERO_KEY_BY_CLASS.get(HeroClass);
+        triggerHeroSelectPop(heroKey);
+    }
 
     updateCoopHeroSelectionUI();
     updateReadyMenuState();
@@ -1412,6 +1539,7 @@ function buildMenuItems() {
     }
     const cards = heroGridSingle ? Array.from(heroGridSingle.querySelectorAll('.hero-card')) : [];
     heroCardItems = cards;
+    ensureHeroIndicators();
     items.push(...cards);
     menuItems = items;
     if (menuFocusIndex >= menuItems.length) {
@@ -1422,13 +1550,109 @@ function buildMenuItems() {
     }
 }
 
+function ensureHeroIndicators() {
+    if (!heroGridSingle) return;
+    if (!heroFocusLayer) {
+        heroFocusLayer = document.createElement('div');
+        heroFocusLayer.className = 'hero-focus-layer';
+        heroGridSingle.appendChild(heroFocusLayer);
+    }
+    if (!heroFocusTags.length) {
+        for (let i = 0; i < MAX_PLAYERS; i += 1) {
+            const tag = document.createElement('div');
+            tag.className = `hero-focus-tag p${i + 1}`;
+            tag.textContent = `P${i + 1}`;
+            heroFocusLayer.appendChild(tag);
+            heroFocusTags.push(tag);
+        }
+    }
+
+    heroCardItems.forEach((card) => {
+        if (!card) return;
+        const existingBookmarks = card.querySelector('.hero-bookmarks');
+        if (existingBookmarks) {
+            existingBookmarks.remove();
+        }
+        const existingSelectedTags = card.querySelector('.hero-selected-tags');
+        if (existingSelectedTags) {
+            existingSelectedTags.remove();
+        }
+        if (!card.querySelector('.hero-select-shades')) {
+            const shades = document.createElement('div');
+            shades.className = 'hero-select-shades';
+            for (let i = 0; i < MAX_PLAYERS; i += 1) {
+                const shade = document.createElement('div');
+                shade.className = `hero-select-shade p${i + 1}`;
+                shades.appendChild(shade);
+            }
+            card.appendChild(shades);
+        }
+    });
+    updateAllHeroFocusTags();
+}
+
+function updateHeroFocusTag(playerIndex, stackIndex = 0, stackCount = 1) {
+    const tag = heroFocusTags[playerIndex - 1];
+    if (!tag || !heroGridSingle) return;
+    if (!localMultiplayerEnabled || playerIndex > localPlayerCount || !heroCardItems.length || !heroMenu || heroMenu.style.display === 'none') {
+        tag.style.opacity = '0';
+        return;
+    }
+
+    const focusIndex = menuFocusIndices[playerIndex - 1] || 0;
+    const card = heroCardItems[focusIndex];
+    if (!card) {
+        tag.style.opacity = '0';
+        return;
+    }
+    const gridRect = heroGridSingle.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const baseX = cardRect.left - gridRect.left + cardRect.width - 52;
+    const baseY = cardRect.top - gridRect.top + 10;
+    const verticalSpacing = 36;
+    const perPlayerOffset = (playerIndex - 1) * 16;
+    const offsetY = stackCount > 1 ? stackIndex * verticalSpacing : 0;
+    tag.style.transform = `translate(${baseX}px, ${baseY + offsetY + perPlayerOffset}px)`;
+    tag.style.opacity = '1';
+}
+
+function updateAllHeroFocusTags() {
+    if (!heroFocusTags.length) return;
+    const focusGroups = new Map();
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        const focusIndex = menuFocusIndices[i] || 0;
+        if (!focusGroups.has(focusIndex)) {
+            focusGroups.set(focusIndex, []);
+        }
+        focusGroups.get(focusIndex).push(i + 1);
+    }
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        if (i >= localPlayerCount) {
+            updateHeroFocusTag(i + 1, 0, 1);
+            continue;
+        }
+        const focusIndex = menuFocusIndices[i] || 0;
+        const group = (focusGroups.get(focusIndex) || [i + 1]).slice().sort((a, b) => {
+            const orderA = heroFocusEnterOrder[a - 1] || 0;
+            const orderB = heroFocusEnterOrder[b - 1] || 0;
+            if (orderA === orderB) return a - b;
+            return orderA - orderB;
+        });
+        const stackIndex = group.indexOf(i + 1);
+        updateHeroFocusTag(i + 1, stackIndex === -1 ? 0 : stackIndex, group.length);
+    }
+}
+
 function initCoopHeroMenu() {
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
-        menuSelectLockedByPlayer[i] = false;
+        // Require button release before selections after switching modes.
+        menuSelectLockedByPlayer[i] = true;
         menuBackLockedByPlayer[i] = false;
         menuLastNavTimes[i] = 0;
         menuFocusIndices[i] = heroCardItems.length ? (i % heroCardItems.length) : 0;
+        heroFocusEnterOrder[i] = 0;
     }
+    heroFocusOrderCounter = 0;
     heroCardItems.forEach((item) => {
         item.classList.remove('menu-focus');
     });
@@ -1436,10 +1660,15 @@ function initCoopHeroMenu() {
         updateCoopHeroFocus(i + 1);
     }
     updateCoopHeroSelectionUI();
+    updateAllHeroFocusTags();
 }
 
 function updateCoopHeroFocus(playerIndex) {
     const focusIndex = menuFocusIndices[playerIndex - 1] || 0;
+    if (localMultiplayerEnabled && playerIndex <= localPlayerCount) {
+        heroFocusOrderCounter += 1;
+        heroFocusEnterOrder[playerIndex - 1] = heroFocusOrderCounter;
+    }
     const className = `menu-focus-p${playerIndex}`;
     heroCardItems.forEach((item, index) => {
         item.classList.toggle(className, index === focusIndex);
@@ -1448,6 +1677,7 @@ function updateCoopHeroFocus(playerIndex) {
     if (focused && typeof focused.scrollIntoView === 'function') {
         focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
+    updateHeroFocusTag(playerIndex);
 }
 
 function moveCoopHeroFocus(playerIndex, delta) {
@@ -1479,6 +1709,18 @@ function updateCoopHeroSelectionUI() {
     }
 }
 
+function triggerHeroSelectPop(heroKey) {
+    if (!heroKey) return;
+    const card = heroCardItems.find((item) => item.dataset.hero === heroKey);
+    if (!card) return;
+    card.classList.remove('hero-select-pop');
+    void card.offsetWidth;
+    card.classList.add('hero-select-pop');
+    window.setTimeout(() => {
+        card.classList.remove('hero-select-pop');
+    }, 220);
+}
+
 function buildTeamMenuItems() {
     teamMenuItems = [];
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
@@ -1502,7 +1744,8 @@ function moveTeamMenuFocus(playerIndex, delta) {
     const index = playerIndex - 1;
     const items = teamMenuItems[index] || [];
     if (!items.length) return;
-    teamFocusIndices[index] = (teamFocusIndices[index] + delta + items.length) % items.length;
+    const next = teamFocusIndices[index] + delta;
+    teamFocusIndices[index] = Math.max(0, Math.min(items.length - 1, next));
     updateTeamMenuFocus(playerIndex);
 }
 
@@ -1515,6 +1758,149 @@ function updateTeamSelectionUI() {
             blueButton.classList.toggle(`selected-p${i + 1}`, team === 'blue');
             redButton.classList.toggle(`selected-p${i + 1}`, team === 'red');
         }
+    }
+}
+
+function findMidfieldPlatform(levelInstance) {
+    if (!levelInstance || !Array.isArray(levelInstance.platforms)) return null;
+    const candidates = levelInstance.platforms.filter((platform) => {
+        if (!platform || !platform.bounds) return false;
+        if (platform.type === 'wall' || platform.type === 'ladder' || platform.isLadder) return false;
+        return platform.bounds.left <= 0 && platform.bounds.right >= 0;
+    });
+    if (!candidates.length) return null;
+    return candidates.reduce((best, platform) => {
+        if (!best) return platform;
+        return platform.bounds.top > best.bounds.top ? platform : best;
+    }, null);
+}
+
+function createHealthPotion(levelInstance) {
+    if (!scene) return null;
+    const platform = findMidfieldPlatform(levelInstance);
+    const baseX = platform ? (platform.bounds.left + platform.bounds.right) / 2 : 0;
+    const baseY = platform ? platform.bounds.top + 0.45 : 0.5;
+
+    const group = new THREE.Group();
+    const bottle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.22, 0.5, 12),
+        new THREE.MeshBasicMaterial({ color: 0x46d16b })
+    );
+    bottle.position.set(0, 0.2, 0.2);
+    group.add(bottle);
+
+    const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.12, 10),
+        new THREE.MeshBasicMaterial({ color: 0x2d2d2d })
+    );
+    cap.position.set(0, 0.48, 0.22);
+    group.add(cap);
+
+    const glow = new THREE.Mesh(
+        new THREE.RingGeometry(0.32, 0.48, 24),
+        new THREE.MeshBasicMaterial({ color: 0x8cffb1, transparent: true, opacity: 0.45 })
+    );
+    glow.rotation.x = Math.PI / 2;
+    glow.position.set(0, -0.05, 0.1);
+    group.add(glow);
+
+    group.position.set(baseX, baseY, 0.2);
+    scene.add(group);
+
+    return {
+        mesh: group,
+        base: { x: baseX, y: baseY },
+        bounds: {
+            left: baseX - 0.4,
+            right: baseX + 0.4,
+            top: baseY + 0.6,
+            bottom: baseY - 0.2
+        },
+        active: true,
+        respawnTimer: 0,
+        respawnDelay: 30,
+        bobTime: 0
+    };
+}
+
+function removeHealthPotion() {
+    if (healthPotion && healthPotion.mesh && healthPotion.mesh.parent) {
+        healthPotion.mesh.parent.remove(healthPotion.mesh);
+    }
+    healthPotion = null;
+}
+
+function updateHealthPotion(deltaTime, activePlayers) {
+    if (!healthPotion || !healthPotion.mesh) return;
+    if (!healthPotion.active) {
+        healthPotion.respawnTimer = Math.max(0, healthPotion.respawnTimer - deltaTime);
+        if (healthPotion.respawnTimer === 0) {
+            healthPotion.active = true;
+            healthPotion.mesh.visible = true;
+        }
+        return;
+    }
+
+    healthPotion.bobTime += deltaTime;
+    const bobOffset = Math.sin(healthPotion.bobTime * 2.5) * 0.06;
+    healthPotion.mesh.position.y = healthPotion.base.y + bobOffset;
+    const { x, y } = healthPotion.mesh.position;
+    healthPotion.bounds.left = x - 0.4;
+    healthPotion.bounds.right = x + 0.4;
+    healthPotion.bounds.top = y + 0.6;
+    healthPotion.bounds.bottom = y - 0.2;
+
+    for (const activePlayer of activePlayers) {
+        if (!activePlayer || !activePlayer.isAlive) continue;
+        if (!checkAABBCollision(activePlayer.getBounds(), healthPotion.bounds)) continue;
+        activePlayer.heal(30);
+        healthPotion.active = false;
+        healthPotion.respawnTimer = healthPotion.respawnDelay;
+        healthPotion.mesh.visible = false;
+        break;
+    }
+}
+
+function handlePauseGamepadToggle() {
+    if (!pauseMenu) return;
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        const activeInput = inputs[i];
+        if (!activeInput || typeof activeInput.isGamepadPressed !== 'function') {
+            lastPauseStartPressed[i] = false;
+            continue;
+        }
+        const pressed = activeInput.isGamepadPressed('Button9');
+        if (pressed && !lastPauseStartPressed[i]) {
+            pauseMenu.toggle();
+        }
+        lastPauseStartPressed[i] = pressed;
+    }
+}
+
+function startMenuRender() {
+    if (menuRenderActive) return;
+    menuRenderActive = true;
+    const loop = () => {
+        if (!menuRenderActive) return;
+        if (!gameStarted && renderer && camera) {
+            const now = performance.now();
+            if (now - lastGamepadRefresh > GAMEPAD_REFRESH_INTERVAL_MS) {
+                refreshGamepadSelects();
+                lastGamepadRefresh = now;
+            }
+            pollMenuGamepad();
+            renderer.render(scene, camera);
+        }
+        menuRenderHandle = requestAnimationFrame(loop);
+    };
+    menuRenderHandle = requestAnimationFrame(loop);
+}
+
+function stopMenuRender() {
+    menuRenderActive = false;
+    if (menuRenderHandle) {
+        cancelAnimationFrame(menuRenderHandle);
+        menuRenderHandle = null;
     }
 }
 
@@ -1538,6 +1924,10 @@ function hideReadyMenu() {
     if (!readyMenu) return;
     readyMenu.classList.remove('active');
     readyMenuActive = false;
+}
+
+function activateReadyMenuSelection() {
+    confirmReadyStart();
 }
 
 function confirmReadyStart() {
@@ -1706,6 +2096,12 @@ function pollHeroMenuGamepadForPlayer(pad, playerIndex) {
 
     const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
     if (backPressed && !menuBackLockedByPlayer[selectIndex]) {
+        const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
+        if (playerIndex === 1 && localMultiplayerEnabled && !hasSelection && heroMenu && heroMenu.style.display === 'flex') {
+            setPlayerCount(1);
+            menuBackLockedByPlayer[selectIndex] = true;
+            return;
+        }
         pendingHeroClasses[selectIndex] = null;
         heroLocked[selectIndex] = false;
         updateCoopHeroSelectionUI();
@@ -1719,7 +2115,10 @@ function pollHeroMenuGamepadForPlayer(pad, playerIndex) {
 function pollCoopHeroMenuGamepads() {
     for (let i = 0; i < localPlayerCount; i += 1) {
         const playerIndex = i + 1;
-        pollHeroMenuGamepadForPlayer(getAssignedPadForPlayer(playerIndex), playerIndex);
+        const pad = playerIndex === 1
+            ? (getAssignedPadForPlayer(playerIndex) || getFirstConnectedPad())
+            : getAssignedPadForPlayer(playerIndex);
+        pollHeroMenuGamepadForPlayer(pad, playerIndex);
     }
 }
 
@@ -1778,6 +2177,23 @@ function pollMenuGamepad() {
     }
 
     if (localMultiplayerEnabled) {
+        if (heroMenu && heroMenu.style.display === 'flex') {
+            const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
+            if (!hasSelection) {
+                const pad = getFirstConnectedPad();
+                if (pad) {
+                    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+                    if (backPressed && !menuBackLockedByPlayer[0]) {
+                        setPlayerCount(1);
+                        menuBackLockedByPlayer[0] = true;
+                        return;
+                    }
+                    if (!backPressed) {
+                        menuBackLockedByPlayer[0] = false;
+                    }
+                }
+            }
+        }
         pollCoopHeroMenuGamepads();
         return;
     }
@@ -1791,7 +2207,7 @@ function pollReadyMenuGamepad() {
 
     const confirmPressed = pad.buttons[0] && pad.buttons[0].pressed;
     if (confirmPressed && !readyConfirmLocked) {
-        confirmReadyStart();
+        activateReadyMenuSelection();
         readyConfirmLocked = true;
     } else if (!confirmPressed) {
         readyConfirmLocked = false;
@@ -1820,11 +2236,13 @@ window.addEventListener('load', () => {
     fourPlayerToggle = document.getElementById('four-player-toggle');
     coopHint = document.getElementById('coop-hint');
     heroGridSingle = document.getElementById('hero-grid-single');
+    if (heroMenu) {
+        heroMenu.addEventListener('scroll', () => updateAllHeroFocusTags());
+    }
     controllerToggleButton = document.getElementById('controller-toggle');
     gamepadAssign = document.getElementById('gamepad-assign');
     readyMenu = document.getElementById('ready-menu');
     readyConfirmButton = document.getElementById('ready-confirm');
-    readyCancelButton = document.getElementById('ready-cancel');
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');
     p3GamepadSelect = document.getElementById('p3-gamepad-select');
@@ -1915,10 +2333,9 @@ window.addEventListener('load', () => {
         });
     }
     if (readyConfirmButton) {
-        readyConfirmButton.addEventListener('click', () => confirmReadyStart());
-    }
-    if (readyCancelButton) {
-        readyCancelButton.addEventListener('click', () => hideReadyMenu());
+        readyConfirmButton.addEventListener('click', () => {
+            confirmReadyStart();
+        });
     }
 
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
@@ -1933,8 +2350,12 @@ window.addEventListener('load', () => {
 
     document.addEventListener('keydown', (event) => {
         if (readyMenuActive) {
-            if (event.code === 'Enter' || event.code === 'Space') {
-                confirmReadyStart();
+            if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
+                moveReadyMenuFocus(-1);
+            } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
+                moveReadyMenuFocus(1);
+            } else if (event.code === 'Enter' || event.code === 'Space') {
+                activateReadyMenuSelection();
             } else if (event.code === 'Escape' || event.code === 'Backspace') {
                 hideReadyMenu();
             }
@@ -1971,6 +2392,7 @@ window.addEventListener('load', () => {
 
     window.addEventListener('gamepadconnected', () => refreshGamepadSelects(true));
     window.addEventListener('gamepaddisconnected', () => refreshGamepadSelects(true));
+    window.addEventListener('resize', () => updateAllHeroFocusTags());
 
     refreshGamepadSelects(true);
     setPlayerCount(localPlayerCount);
@@ -1998,18 +2420,5 @@ window.addEventListener('load', () => {
         handleHeroSelect(Archer);
     });
 
-    // Render empty scene while in menu
-    function menuRender() {
-        if (!gameStarted) {
-            const now = performance.now();
-            if (now - lastGamepadRefresh > GAMEPAD_REFRESH_INTERVAL_MS) {
-                refreshGamepadSelects();
-                lastGamepadRefresh = now;
-            }
-            pollMenuGamepad();
-            renderer.render(scene, camera);
-            requestAnimationFrame(menuRender);
-        }
-    }
-    menuRender();
+    startMenuRender();
 });

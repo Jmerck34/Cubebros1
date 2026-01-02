@@ -6,6 +6,7 @@ import { GameLoop } from './core/gameLoop.js';
 import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
 import { getAimDirection } from './utils/aim.js';
+import { updateDamageNumbers } from './utils/damageNumbers.js';
 import { Warrior } from './player/Warrior.js';
 import { Level } from './world/Level.js';
 import { CameraFollow } from './camera/CameraFollow.js';
@@ -111,6 +112,8 @@ const gameLoop = new GameLoop(
 
         // Update UI
         uiManager.update();
+
+        updateDamageNumbers(deltaTime);
     },
     // Render callback
     () => {

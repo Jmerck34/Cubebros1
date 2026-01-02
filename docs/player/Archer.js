@@ -350,6 +350,9 @@ export class Archer extends Hero {
      * Teleport player to arrow impact location
      */
     teleportToArrow(x, y) {
+        if (!this.isAlive) {
+            return;
+        }
         this.position.x = x;
         this.position.y = y;
         this.velocity.x = 0;
@@ -370,7 +373,7 @@ export class Archer extends Hero {
      */
     updatePotionEffects(deltaTime) {
         if (this.healOverTimeRemaining > 0) {
-            const healPerSecond = 4;
+            const healPerSecond = 8;
             this.heal(healPerSecond * deltaTime);
             this.healOverTimeRemaining -= deltaTime;
         }

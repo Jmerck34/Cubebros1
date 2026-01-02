@@ -16,6 +16,7 @@ import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
+import { updateDamageNumbers } from './utils/damageNumbers.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -151,6 +152,8 @@ const gameLoop = new GameLoop(
         // Update UI
         uiManager.update();
 
+        updateDamageNumbers(deltaTime);
+
         // Update environment animations
         environment.update(deltaTime);
     },
@@ -173,7 +176,7 @@ console.log('⚔️ WARRIOR:');
 console.log('  Q/Click = Sword Slash | W = Shield Bash | E = Dash | R = Whirlwind');
 console.log('');
 console.log('🗡️ ASSASSIN:');
-console.log('  Q/Click = Dagger Combo (bleed) | W = Poison Bomb | E = Shadow Walk | R = Assassinate');
+console.log('  Q/Click = Dagger Combo (bleed) | W = Throwing Stars (slow) | E = Shadow Walk | R = Assassinate');
 console.log('');
 console.log('🤖 CYBORG:');
 console.log('  Q/Click = Fireball | W = Freeze Blast | E = Bubble Shield | R = Kame Hame Ha');

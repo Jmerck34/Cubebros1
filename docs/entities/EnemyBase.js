@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { GRAVITY } from '../core/constants.js';
 import { EnemyHealthBar } from '../ui/EnemyHealthBar.js';
+import { spawnDamageNumber } from '../utils/damageNumbers.js';
 
 /**
  * Enemy Base Class - Foundation for all enemies
@@ -41,6 +42,8 @@ export class EnemyBase {
         this.bleedEffect = null;
         this.bleedDrops = [];
         this.bleedDropTimer = 0;
+        this.slowTimer = 0;
+        this.slowMultiplier = 1;
         this.baseColor = color;
         this.hitboxScale = { x: 1, y: 1 };
         this.debugHitboxVisible = false;
@@ -111,6 +114,13 @@ export class EnemyBase {
             this.poisonEffect = null;
         }
 
+        if (this.slowTimer > 0) {
+            this.slowTimer = Math.max(0, this.slowTimer - deltaTime);
+            if (this.slowTimer === 0) {
+                this.slowMultiplier = 1;
+            }
+        }
+
         if (this.bleedTimer > 0) {
             this.bleedTimer -= deltaTime;
             this.updateBleedEffect(deltaTime, true);
@@ -123,7 +133,8 @@ export class EnemyBase {
         this.position.y += this.velocity.y * deltaTime;
 
         // Horizontal movement
-        const moveSpeed = (this.frozenTimer > 0 || this.stunTimer > 0) ? 0 : this.speed;
+        const slowScale = this.slowMultiplier || 1;
+        const moveSpeed = (this.frozenTimer > 0 || this.stunTimer > 0) ? 0 : this.speed * slowScale;
         this.velocity.x = this.direction * moveSpeed;
         this.position.x += this.velocity.x * deltaTime;
 
@@ -171,8 +182,18 @@ export class EnemyBase {
     /**
      * Enemy takes damage and dies
      */
-    takeDamage() {
-        this.currentHealth -= 1;
+    takeDamage(amount = 1) {
+        const damage = Number.isFinite(amount) ? amount : 1;
+        if (damage <= 0) {
+            return;
+        }
+
+        spawnDamageNumber(this.scene, this.position, damage, {
+            color: '#ffe08a',
+            stroke: 'rgba(0, 0, 0, 0.85)'
+        });
+
+        this.currentHealth = Math.max(0, this.currentHealth - damage);
         if (this.healthBar) {
             this.healthBar.setHealth(this.currentHealth);
         }
@@ -323,6 +344,17 @@ export class EnemyBase {
     }
 
     /**
+     * Apply slow effect.
+     * @param {number} durationSeconds
+     * @param {number} multiplier
+     */
+    setSlowed(durationSeconds = 1.2, multiplier = 0.7) {
+        if (!this.isAlive) return;
+        this.slowTimer = Math.max(this.slowTimer, durationSeconds);
+        this.slowMultiplier = Math.min(this.slowMultiplier, multiplier);
+    }
+
+    /**
      * Mark enemy as bleeding (visual only)
      * @param {number} durationSeconds
      */
@@ -456,5 +488,3 @@ export class EnemyBase {
         this.debugHitbox.scale.set(width, height, 1);
     }
 }
-
-

@@ -29,7 +29,8 @@ export function handleJump(player, input) {
 
     // Reset jumps when grounded
     if (player.isGrounded) {
-        player.jumpsRemaining = 2;
+        const maxJumps = Number.isFinite(player.maxJumps) ? player.maxJumps : 2;
+        player.jumpsRemaining = maxJumps;
     }
 
     // Apply debug jump force multiplier if available

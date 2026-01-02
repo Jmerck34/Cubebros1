@@ -9,6 +9,16 @@ export class PauseMenu {
         this.input = input;
         this.isOpen = false;
         this.bindingButtons = new Map();
+        this.menuButtons = [];
+        this.menuFocusIndex = 0;
+        this.lastNavTime = 0;
+        this.lastPadState = {
+            up: false,
+            down: false,
+            confirm: false,
+            back: false,
+            start: false
+        };
 
         // Create menu button (top right)
         this.createMenuButton();
@@ -136,6 +146,13 @@ export class PauseMenu {
         this.menuContainer.appendChild(this.quitButton);
         this.overlay.appendChild(this.menuContainer);
         document.body.appendChild(this.overlay);
+        this.menuButtons = [
+            this.resumeButton,
+            this.backToMenuButton,
+            this.keybindToggle,
+            this.quitButton
+        ];
+        this.updateMenuFocus();
 
         // Click outside to close
         this.overlay.addEventListener('click', (e) => {
@@ -202,6 +219,8 @@ export class PauseMenu {
         this.overlay.style.display = 'flex';
         this.menuButton.style.display = 'none';
         this.refreshKeybindLabels();
+        this.menuFocusIndex = 0;
+        this.updateMenuFocus();
     }
 
     /**
@@ -226,6 +245,50 @@ export class PauseMenu {
     }
 
     /**
+     * Handle controller navigation for the pause menu
+     * @param {InputManager|InputManager[]} inputSource
+     */
+    handleGamepad(inputSource) {
+        if (!this.isOpen) return;
+        const inputs = Array.isArray(inputSource) ? inputSource : [inputSource];
+        const activeInput = inputs.find((entry) => entry && entry.gamepad);
+        if (!activeInput || typeof activeInput.isGamepadPressed !== 'function') return;
+
+        const now = performance.now();
+        const up = activeInput.isGamepadPressed('DPadUp') || activeInput.isGamepadPressed('Axis1-');
+        const down = activeInput.isGamepadPressed('DPadDown') || activeInput.isGamepadPressed('Axis1+');
+        const confirm = activeInput.isGamepadPressed('Button0');
+        const back = activeInput.isGamepadPressed('Button1');
+        const start = activeInput.isGamepadPressed('Button9');
+
+        if ((up && !this.lastPadState.up) || (down && !this.lastPadState.down)) {
+            if (now - this.lastNavTime > 180) {
+                const delta = up ? -1 : 1;
+                const count = this.menuButtons.length;
+                this.menuFocusIndex = (this.menuFocusIndex + delta + count) % count;
+                this.updateMenuFocus();
+                this.lastNavTime = now;
+            }
+        }
+
+        if (confirm && !this.lastPadState.confirm) {
+            const target = this.menuButtons[this.menuFocusIndex];
+            if (target) target.click();
+        }
+
+        if ((back && !this.lastPadState.back) || (start && !this.lastPadState.start)) {
+            this.close();
+            if (this.onResume) this.onResume();
+        }
+
+        this.lastPadState.up = up;
+        this.lastPadState.down = down;
+        this.lastPadState.confirm = confirm;
+        this.lastPadState.back = back;
+        this.lastPadState.start = start;
+    }
+
+    /**
      * Check if menu is open
      * @returns {boolean}
      */
@@ -243,6 +306,19 @@ export class PauseMenu {
         if (this.overlay && this.overlay.parentNode) {
             this.overlay.parentNode.removeChild(this.overlay);
         }
+    }
+
+    updateMenuFocus() {
+        this.menuButtons.forEach((button, index) => {
+            if (!button) return;
+            if (index === this.menuFocusIndex) {
+                button.style.outline = '3px solid #ffd166';
+                button.style.outlineOffset = '2px';
+            } else {
+                button.style.outline = 'none';
+                button.style.outlineOffset = '0';
+            }
+        });
     }
 
     /**

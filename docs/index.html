@@ -261,40 +261,36 @@
             box-shadow: 0 0 14px rgba(204, 47, 47, 0.6);
         }
 
-        .team-button.menu-focus-p1 {
-            outline: 3px solid rgba(122, 198, 255, 0.9);
-            box-shadow: 0 0 16px rgba(122, 198, 255, 0.5);
+        .team-button.blue.menu-focus-p1,
+        .team-button.blue.menu-focus-p2,
+        .team-button.blue.menu-focus-p3,
+        .team-button.blue.menu-focus-p4 {
+            outline: 3px solid rgba(47, 108, 176, 0.95);
+            box-shadow: 0 0 16px rgba(47, 108, 176, 0.6);
         }
 
-        .team-button.menu-focus-p2 {
-            outline: 3px solid rgba(255, 160, 160, 0.9);
-            box-shadow: 0 0 16px rgba(255, 160, 160, 0.5);
+        .team-button.red.menu-focus-p1,
+        .team-button.red.menu-focus-p2,
+        .team-button.red.menu-focus-p3,
+        .team-button.red.menu-focus-p4 {
+            outline: 3px solid rgba(204, 47, 47, 0.95);
+            box-shadow: 0 0 16px rgba(204, 47, 47, 0.6);
         }
 
-        .team-button.menu-focus-p3 {
-            outline: 3px solid rgba(120, 230, 170, 0.9);
-            box-shadow: 0 0 16px rgba(120, 230, 170, 0.5);
+        .team-button.blue.selected-p1,
+        .team-button.blue.selected-p2,
+        .team-button.blue.selected-p3,
+        .team-button.blue.selected-p4 {
+            border-color: rgba(47, 108, 176, 0.95);
+            box-shadow: 0 0 18px rgba(47, 108, 176, 0.6);
         }
 
-        .team-button.menu-focus-p4 {
-            outline: 3px solid rgba(200, 165, 255, 0.9);
-            box-shadow: 0 0 16px rgba(200, 165, 255, 0.5);
-        }
-
-        .team-button.selected-p1 {
-            border-color: rgba(122, 198, 255, 0.9);
-        }
-
-        .team-button.selected-p2 {
-            border-color: rgba(255, 160, 160, 0.9);
-        }
-
-        .team-button.selected-p3 {
-            border-color: rgba(120, 230, 170, 0.9);
-        }
-
-        .team-button.selected-p4 {
-            border-color: rgba(200, 165, 255, 0.9);
+        .team-button.red.selected-p1,
+        .team-button.red.selected-p2,
+        .team-button.red.selected-p3,
+        .team-button.red.selected-p4 {
+            border-color: rgba(204, 47, 47, 0.95);
+            box-shadow: 0 0 18px rgba(204, 47, 47, 0.6);
         }
 
         .team-controls {
@@ -335,6 +331,7 @@
             max-width: 860px;
             width: 100%;
             margin-bottom: 20px;
+            position: relative;
         }
 
         .hero-grid-split {
@@ -380,6 +377,8 @@
             transition: all 0.3s ease;
             min-width: 220px;
             scroll-margin-top: 120px;
+            position: relative;
+            overflow: hidden;
         }
 
         .hero-card:hover {
@@ -456,43 +455,95 @@
         }
 
         .hero-card.menu-focus-p1 {
-            outline: 3px solid rgba(122, 198, 255, 0.9);
-            box-shadow: 0 0 18px rgba(122, 198, 255, 0.6);
+            outline: none;
+            box-shadow: none;
         }
 
         .hero-card.menu-focus-p2 {
-            outline: 3px solid rgba(255, 160, 160, 0.9);
-            box-shadow: 0 0 18px rgba(255, 160, 160, 0.6);
+            outline: none;
+            box-shadow: none;
         }
 
         .hero-card.menu-focus-p3 {
-            outline: 3px solid rgba(120, 230, 170, 0.9);
-            box-shadow: 0 0 18px rgba(120, 230, 170, 0.6);
+            outline: none;
+            box-shadow: none;
         }
 
         .hero-card.menu-focus-p4 {
-            outline: 3px solid rgba(200, 165, 255, 0.9);
-            box-shadow: 0 0 18px rgba(200, 165, 255, 0.6);
+            outline: none;
+            box-shadow: none;
         }
 
-        .hero-card.selected-p1 {
-            border-color: rgba(122, 198, 255, 0.9);
-            box-shadow: 0 0 18px rgba(122, 198, 255, 0.4);
+        .hero-focus-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
         }
 
-        .hero-card.selected-p2 {
-            border-color: rgba(255, 160, 160, 0.9);
-            box-shadow: 0 0 18px rgba(255, 160, 160, 0.4);
+        .hero-focus-tag {
+            position: absolute;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+            transform: translate(0, 0);
+            transition: transform 0.2s ease, opacity 0.15s ease;
+            opacity: 0;
         }
 
-        .hero-card.selected-p3 {
-            border-color: rgba(120, 230, 170, 0.9);
-            box-shadow: 0 0 18px rgba(120, 230, 170, 0.4);
+        .hero-focus-tag.p1 { border-color: rgba(122, 198, 255, 0.9); }
+        .hero-focus-tag.p2 { border-color: rgba(255, 160, 160, 0.9); }
+        .hero-focus-tag.p3 { border-color: rgba(120, 230, 170, 0.9); }
+        .hero-focus-tag.p4 { border-color: rgba(200, 165, 255, 0.9); }
+
+        .hero-select-shades {
+            position: absolute;
+            inset: 0;
+            border-radius: 12px;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
         }
 
-        .hero-card.selected-p4 {
-            border-color: rgba(200, 165, 255, 0.9);
-            box-shadow: 0 0 18px rgba(200, 165, 255, 0.4);
+        .hero-card > *:not(.hero-select-shades) {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-select-shade {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .hero-select-shade.p1 { background: rgba(122, 198, 255, 0.22); }
+        .hero-select-shade.p2 { background: rgba(255, 160, 160, 0.22); }
+        .hero-select-shade.p3 { background: rgba(120, 230, 170, 0.22); }
+        .hero-select-shade.p4 { background: rgba(200, 165, 255, 0.22); }
+
+        .hero-card.selected-p1 .hero-select-shade.p1,
+        .hero-card.selected-p2 .hero-select-shade.p2,
+        .hero-card.selected-p3 .hero-select-shade.p3,
+        .hero-card.selected-p4 .hero-select-shade.p4 {
+            opacity: 1;
+        }
+
+        .hero-card.hero-select-pop {
+            animation: heroSelectPop 0.2s ease;
+        }
+
+        @keyframes heroSelectPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+            100% { transform: scale(1); }
         }
 
         .player-count-button.menu-focus {
@@ -674,6 +725,13 @@
         .ready-button:hover {
             transform: translateY(-1px);
             border-color: rgba(255, 255, 255, 0.7);
+        }
+
+        .ready-button:focus-visible {
+            border-color: rgba(255, 217, 102, 0.9);
+            box-shadow: 0 0 12px rgba(255, 217, 102, 0.55);
+            transform: translateY(-1px);
+            outline: none;
         }
 
         .gamepad-assign {
@@ -1015,7 +1073,7 @@
                 <div class="hero-desc">Burst Damage - Dual Daggers</div>
                 <div class="abilities">
                     <div class="ability"><strong>Q/Click:</strong> Dagger Combo (bleed)</div>
-                    <div class="ability"><strong>Right Click:</strong> Poison Bomb (DoT cloud)</div>
+                    <div class="ability"><strong>Right Click:</strong> Throwing Stars (slow)</div>
                     <div class="ability"><strong>E:</strong> Shadow Walk (invincible)</div>
                     <div class="ability"><strong>R:</strong> Assassinate (teleport)</div>
                 </div>
@@ -1110,10 +1168,9 @@
     <div id="ready-menu" aria-hidden="true">
         <div class="ready-panel">
             <h2>Ready to Start?</h2>
-            <p>Player 1: Press A/Enter to confirm. B/Esc to go back.</p>
+            <p>Player 1: Press A/Enter to start. B/Esc to back out.</p>
             <div class="ready-actions">
                 <button id="ready-confirm" class="ready-button" type="button">Start Match</button>
-                <button id="ready-cancel" class="ready-button" type="button">Back</button>
             </div>
         </div>
     </div>

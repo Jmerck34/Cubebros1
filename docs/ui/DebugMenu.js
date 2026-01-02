@@ -266,7 +266,7 @@ export class DebugMenu {
             'Cyborg': ['Fireball', 'Freeze Blast', 'Bubble Shield', 'Kame Hame Ha'],
             'Warlock': ['Lightning Strike', 'Fear', 'Hover', 'Chaos Storm'],
             'Warrior': ['Sword Slash', 'Shield Bash', 'Dash', 'Whirlwind'],
-            'Assassin': ['Dagger Combo', 'Poison Bomb', 'Shadow Walk', 'Assassinate'],
+            'Assassin': ['Dagger Combo', 'Throwing Stars', 'Shadow Walk', 'Assassinate'],
             'Archer': ['Shoot Arrow', 'Healing Potion', 'Teleport Arrow', 'Machine Bow']
         };
 

@@ -24,6 +24,13 @@ export class Assassin extends Hero {
         // Shadow walk state
         this.isShadowWalking = false;
         this.shadowWalkTimer = 0;
+        this.shadowWalkOpacity = 0.35;
+        this.shadowWalkTint = 0x000000;
+        this.shadowWalkMaterials = null;
+        this.shadowPoofParticles = [];
+        this.shadowWalkMaxJumpsBase = null;
+        this.shadowWalkSpeedMultiplier = 1.35;
+        this.shadowWalkMoveSpeedBase = null;
 
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
@@ -115,11 +122,11 @@ export class Assassin extends Hero {
             return true;
         };
 
-        // W - Poison Bomb
-        const poisonBomb = new Ability('Poison Bomb', 5);
-        poisonBomb.use = (hero) => {
-            if (!Ability.prototype.use.call(poisonBomb, hero)) return false;
-            hero.throwPoisonBomb();
+        // W - Throwing Stars
+        const throwingStars = new Ability('Throwing Stars', 2.5, false, 30);
+        throwingStars.use = (hero) => {
+            if (!Ability.prototype.use.call(throwingStars, hero)) return false;
+            hero.throwThrowingStars();
             return true;
         };
 
@@ -137,7 +144,7 @@ export class Assassin extends Hero {
             return hero.assassinateTarget();
         };
 
-        this.setAbilities(daggerSlash, poisonBomb, shadowWalk, assassinate);
+        this.setAbilities(daggerSlash, throwingStars, shadowWalk, assassinate);
     }
 
     initFlipAudio() {
@@ -239,6 +246,7 @@ export class Assassin extends Hero {
                 this.deactivateShadowWalk();
             }
 
+            this.applyShadowWalkVisual();
             if (this.healthBar && typeof this.healthBar.setOpacity === 'function') {
                 this.healthBar.setOpacity(0.05);
             }
@@ -448,10 +456,10 @@ export class Assassin extends Hero {
     }
 
     /**
-     * Throw Poison Bomb - W Ability (Now detects platforms)
+     * Throwing Stars - W Ability (slows targets)
      */
-    throwPoisonBomb() {
-        console.log('ðŸ’£ POISON BOMB!');
+    throwThrowingStars() {
+        console.log('ðŸŒŸ THROWING STARS!');
 
         // Cancel shadow walk if active
         if (this.isShadowWalking) {
@@ -459,91 +467,115 @@ export class Assassin extends Hero {
         }
         this.playPoisonThrowSound();
 
-        // Create poison bomb projectile (body + cap + fuse)
-        const bombGroup = new THREE.Group();
-        const bombGeometry = new THREE.SphereGeometry(0.16, 16, 16);
-        const bombMaterial = new THREE.MeshBasicMaterial({ color: 0x2d2d2d });
-        const bomb = new THREE.Mesh(bombGeometry, bombMaterial);
-        bombGroup.add(bomb);
-
-        const capGeometry = new THREE.CylinderGeometry(0.05, 0.07, 0.06, 12);
-        const capMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
-        const cap = new THREE.Mesh(capGeometry, capMaterial);
-        cap.position.set(0, 0.16, 0);
-        bombGroup.add(cap);
-
-        const fuseGeometry = new THREE.BoxGeometry(0.02, 0.08, 0.02);
-        const fuseMaterial = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
-        const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
-        fuse.position.set(0.04, 0.22, 0);
-        bombGroup.add(fuse);
-
         const aim = this.getAimDirection();
         const useAim = this.hasAimInput;
         const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
-
-        // Starting position
-        bombGroup.position.set(
-            this.position.x + (0.5 * direction.x),
-            this.position.y + (0.5 * direction.y),
-            0.2
-        );
-        this.mesh.parent.add(bombGroup);
-
-        // Throw direction based on facing or aim
-        const throwDirection = direction;
-        let bombX = bombGroup.position.x;
-        let bombY = bombGroup.position.y;
-        let velocityY = useAim ? throwDirection.y * 8 : 5;
-        const velocityX = throwDirection.x * 8;
-
-        // Get level reference (stored when enemy reference is set)
+        const baseAngle = Math.atan2(direction.y, direction.x);
+        const starCount = 1;
+        const spread = 0;
+        const speed = 12;
+        const maxRange = 12;
+        const slowDuration = 1.2;
+        const slowMultiplier = 0.6;
         const level = this.level || { platforms: [] };
 
-        // Animate bomb trajectory
-        const bombInterval = setInterval(() => {
-            bombX += velocityX * 0.016;
-            velocityY -= 20 * 0.016; // Gravity
-            bombY += velocityY * 0.016;
+        const createStarMesh = () => {
+            const starGroup = new THREE.Group();
+            const points = [
+                new THREE.Vector2(0, 0.62),
+                new THREE.Vector2(0.22, 0.22),
+                new THREE.Vector2(0.62, 0),
+                new THREE.Vector2(0.22, -0.22),
+                new THREE.Vector2(0, -0.62),
+                new THREE.Vector2(-0.22, -0.22),
+                new THREE.Vector2(-0.62, 0),
+                new THREE.Vector2(-0.22, 0.22)
+            ];
+            const shape = new THREE.Shape(points);
+            const hole = new THREE.Path();
+            const holeRadius = 0.12;
+            hole.absellipse(0, 0, holeRadius, holeRadius, 0, Math.PI * 2, false, 0);
+            shape.holes.push(hole);
 
-            bombGroup.position.x = bombX;
-            bombGroup.position.y = bombY;
-            bombGroup.rotation.z += 0.2;
+            const starGeometry = new THREE.ShapeGeometry(shape);
+            const starMaterial = new THREE.MeshBasicMaterial({
+                color: 0x111111,
+                transparent: true,
+                opacity: 0.9,
+                side: THREE.DoubleSide
+            });
+            const starMesh = new THREE.Mesh(starGeometry, starMaterial);
+            starMesh.scale.set(1.6, 1.6, 1);
+            starGroup.add(starMesh);
+            return starGroup;
+        };
 
-            // Create bomb bounds for collision detection
-            const bombBounds = {
-                left: bombX - 0.15,
-                right: bombX + 0.15,
-                top: bombY + 0.15,
-                bottom: bombY - 0.15
-            };
+        for (let i = 0; i < starCount; i += 1) {
+            const offset = i - (starCount - 1) / 2;
+            const angle = baseAngle + offset * spread;
+            const star = createStarMesh();
+            const startX = this.position.x + (0.6 * direction.x);
+            const startY = this.position.y + (0.4 * direction.y);
+            let starX = startX;
+            let starY = startY;
+            star.position.set(starX, starY, 0.3);
+            this.mesh.parent.add(star);
 
-            // Check collision with platforms
-            let hitPlatform = false;
-            if (level.platforms) {
-                for (const platform of level.platforms) {
-                    if (checkAABBCollision(bombBounds, platform.bounds)) {
-                        hitPlatform = true;
-                        break;
+            const starInterval = setInterval(() => {
+                starX += Math.cos(angle) * speed * 0.016;
+                starY += Math.sin(angle) * speed * 0.016;
+                star.position.set(starX, starY, 0.3);
+                star.rotation.z += 0.3;
+
+                const bounds = {
+                    left: starX - 0.45,
+                    right: starX + 0.45,
+                    top: starY + 0.45,
+                    bottom: starY - 0.45
+                };
+
+                let hitPlatform = false;
+                if (level.platforms) {
+                    for (const platform of level.platforms) {
+                        if (checkAABBCollision(bounds, platform.bounds)) {
+                            hitPlatform = true;
+                            break;
+                        }
                     }
                 }
-            }
 
-            const hitGround = bombY < -2;
-            const outOfRange = Math.abs(bombX - this.position.x) > 10;
-
-            // Check if hit ground, platform, or went off screen
-            if (hitPlatform || hitGround || outOfRange) {
-                clearInterval(bombInterval);
-                this.mesh.parent.remove(bombGroup);
-                if (hitPlatform || hitGround) {
-                    this.playPoisonImpactSound();
+                const traveled = Math.hypot(starX - startX, starY - startY);
+                if (hitPlatform || traveled > maxRange) {
+                    clearInterval(starInterval);
+                    this.mesh.parent.remove(star);
+                    if (hitPlatform) {
+                        this.playPoisonImpactSound();
+                    }
+                    return;
                 }
 
-                // Create poison cloud at impact location
-                this.createPoisonCloud(bombX, bombY);
-            }
-        }, 16);
+                for (const target of this.getDamageTargets()) {
+                    if (!target.isAlive) continue;
+                    const targetBounds = target.getBounds();
+                    if (!checkAABBCollision(bounds, targetBounds)) continue;
+                    const baseDamage = 20;
+                    const adjustedDamage = this.abilities.w && typeof this.abilities.w.getAdjustedDamage === 'function'
+                        ? this.abilities.w.getAdjustedDamage(baseDamage)
+                        : baseDamage;
+                    target.takeDamage(Math.max(1, Math.round(adjustedDamage)));
+                    if (target.type !== 'player') {
+                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    }
+                    if (typeof target.setSlowed === 'function') {
+                        target.setSlowed(slowDuration, slowMultiplier);
+                    }
+                    this.playPoisonImpactSound();
+                    clearInterval(starInterval);
+                    this.mesh.parent.remove(star);
+                    break;
+                }
+            }, 16);
+        }
     }
 
     /**
@@ -611,9 +643,18 @@ export class Assassin extends Hero {
 
         this.isShadowWalking = true;
         this.shadowWalkTimer = 5; // 5 seconds
+        this.spawnShadowPoof();
+        if (this.shadowWalkMoveSpeedBase === null) {
+            this.shadowWalkMoveSpeedBase = this.moveSpeedMultiplier || 1;
+        }
+        this.moveSpeedMultiplier = this.shadowWalkMoveSpeedBase * this.shadowWalkSpeedMultiplier;
+        if (this.shadowWalkMaxJumpsBase === null) {
+            this.shadowWalkMaxJumpsBase = Number.isFinite(this.maxJumps) ? this.maxJumps : 2;
+        }
+        this.maxJumps = 3;
+        this.jumpsRemaining = Math.min(Math.max(this.jumpsRemaining + 1, 1), this.maxJumps);
 
-        // Hide the main character mesh
-        this.mesh.visible = false;
+        this.applyShadowWalkVisual();
         if (this.healthBar) {
             if (typeof this.healthBar.show === 'function') {
                 this.healthBar.show();
@@ -662,9 +703,21 @@ export class Assassin extends Hero {
      */
     deactivateShadowWalk() {
         this.isShadowWalking = false;
+        this.spawnShadowPoof();
+        if (this.shadowWalkMoveSpeedBase !== null) {
+            this.moveSpeedMultiplier = this.shadowWalkMoveSpeedBase;
+            this.shadowWalkMoveSpeedBase = null;
+        }
+        if (this.shadowWalkMaxJumpsBase !== null) {
+            this.maxJumps = this.shadowWalkMaxJumpsBase;
+            this.shadowWalkMaxJumpsBase = null;
+            if (this.jumpsRemaining > this.maxJumps) {
+                this.jumpsRemaining = this.maxJumps;
+            }
+        }
 
         // Show the main character mesh again
-        this.mesh.visible = true;
+        this.clearShadowWalkVisual();
         if (this.healthBar) {
             if (typeof this.healthBar.setOpacity === 'function') {
                 this.healthBar.setOpacity(1);
@@ -679,6 +732,90 @@ export class Assassin extends Hero {
             this.mesh.parent.remove(this.shadowLine);
             this.shadowLine = null;
         }
+    }
+
+    applyShadowWalkVisual() {
+        this.mesh.visible = true;
+        if (!this.shadowWalkMaterials) {
+            this.shadowWalkMaterials = [];
+            this.mesh.traverse((child) => {
+                if (!child.isMesh || !child.material) return;
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach((material) => {
+                    this.shadowWalkMaterials.push({
+                        material,
+                        color: material.color ? material.color.clone() : null,
+                        opacity: material.opacity,
+                        transparent: material.transparent,
+                        depthWrite: material.depthWrite
+                    });
+                });
+            });
+        }
+
+        this.shadowWalkMaterials.forEach((entry) => {
+            const material = entry.material;
+            if (material.color && this.shadowWalkTint !== null) {
+                material.color.set(this.shadowWalkTint);
+            }
+            material.transparent = true;
+            material.opacity = this.shadowWalkOpacity;
+            material.depthWrite = false;
+        });
+    }
+
+    clearShadowWalkVisual() {
+        if (!this.shadowWalkMaterials) return;
+        this.shadowWalkMaterials.forEach((entry) => {
+            const material = entry.material;
+            if (entry.color && material.color) {
+                material.color.copy(entry.color);
+            }
+            material.opacity = entry.opacity;
+            material.transparent = entry.transparent;
+            material.depthWrite = entry.depthWrite;
+        });
+        this.shadowWalkMaterials = null;
+    }
+
+    spawnShadowPoof() {
+        if (!this.scene) return;
+        const poofGroup = new THREE.Group();
+        const puffCount = 8;
+        for (let i = 0; i < puffCount; i += 1) {
+            const size = 0.18 + Math.random() * 0.22;
+            const puff = new THREE.Mesh(
+                new THREE.CircleGeometry(size, 12),
+                new THREE.MeshBasicMaterial({
+                    color: 0x000000,
+                    transparent: true,
+                    opacity: 0.7
+                })
+            );
+            const offsetX = (Math.random() - 0.5) * 0.9;
+            const offsetY = (Math.random() - 0.2) * 0.8;
+            puff.position.set(offsetX, offsetY, 0.35);
+            poofGroup.add(puff);
+        }
+        poofGroup.position.set(this.position.x, this.position.y + 0.2, 0.2);
+        this.mesh.parent.add(poofGroup);
+
+        let opacity = 0.7;
+        let scale = 1;
+        const poofInterval = setInterval(() => {
+            opacity -= 0.08;
+            scale += 0.15;
+            poofGroup.scale.set(scale, scale, 1);
+            poofGroup.children.forEach((puff) => {
+                puff.material.opacity = Math.max(0, opacity);
+            });
+            if (opacity <= 0) {
+                clearInterval(poofInterval);
+                if (poofGroup.parent) {
+                    poofGroup.parent.remove(poofGroup);
+                }
+            }
+        }, 40);
     }
 
     /**
