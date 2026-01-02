@@ -26,7 +26,14 @@ export class Warrior extends Hero {
         this.facingDirection = 1;
         this.dashResetCount = 0;
         this.shieldBashInvuln = 0;
+        this.shieldBlockTimer = 0;
+        this.shieldGuardRing = null;
         this.isSpinningUltimate = false;
+        this.swordComboStep = 0;
+        this.swordComboTimers = [];
+        this.swordComboWindowMs = 900;
+        this.swordComboResetAfterFinisherMs = 3000;
+        this.swordComboResetTimer = null;
 
         // Set warrior abilities
         this.initializeAbilities();
@@ -46,6 +53,8 @@ export class Warrior extends Hero {
         // Dash sound
         this.dashVolume = 0.08;
         this.initDashAudio();
+
+        this.initShieldGuardRing();
     }
 
     /**
@@ -163,7 +172,7 @@ export class Warrior extends Hero {
      */
     initializeAbilities() {
         // Q - Sword Slash (short cooldown)
-        const swordSlash = new Ability('Sword Slash', 1);
+        const swordSlash = new Ability('Sword Slash', 0.2);
         swordSlash.use = (hero) => {
             if (!Ability.prototype.use.call(swordSlash, hero)) return false;
 
@@ -172,13 +181,11 @@ export class Warrior extends Hero {
             return true;
         };
 
-        // W - Shield Bash (medium cooldown)
-        const shieldBash = new Ability('Shield Bash', 4);
+        // W - Shield Guard (immobile + invincible)
+        const shieldBash = new Ability('Shield Guard', 8);
         shieldBash.use = (hero) => {
             if (!Ability.prototype.use.call(shieldBash, hero)) return false;
-
-            // Shield bash effect
-            hero.shieldBashAttack();
+            hero.activateShieldGuard();
             return true;
         };
 
@@ -302,35 +309,48 @@ export class Warrior extends Hero {
 
         const originalRot = -0.87; // ~50 degrees clockwise
         const swings = [
-            { start: -0.6, end: -2.0, delay: 0, offsetY: 0.0, tint: 0xbfe3ff },   // Heavy downward slash
-            { start: -1.9, end: -0.1, delay: 190, offsetY: 0.15, tint: 0x99ccff }, // Wide horizontal-ish slash
-            { start: -0.3, end: -2.5, delay: 380, offsetY: -0.1, tint: 0xddeeff }  // Finisher
+            { start: -0.6, end: -2.0, offsetY: 0.0, tint: 0xbfe3ff, damageHits: 1 },   // First swing
+            { start: -1.9, end: -0.1, offsetY: 0.15, tint: 0x99ccff, damageHits: 1 }, // Second swing
+            { start: -0.3, end: -2.6, offsetY: -0.1, tint: 0xfff1c7, damageHits: 3 }  // Big finisher
         ];
 
-        swings.forEach((swing, index) => {
-            setTimeout(() => {
-                // Wind up
-                this.sword.rotation.z = swing.start;
+        this.swordComboTimers.forEach((timer) => clearTimeout(timer));
+        this.swordComboTimers = [];
 
-                setTimeout(() => {
-                    // Slash
-                    this.sword.rotation.z = swing.end;
-                    this.playSwordSwingSound();
-                    this.createCrescentSlash(true, swing.start, swing.end, index, swing.offsetY, swing.tint);
-                }, 80);
-            }, swing.delay);
-        });
+        if (this.swordComboResetTimer) {
+            clearTimeout(this.swordComboResetTimer);
+        }
 
-        setTimeout(() => {
+        const swing = swings[this.swordComboStep];
+        const isFinisher = this.swordComboStep === swings.length - 1;
+        this.sword.rotation.z = swing.start;
+        const slashTimer = setTimeout(() => {
+            this.sword.rotation.z = swing.end;
+            this.playSwordSwingSound();
+            this.createCrescentSlash(true, swing.start, swing.end, this.swordComboStep, swing.offsetY, swing.tint, swing.damageHits);
+            if (isFinisher && this.abilities && this.abilities.q) {
+                this.abilities.q.currentCooldown = 3;
+                this.abilities.q.isReady = false;
+            }
+        }, 140);
+        const resetRotTimer = setTimeout(() => {
             this.sword.rotation.z = originalRot;
-        }, 600);
+        }, 360);
+        this.swordComboTimers.push(slashTimer, resetRotTimer);
+
+        const wasFinisher = this.swordComboStep === swings.length - 1;
+        this.swordComboStep = (this.swordComboStep + 1) % swings.length;
+        const resetDelay = wasFinisher ? this.swordComboResetAfterFinisherMs : this.swordComboWindowMs;
+        this.swordComboResetTimer = setTimeout(() => {
+            this.swordComboStep = 0;
+        }, resetDelay);
     }
 
     /**
      * Create crescent moon slash effect that traces the sword tip path
      * @param {boolean} dealDamage - Whether this slash should damage enemies
      */
-    createCrescentSlash(dealDamage = false, startAngleOverride = null, endAngleOverride = null, comboIndex = 0, offsetY = 0, tint = 0xbfe3ff) {
+    createCrescentSlash(dealDamage = false, startAngleOverride = null, endAngleOverride = null, comboIndex = 0, offsetY = 0, tint = 0xbfe3ff, damageHits = 1) {
         // Create crescent slash tracing the sword tip's arc
         const slashGroup = new THREE.Group();
 
@@ -381,15 +401,17 @@ export class Warrior extends Hero {
 
         // Deal damage if specified
         if (dealDamage) {
-            const slashRange = 2.5; // Increased from 1.5 to extend further beyond the sword
-            const slashHeight = 1.5; // Increased vertical range
+            const rangeScale = comboIndex === 2 ? 1.35 : 1;
+            const heightScale = comboIndex === 2 ? 1.2 : 1;
+            const slashRange = 2.5 * rangeScale; // Increased from 1.5 to extend further beyond the sword
+            const slashHeight = 1.5 * heightScale; // Increased vertical range
             const slashBounds = {
                 left: this.position.x + (this.facingDirection > 0 ? -0.3 : -slashRange),
                 right: this.position.x + (this.facingDirection > 0 ? slashRange : 0.3),
                 top: this.position.y + slashHeight,
                 bottom: this.position.y - slashHeight
             };
-            this.damageEnemiesInArea(slashBounds, this.abilities.q);
+            this.damageEnemiesInArea(slashBounds, this.abilities.q, damageHits);
         }
 
         // Animate - fade out and scale up (faster fade)
@@ -463,6 +485,51 @@ export class Warrior extends Hero {
             this.animateShieldTo(originalX, originalY, originalRot, 1, 140);
             this.animateSwordTo(swordOriginalX, swordOriginalY, swordOriginalRot, 1, 140);
         }, 350);
+    }
+
+    /**
+     * Shield Guard - W Ability (immobile + invincible)
+     */
+    activateShieldGuard() {
+        console.log('🛡️ SHIELD GUARD!');
+        this.shieldBlockTimer = 1.5;
+        this.shieldBashInvuln = 1.5;
+        if (typeof this.playShieldBashSound === 'function') {
+            this.playShieldBashSound();
+        }
+        this.animateShieldTo(-0.9, -0.05, 0.2, 1.1, 120);
+        this.animateSwordTo(0.7, -0.05, -0.2, 1, 120);
+        this.showShieldGuardRing(true);
+    }
+
+    initShieldGuardRing() {
+        if (!this.scene) return;
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.9, 1.15, 32),
+            new THREE.MeshBasicMaterial({
+                color: 0x2f6cb0,
+                transparent: true,
+                opacity: 0.65,
+                side: THREE.DoubleSide
+            })
+        );
+        ring.position.set(this.position.x, this.position.y + 0.1, 0.6);
+        ring.visible = false;
+        this.scene.add(ring);
+        this.shieldGuardRing = ring;
+    }
+
+    updateShieldGuardRing() {
+        if (!this.shieldGuardRing) return;
+        const pulse = 0.05 + Math.sin(performance.now() * 0.01) * 0.05;
+        this.shieldGuardRing.position.set(this.position.x, this.position.y + 0.1, 0.6);
+        this.shieldGuardRing.scale.set(1 + pulse, 1 + pulse, 1);
+        this.shieldGuardRing.rotation.z = performance.now() * 0.002;
+    }
+
+    showShieldGuardRing(visible) {
+        if (!this.shieldGuardRing) return;
+        this.shieldGuardRing.visible = visible;
     }
 
     /**
@@ -647,6 +714,9 @@ export class Warrior extends Hero {
      * Update warrior - handle facing direction
      */
     update(deltaTime, input) {
+        const wasGuarding = this.shieldBlockTimer > 0;
+        const frozenPos = wasGuarding ? { x: this.position.x, y: this.position.y } : null;
+        this.forceControlsLocked = wasGuarding;
         // Update facing direction based on movement
         if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
@@ -656,10 +726,45 @@ export class Warrior extends Hero {
 
         // Call parent update
         super.update(deltaTime, input);
+        if (this.shieldBlockTimer > 0) {
+            this.shieldBlockTimer = Math.max(0, this.shieldBlockTimer - deltaTime);
+            this.forceControlsLocked = true;
+            this.velocity.x = 0;
+            this.velocity.y = 0;
+            if (frozenPos) {
+                this.position.x = frozenPos.x;
+                this.position.y = frozenPos.y;
+                this.syncMeshPosition();
+            }
+            this.updateShieldGuardRing();
+        } else {
+            this.showShieldGuardRing(false);
+        }
         if (this.shieldBashInvuln > 0) {
             this.shieldBashInvuln -= deltaTime;
         }
 
+    }
+
+    takeDamage(amount = 1) {
+        if (this.shieldBlockTimer > 0) {
+            return;
+        }
+        super.takeDamage(amount);
+    }
+
+    destroy() {
+        if (this.shieldGuardRing && this.shieldGuardRing.parent) {
+            this.shieldGuardRing.parent.remove(this.shieldGuardRing);
+        }
+        this.swordComboTimers.forEach((timer) => clearTimeout(timer));
+        this.swordComboTimers = [];
+        if (this.swordComboResetTimer) {
+            clearTimeout(this.swordComboResetTimer);
+            this.swordComboResetTimer = null;
+        }
+        this.shieldGuardRing = null;
+        super.destroy();
     }
 
     /**
@@ -724,13 +829,13 @@ export class Warrior extends Hero {
      * @param {Object} bounds - AABB bounds to check {left, right, top, bottom}
      * @param {Ability} ability - Ability to scale damage with debug multipliers
      */
-    damageEnemiesInArea(bounds, ability = null) {
+    damageEnemiesInArea(bounds, ability = null, baseHits = 1) {
         for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
 
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
-                this.applyAbilityDamage(ability, enemy, 1);
+                this.applyAbilityDamage(ability, enemy, baseHits);
                 if (enemy.type !== 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }

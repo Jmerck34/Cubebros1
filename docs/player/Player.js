@@ -122,6 +122,7 @@ export class Player {
         this.slowMultiplier = 1;
         this.controlsInverted = false;
         this.controlsLocked = false;
+        this.forceControlsLocked = false;
 
         // Jump state for double jump
         this.maxJumps = 2;
@@ -745,7 +746,7 @@ export class Player {
             return;
         }
 
-        const controlsLocked = this.controlsLocked;
+        const controlsLocked = this.controlsLocked || this.forceControlsLocked;
 
         // Horizontal movement
         this.velocity.x = 0; // Reset horizontal velocity

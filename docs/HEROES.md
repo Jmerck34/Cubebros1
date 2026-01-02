@@ -37,7 +37,7 @@ const player = new Warrior(scene, 0, 0);
   - Medium range
   - Deals damage in arc pattern
 
-- **W - Shield Bash** (4s cooldown)
+- **W - Shield Guard** (8s cooldown, invincible + immobile)
   - Bash forward with shield
   - Damages and knocks back enemies
   - Small forward dash
@@ -215,7 +215,7 @@ const player = new Warrior(scene, 0, 0);
 ## Tips
 
 ### Warrior
-- Use Shield Bash to create distance then Dash to engage
+- Use Shield Guard to absorb pressure before re-engaging with Dash
 - Whirlwind is best when surrounded
 - Very forgiving for beginners
 

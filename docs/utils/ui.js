@@ -77,7 +77,7 @@ export class UIManager {
             elements.slot.classList.remove('ready');
 
             // Calculate cooldown percentage
-            const cooldownPercent = ability.getCooldownPercent();
+            const cooldownPercent = Math.max(0, Math.min(1, ability.getCooldownPercent()));
             elements.overlay.style.height = `${cooldownPercent * 100}%`;
 
             // Show cooldown time
