@@ -279,7 +279,7 @@ export class Level {
                     onLadder = true;
                     player.onLadder = true;
 
-                    // Ladder physics: allow climbing up/down with W/S keys
+                    // Ladder physics: climb with jump
                     if (player.input) {
                         // Slow fall on ladder
                         if (player.velocity.y < 0) {
@@ -292,10 +292,6 @@ export class Level {
                             player.isGrounded = false;
                         }
 
-                        // Climb down with S
-                        if (player.input.isKeyDown('KeyS') || player.input.isKeyDown('ArrowDown')) {
-                            player.velocity.y = -3; // Climb down speed
-                        }
                     }
                     continue; // Don't apply normal collision for ladder
                 }
@@ -477,7 +473,7 @@ export class Level {
         // LADDER on the side
         const ladderOffset = wallWidth / 2 + 0.3;
         const ladderX = ladderSide === 'left' ? -ladderOffset : ladderOffset;
-        const ladderWidth = 0.5;
+        const ladderWidth = 1.0;
         const ladderDepth = 0.15;
         const ladderHeight = wallHeight - 0.5; // Ladder stops 0.5 units below wall top
 
