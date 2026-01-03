@@ -23,14 +23,84 @@ export class Environment {
         this.particles = [];
         this.stars = [];
 
-        this.createCanyonSky();
-        this.createCanyonSun();
-        this.createSkyStreaks();
-        this.createMesaRanges();
-        this.createCanyonSpireField();
-        this.createDuneForeground();
-        this.createDustParticles();
-        this.createSkyGliders();
+        // Tiled sky layers (slow parallax)
+        const skyLayers = [
+            { color: 0x87d9f7, z: -55, opacity: 1, speedMultiplier: 0.12 },
+            { color: 0x6bc3ea, z: -45, opacity: 0.9, speedMultiplier: 0.2 },
+            { color: 0x4aa7d5, z: -35, opacity: 0.8, speedMultiplier: 0.3 },
+            { color: 0x3b8fbe, z: -28, opacity: 0.7, speedMultiplier: 0.4 }
+        ];
+
+        skyLayers.forEach(layer => {
+            const sky = this.createTiledPlaneLayer(layer.color, layer.z, layer.opacity, 220, 120, 3);
+            this.registerParallaxLayer({
+                root: sky.group,
+                speedMultiplier: layer.speedMultiplier,
+                tileWidth: sky.tileWidth,
+                tiles: sky.tiles
+            });
+        });
+
+        // Atmospheric haze bands for depth
+        const hazeGroup = new THREE.Group();
+        this.scene.add(hazeGroup);
+        this.createHazeBands(hazeGroup);
+        this.registerParallaxLayer({ root: hazeGroup, speedMultiplier: 0.55 });
+
+        // Sun and glow
+        const sunGroup = new THREE.Group();
+        this.scene.add(sunGroup);
+        this.createSun(sunGroup);
+        this.registerParallaxLayer({ root: sunGroup, speedMultiplier: 0.35 });
+
+        // Stars (very slow)
+        const starGroup = new THREE.Group();
+        this.scene.add(starGroup);
+        this.createStars(starGroup);
+        this.registerParallaxLayer({ root: starGroup, speedMultiplier: 0.15 });
+
+        // Mountains (layered depth)
+        this.createMountains();
+
+        // Hills (stacked depth layers)
+        const hillConfigs = [
+            { color: 0x6ea0ad, z: -42, baseY: -1.0, amplitude: 1.6, thickness: 5.5, opacity: 0.3, speedMultiplier: 0.45 },
+            { color: 0x5a8b8a, z: -34, baseY: -2.4, amplitude: 1.9, thickness: 6, opacity: 0.45, speedMultiplier: 0.6 },
+            { color: 0x3f6b55, z: -26, baseY: -3.2, amplitude: 2.2, thickness: 6.5, opacity: 0.6, speedMultiplier: 0.75 },
+            { color: 0x2f5a43, z: -18, baseY: -4.4, amplitude: 1.8, thickness: 6.5, opacity: 0.75, speedMultiplier: 0.9 },
+            { color: 0x254735, z: -12, baseY: -5.6, amplitude: 1.3, thickness: 5.5, opacity: 0.85, speedMultiplier: 1.0 },
+            { color: 0x1b3a2b, z: -6, baseY: -6.6, amplitude: 1.0, thickness: 5, opacity: 0.95, speedMultiplier: 1.15 }
+        ];
+
+        hillConfigs.forEach(config => {
+            const hillGroup = new THREE.Group();
+            this.scene.add(hillGroup);
+            this.createHills(
+                config.color,
+                config.z,
+                config.baseY + this.backgroundYOffset,
+                config.amplitude,
+                config.thickness,
+                config.opacity,
+                hillGroup
+            );
+            this.registerParallaxLayer({ root: hillGroup, speedMultiplier: config.speedMultiplier });
+        });
+
+        // Clouds (multiple parallax layers)
+        this.createClouds();
+
+        // Floating particles (near-mid depth)
+        const particleGroup = new THREE.Group();
+        this.scene.add(particleGroup);
+        this.createParticles(particleGroup);
+        this.registerParallaxLayer({ root: particleGroup, speedMultiplier: 0.9 });
+
+        // Stylized clown silhouette (background accent)
+        const clownGroup = new THREE.Group();
+        this.scene.add(clownGroup);
+        this.createClownSilhouette(clownGroup);
+        this.registerParallaxLayer({ root: clownGroup, speedMultiplier: 0.5 });
     }
 
     /**
@@ -79,12 +149,12 @@ export class Environment {
         this.scene.add(skyGroup);
 
         const bands = [
-            { color: 0x1b1f3c, y: 24, height: 26 },
-            { color: 0x252857, y: 14, height: 22 },
-            { color: 0x3a2f63, y: 4, height: 20 },
-            { color: 0x5a365f, y: -6, height: 20 },
-            { color: 0x87414a, y: -16, height: 18 },
-            { color: 0xb85a3f, y: -26, height: 16 }
+            { color: BACKGROUND_PALETTE.blue, y: 24, height: 26 },
+            { color: BACKGROUND_PALETTE.teal, y: 14, height: 22 },
+            { color: BACKGROUND_PALETTE.mint, y: 4, height: 20 },
+            { color: BACKGROUND_PALETTE.peach, y: -6, height: 20 },
+            { color: BACKGROUND_PALETTE.mint, y: -16, height: 18 },
+            { color: BACKGROUND_PALETTE.teal, y: -26, height: 16 }
         ];
 
         bands.forEach((band, index) => {
@@ -104,21 +174,21 @@ export class Environment {
 
         const sun = new THREE.Mesh(
             new THREE.CircleGeometry(4.2, 36),
-            new THREE.MeshBasicMaterial({ color: 0xffb974 })
+            new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.peach })
         );
         sun.position.set(18, 6 + this.backgroundYOffset, -64);
         sunGroup.add(sun);
 
         const glow = new THREE.Mesh(
             new THREE.CircleGeometry(6.5, 36),
-            new THREE.MeshBasicMaterial({ color: 0xffd1a1, transparent: true, opacity: 0.3 })
+            new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.mint, transparent: true, opacity: 0.32 })
         );
         glow.position.set(18, 6 + this.backgroundYOffset, -64.2);
         sunGroup.add(glow);
 
         const glare = new THREE.Mesh(
             new THREE.PlaneGeometry(32, 2.4),
-            new THREE.MeshBasicMaterial({ color: 0xffd9b3, transparent: true, opacity: 0.2 })
+            new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.peach, transparent: true, opacity: 0.2 })
         );
         glare.position.set(18, 3.5 + this.backgroundYOffset, -64.3);
         sunGroup.add(glare);
@@ -135,7 +205,7 @@ export class Environment {
             const height = 1.6 + Math.random() * 1.4;
             const streak = new THREE.Mesh(
                 new THREE.PlaneGeometry(width, height),
-                new THREE.MeshBasicMaterial({ color: 0xf7e6d2, transparent: true, opacity: 0.12 })
+                new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.mint, transparent: true, opacity: 0.12 })
             );
             streak.rotation.z = (-0.12 + Math.random() * 0.24);
             streak.position.set(
@@ -152,17 +222,17 @@ export class Environment {
     createMesaRanges() {
         const farGroup = new THREE.Group();
         this.scene.add(farGroup);
-        this.createMesaLayer(farGroup, 0x6b6f94, -54, -6 + this.backgroundYOffset, 6, 12, 18);
+        this.createMesaLayer(farGroup, BACKGROUND_PALETTE.blue, -54, -6 + this.backgroundYOffset, 6, 12, 18);
         this.registerParallaxLayer({ root: farGroup, speedMultiplier: 0.2 });
 
         const midGroup = new THREE.Group();
         this.scene.add(midGroup);
-        this.createMesaLayer(midGroup, 0x8a5a78, -40, -10 + this.backgroundYOffset, 7, 14, 20);
+        this.createMesaLayer(midGroup, BACKGROUND_PALETTE.teal, -40, -10 + this.backgroundYOffset, 7, 14, 20);
         this.registerParallaxLayer({ root: midGroup, speedMultiplier: 0.35 });
 
         const nearGroup = new THREE.Group();
         this.scene.add(nearGroup);
-        this.createMesaLayer(nearGroup, 0xa15d55, -28, -14 + this.backgroundYOffset, 8, 16, 22);
+        this.createMesaLayer(nearGroup, BACKGROUND_PALETTE.green, -28, -14 + this.backgroundYOffset, 8, 16, 22);
         this.registerParallaxLayer({ root: nearGroup, speedMultiplier: 0.5 });
     }
 
@@ -198,7 +268,7 @@ export class Environment {
 
         const highlight = new THREE.Mesh(
             new THREE.PlaneGeometry(260, 1.2),
-            new THREE.MeshBasicMaterial({ color: 0xd6c2b6, transparent: true, opacity: 0.1 })
+            new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.peach, transparent: true, opacity: 0.1 })
         );
         highlight.position.set(0, baseY + heightMax - 1.2, z + 0.2);
         targetGroup.add(highlight);
@@ -219,7 +289,7 @@ export class Environment {
 
             const spire = new THREE.Mesh(
                 new THREE.ShapeGeometry(shape),
-                new THREE.MeshBasicMaterial({ color: 0x3f3247 })
+                new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.blue })
             );
             spire.position.set(-120 + i * 13 + Math.random() * 4, -6 + this.backgroundYOffset, -18);
             spireGroup.add(spire);
@@ -246,7 +316,7 @@ export class Environment {
         const shape = new THREE.Shape(points);
         const dune = new THREE.Mesh(
             new THREE.ShapeGeometry(shape),
-            new THREE.MeshBasicMaterial({ color: 0x2f2b3a })
+            new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.green })
         );
         dune.position.set(0, this.backgroundYOffset, -6);
         duneGroup.add(dune);
@@ -261,7 +331,7 @@ export class Environment {
         for (let i = 0; i < 36; i++) {
             const particleGeometry = new THREE.CircleGeometry(0.06 + Math.random() * 0.06, 8);
             const particleMaterial = new THREE.MeshBasicMaterial({
-                color: 0xf3b47a,
+                color: BACKGROUND_PALETTE.peach,
                 transparent: true,
                 opacity: 0.35 + Math.random() * 0.3
             });
@@ -295,11 +365,11 @@ export class Environment {
         for (let i = 0; i < 5; i++) {
             const body = new THREE.Mesh(
                 new THREE.PlaneGeometry(2.4, 0.6),
-                new THREE.MeshBasicMaterial({ color: 0xf0e7d6 })
+                new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.peach })
             );
             const wing = new THREE.Mesh(
                 new THREE.PlaneGeometry(3.6, 0.4),
-                new THREE.MeshBasicMaterial({ color: 0x2d2b3b })
+                new THREE.MeshBasicMaterial({ color: BACKGROUND_PALETTE.blue })
             );
             wing.position.set(0, -0.3, 0.02);
 

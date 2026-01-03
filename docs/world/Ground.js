@@ -10,7 +10,7 @@ export class Ground {
 
         // Create ground geometry (using BoxGeometry for a solid platform)
         const geometry = new THREE.BoxGeometry(width, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x7a3d2d });
+        const material = new THREE.MeshBasicMaterial({ color: 0x8b4513 });
         this.mesh = new THREE.Mesh(geometry, material);
 
         // Position ground
