@@ -70,6 +70,7 @@ let menuFocusIndex = 0;
 let menuLastNavTime = 0;
 let menuSelectLocked = false;
 let menuBackLocked = false;
+let heroMenuCardStartIndex = 0;
 let menuFocusIndices = Array(MAX_PLAYERS).fill(0);
 let menuLastNavTimes = Array(MAX_PLAYERS).fill(0);
 let menuSelectLockedByPlayer = Array(MAX_PLAYERS).fill(false);
@@ -1582,6 +1583,7 @@ function buildMenuItems() {
     const cards = heroGridSingle ? Array.from(heroGridSingle.querySelectorAll('.hero-card')) : [];
     heroCardItems = cards;
     ensureHeroIndicators();
+    heroMenuCardStartIndex = items.length;
     items.push(...cards);
     menuItems = items;
     if (menuFocusIndex >= menuItems.length) {
@@ -1727,6 +1729,17 @@ function moveCoopHeroFocus(playerIndex, delta) {
     const index = playerIndex - 1;
     menuFocusIndices[index] = (menuFocusIndices[index] + delta + heroCardItems.length) % heroCardItems.length;
     updateCoopHeroFocus(playerIndex);
+}
+
+function moveCoopHeroFocusGrid(playerIndex, dx, dy) {
+    if (!heroCardItems.length) return;
+    const index = playerIndex - 1;
+    const columns = getHeroGridColumnCount();
+    const nextIndex = getGridIndexByDirection(menuFocusIndices[index] || 0, dx, dy, heroCardItems.length, columns);
+    if (nextIndex !== menuFocusIndices[index]) {
+        menuFocusIndices[index] = nextIndex;
+        updateCoopHeroFocus(playerIndex);
+    }
 }
 
 function updateCoopHeroSelectionUI() {
@@ -2073,6 +2086,67 @@ function updateMenuFocus() {
     }
 }
 
+function getHeroGridColumnCount() {
+    if (!heroGridSingle) return 1;
+    const style = window.getComputedStyle(heroGridSingle);
+    const columns = (style.gridTemplateColumns || '')
+        .split(' ')
+        .filter(Boolean)
+        .length;
+    return Math.max(1, columns);
+}
+
+function getGridIndexByDirection(currentIndex, dx, dy, total, columns) {
+    if (!Number.isFinite(total) || total <= 0) return 0;
+    const safeColumns = Math.max(1, columns);
+    const maxIndex = total - 1;
+    const row = Math.floor(currentIndex / safeColumns);
+    const col = currentIndex % safeColumns;
+    const rows = Math.ceil(total / safeColumns);
+    const nextRow = Math.max(0, Math.min(rows - 1, row + dy));
+    const nextCol = Math.max(0, Math.min(safeColumns - 1, col + dx));
+    let nextIndex = nextRow * safeColumns + nextCol;
+    if (nextIndex > maxIndex) {
+        nextIndex = Math.min(maxIndex, nextRow * safeColumns + (maxIndex % safeColumns));
+    }
+    return Math.max(0, Math.min(maxIndex, nextIndex));
+}
+
+function moveMenuFocusGrid(dx, dy) {
+    if (!menuItems.length) return;
+
+    if (menuFocusIndex < heroMenuCardStartIndex) {
+        if (dy > 0 && heroCardItems.length) {
+            menuFocusIndex = heroMenuCardStartIndex;
+            updateMenuFocus();
+            return;
+        }
+        if (dy < 0) {
+            return;
+        }
+        if (dx !== 0) {
+            const nextIndex = menuFocusIndex + dx;
+            if (nextIndex >= 0 && nextIndex < heroMenuCardStartIndex) {
+                menuFocusIndex = nextIndex;
+                updateMenuFocus();
+            }
+        }
+        return;
+    }
+
+    const cardIndex = menuFocusIndex - heroMenuCardStartIndex;
+    const columns = getHeroGridColumnCount();
+    const row = Math.floor(cardIndex / columns);
+    if (dy < 0 && row === 0) {
+        menuFocusIndex = Math.max(0, heroMenuCardStartIndex - 1);
+        updateMenuFocus();
+        return;
+    }
+    const nextCardIndex = getGridIndexByDirection(cardIndex, dx, dy, heroCardItems.length, columns);
+    menuFocusIndex = heroMenuCardStartIndex + nextCardIndex;
+    updateMenuFocus();
+}
+
 function moveMenuFocus(delta) {
     if (!menuItems.length) return;
     const nextIndex = (menuFocusIndex + delta + menuItems.length) % menuItems.length;
@@ -2146,8 +2220,21 @@ function pollSingleMenuGamepad() {
     const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
 
     if ((up || down || left || right) && now - menuLastNavTime > MENU_NAV_COOLDOWN_MS) {
-        const delta = (down || right) ? 1 : -1;
-        moveMenuFocus(delta);
+        let dx = 0;
+        let dy = 0;
+        if (up || down) {
+            dy = up ? -1 : 1;
+        }
+        if (!dy && (left || right)) {
+            dx = left ? -1 : 1;
+        } else if (left || right) {
+            const axisPreferX = Math.abs(axisX) > Math.abs(axisY);
+            if (axisPreferX) {
+                dy = 0;
+                dx = left ? -1 : 1;
+            }
+        }
+        moveMenuFocusGrid(dx, dy);
         menuLastNavTime = now;
     }
 
@@ -2183,8 +2270,21 @@ function pollHeroMenuGamepadForPlayer(pad, playerIndex) {
         const index = playerIndex - 1;
         const lastNav = menuLastNavTimes[index] || 0;
         if (now - lastNav > MENU_NAV_COOLDOWN_MS) {
-            const delta = (down || right) ? 1 : -1;
-            moveCoopHeroFocus(playerIndex, delta);
+            let dx = 0;
+            let dy = 0;
+            if (up || down) {
+                dy = up ? -1 : 1;
+            }
+            if (!dy && (left || right)) {
+                dx = left ? -1 : 1;
+            } else if (left || right) {
+                const axisPreferX = Math.abs(axisX) > Math.abs(axisY);
+                if (axisPreferX) {
+                    dy = 0;
+                    dx = left ? -1 : 1;
+                }
+            }
+            moveCoopHeroFocusGrid(playerIndex, dx, dy);
             menuLastNavTimes[index] = now;
         }
     }
@@ -2234,15 +2334,18 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
     if (!pad) return;
     const now = performance.now();
     const axisX = pad.axes[0] || 0;
+    const axisY = pad.axes[1] || 0;
 
     const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
     const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+    const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
+    const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
 
     const index = playerIndex - 1;
-    if (left || right) {
+    if (left || right || up || down) {
         const lastNav = teamLastNavTimes[index] || 0;
         if (now - lastNav > MENU_NAV_COOLDOWN_MS) {
-            const delta = right ? 1 : -1;
+            const delta = (right || down) ? 1 : -1;
             moveTeamMenuFocus(playerIndex, delta);
             teamLastNavTimes[index] = now;
         }
