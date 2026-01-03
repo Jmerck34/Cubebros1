@@ -8,6 +8,8 @@ export class DebugMenu {
         this.player = player;
         this.pauseMenu = pauseMenu; // Reference to pause menu to trigger pause
         this.isOpen = false;
+        this.trainingDummy = null;
+        this.trainingDummyTicker = null;
 
         // Global physics multipliers (persist across hero switches)
         this.globalPhysics = {
@@ -254,6 +256,14 @@ export class DebugMenu {
                 }
             });
         }
+
+        // Training Dummy Section
+        this.addSection('🧪 Training Dummy');
+        const dummyLabel = this.trainingDummy ? 'Respawn Dummy Hero' : 'Spawn Dummy Hero';
+        this.addActionButton(dummyLabel, () => {
+            this.spawnTrainingDummy();
+            this.populateMenu();
+        });
     }
 
     /**
@@ -549,6 +559,45 @@ export class DebugMenu {
     }
 
     /**
+     * Add a simple action button
+     */
+    addActionButton(label, onClick) {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            margin: 12px 0;
+            padding-left: 10px;
+        `;
+
+        const button = document.createElement('button');
+        button.textContent = label;
+        button.style.cssText = `
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #3a6ea5 0%, #2b5a88 100%);
+            border: 2px solid #ffffff;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: Arial, sans-serif;
+        `;
+
+        button.addEventListener('mouseenter', () => {
+            button.style.transform = 'scale(1.05)';
+        });
+
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+
+        button.addEventListener('click', onClick);
+
+        container.appendChild(button);
+        this.contentContainer.appendChild(container);
+    }
+
+    /**
      * Setup keyboard listener for "=" key
      */
     setupKeyboardListener() {
@@ -624,6 +673,110 @@ export class DebugMenu {
         this.applyHitboxSettings();
     }
 
+    spawnTrainingDummy() {
+        if (!this.player || !this.player.scene) {
+            return;
+        }
+
+        if (this.trainingDummy) {
+            this.removeTrainingDummy();
+        }
+
+        const DummyClass = this.player.constructor;
+        const facing = typeof this.player.facingDirection === 'number' ? this.player.facingDirection : 1;
+        const spawnX = this.player.position.x + facing * 4.5;
+        const spawnY = this.player.position.y;
+        let dummy;
+
+        try {
+            dummy = new DummyClass(this.player.scene, spawnX, spawnY);
+        } catch (error) {
+            console.warn('[Debug] Unable to spawn dummy hero:', error);
+            return;
+        }
+
+        dummy.team = this.player.team === 'blue' ? 'red' : (this.player.team === 'red' ? 'blue' : 'dummy');
+        dummy.isTrainingDummy = true;
+        dummy.forceControlsLocked = true;
+        dummy.velocity.x = 0;
+        dummy.velocity.y = 0;
+        dummy.maxHealth = Math.max(dummy.maxHealth || 100, 200);
+        dummy.currentHealth = dummy.maxHealth;
+        if (dummy.healthBar && typeof dummy.healthBar.setHealth === 'function') {
+            dummy.healthBar.setHealth(dummy.currentHealth);
+        }
+
+        const originalDie = dummy.die ? dummy.die.bind(dummy) : null;
+        dummy.die = () => {
+            if (originalDie) {
+                originalDie();
+            }
+            dummy.currentHealth = dummy.maxHealth;
+            dummy.isAlive = true;
+            dummy.respawnTimer = 0;
+            if (dummy.healthBar && typeof dummy.healthBar.setHealth === 'function') {
+                dummy.healthBar.setHealth(dummy.currentHealth);
+            }
+        };
+
+        dummy.enemies = this.player.enemies || [];
+
+        const allPlayers = typeof this.player.getAllPlayers === 'function' ? this.player.getAllPlayers() : [];
+        allPlayers.forEach((activePlayer) => {
+            if (!activePlayer || activePlayer === dummy) return;
+            if (!Array.isArray(activePlayer.opponents)) {
+                activePlayer.opponents = [];
+            }
+            if (!activePlayer.opponents.includes(dummy) && (!activePlayer.team || activePlayer.team !== dummy.team)) {
+                activePlayer.opponents.push(dummy);
+            }
+        });
+
+        dummy.opponents = allPlayers.filter((activePlayer) => activePlayer && activePlayer !== dummy && activePlayer.team !== dummy.team);
+        this.trainingDummy = dummy;
+        this.startTrainingDummyTicker();
+        console.log('[Debug] Training dummy spawned');
+    }
+
+    removeTrainingDummy() {
+        const dummy = this.trainingDummy;
+        if (!dummy) return;
+
+        const allPlayers = typeof this.player.getAllPlayers === 'function' ? this.player.getAllPlayers() : [];
+        allPlayers.forEach((activePlayer) => {
+            if (activePlayer && Array.isArray(activePlayer.opponents)) {
+                activePlayer.opponents = activePlayer.opponents.filter((opponent) => opponent !== dummy);
+            }
+        });
+
+        if (typeof dummy.destroy === 'function') {
+            dummy.destroy();
+        }
+
+        this.trainingDummy = null;
+        if (this.trainingDummyTicker) {
+            clearInterval(this.trainingDummyTicker);
+            this.trainingDummyTicker = null;
+        }
+    }
+
+    startTrainingDummyTicker() {
+        if (this.trainingDummyTicker) {
+            clearInterval(this.trainingDummyTicker);
+        }
+        this.trainingDummyTicker = setInterval(() => {
+            if (!this.trainingDummy) {
+                clearInterval(this.trainingDummyTicker);
+                this.trainingDummyTicker = null;
+                return;
+            }
+            this.trainingDummy.syncMeshPosition();
+            if (this.trainingDummy.healthBar) {
+                this.trainingDummy.healthBar.update(0);
+            }
+        }, 50);
+    }
+
     /**
      * Apply enemy contact settings to player
      */
@@ -666,6 +819,7 @@ export class DebugMenu {
      * Destroy the menu (cleanup)
      */
     destroy() {
+        this.removeTrainingDummy();
         if (this.overlay && this.overlay.parentNode) {
             this.overlay.parentNode.removeChild(this.overlay);
         }
