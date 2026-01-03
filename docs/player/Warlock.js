@@ -27,6 +27,7 @@ export class Warlock extends Hero {
         this.hoverTrailParticles = [];
         this.hoverTimeout = null;
         this.hoverAnimationInterval = null;
+        this.hoverToggleCooldownUntil = 0;
 
         // Chaos storm state (ultimate)
         this.isChaosStormActive = false;
@@ -124,6 +125,14 @@ export class Warlock extends Hero {
         // E - Hover
         const hover = new Ability('Hover', 6);
         hover.use = (hero) => {
+            const now = performance.now();
+            if (hero.isHovering) {
+                if (now < hero.hoverToggleCooldownUntil) {
+                    return false;
+                }
+                hero.deactivateHover();
+                return true;
+            }
             if (!Ability.prototype.use.call(hover, hero)) return false;
             hero.activateHover();
             return true;
@@ -447,6 +456,7 @@ export class Warlock extends Hero {
         console.log('☁️ HOVER!');
 
         this.isHovering = true;
+        this.hoverToggleCooldownUntil = performance.now() + 200;
 
         // Create dark cloud group (similar to background clouds but faded black)
         this.hoverCloud = new THREE.Group();

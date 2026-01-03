@@ -14,6 +14,11 @@ const FOREGROUND_PALETTE = {
     cloudBody: 0xe8f6ff,
     cloudTop: 0xf6fbff,
     cloudSide: 0xcddfeb,
+    ropeBody: 0x5b3d24,
+    ropeTop: 0x7a5431,
+    ropeSide: 0x3a2616,
+    ropePlank: 0x6a4b2b,
+    ropeLine: 0x2d1c12,
     launcherBody: 0x4a3a2a,
     launcherTop: 0x8c5a30,
     launcherSide: 0x2b1d12,
@@ -45,6 +50,8 @@ export class Level {
         this.enemies = [];
         this.movingPlatforms = [];
         this.flags = [];
+        this.windZones = [];
+        this.windStreaks = [];
     }
 
     /**
@@ -79,6 +86,11 @@ export class Level {
                 topColor = FOREGROUND_PALETTE.cloudTop;
                 sideColor = FOREGROUND_PALETTE.cloudSide;
                 break;
+            case 'rope':
+                bodyColor = FOREGROUND_PALETTE.ropeBody;
+                topColor = FOREGROUND_PALETTE.ropeTop;
+                sideColor = FOREGROUND_PALETTE.ropeSide;
+                break;
             case 'launcher':
                 bodyColor = FOREGROUND_PALETTE.launcherBody;
                 topColor = FOREGROUND_PALETTE.launcherTop;
@@ -108,6 +120,64 @@ export class Level {
         const side = new THREE.Mesh(sideGeometry, sideMaterial);
         side.position.y = -height * 0.4;
         platformGroup.add(side);
+
+        if (type === 'cloud') {
+            const puffCount = Math.max(4, Math.round(width / 2.2));
+            const puffRadius = Math.max(0.25, height * 0.55);
+            const puffGeometry = new THREE.CircleGeometry(puffRadius, 10);
+            const puffMaterial = new THREE.MeshBasicMaterial({
+                color: topColor,
+                transparent: true,
+                opacity: 0.9
+            });
+            for (let i = 0; i < puffCount; i++) {
+                const t = puffCount === 1 ? 0.5 : i / (puffCount - 1);
+                const puff = new THREE.Mesh(puffGeometry, puffMaterial);
+                puff.position.set(
+                    -width / 2 + t * width,
+                    height * 0.2 + (i % 2 === 0 ? 0.05 : -0.05),
+                    0.3
+                );
+                platformGroup.add(puff);
+            }
+
+            const edgePuffGeometry = new THREE.CircleGeometry(puffRadius * 1.15, 10);
+            const edgePuffMaterial = new THREE.MeshBasicMaterial({
+                color: sideColor,
+                transparent: true,
+                opacity: 0.7
+            });
+            const leftPuff = new THREE.Mesh(edgePuffGeometry, edgePuffMaterial);
+            leftPuff.position.set(-width / 2 + puffRadius * 0.6, -height * 0.05, 0.2);
+            platformGroup.add(leftPuff);
+            const rightPuff = new THREE.Mesh(edgePuffGeometry, edgePuffMaterial);
+            rightPuff.position.set(width / 2 - puffRadius * 0.6, -height * 0.05, 0.2);
+            platformGroup.add(rightPuff);
+        }
+
+        if (type === 'rope') {
+            const plankMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ropePlank });
+            const plankCount = Math.max(4, Math.round(width / 1.6));
+            const plankSpacing = width / (plankCount + 1);
+            const plankWidth = Math.min(1.2, plankSpacing * 0.8);
+            const plankHeight = Math.max(0.12, height * 0.35);
+            const plankDepth = 0.35;
+            for (let i = 0; i < plankCount; i++) {
+                const plank = new THREE.Mesh(new THREE.BoxGeometry(plankWidth, plankHeight, plankDepth), plankMaterial);
+                plank.position.set(-width / 2 + plankSpacing * (i + 1), height / 2 + plankHeight * 0.25, 0.08);
+                platformGroup.add(plank);
+            }
+
+            const ropeMaterial = new THREE.MeshBasicMaterial({
+                color: FOREGROUND_PALETTE.ropeLine,
+                transparent: true,
+                opacity: 0.65
+            });
+            const ropeThickness = Math.max(0.05, height * 0.12);
+            const rope = new THREE.Mesh(new THREE.BoxGeometry(width, ropeThickness, 0.1), ropeMaterial);
+            rope.position.set(0, height / 2 + plankHeight * 0.8, 0.2);
+            platformGroup.add(rope);
+        }
 
         // Add detail patterns for grass platforms
         if (type === 'grass' || type === 'ground') {
@@ -198,6 +268,8 @@ export class Level {
     addMovingPlatform(x, y, width, height, type = 'stone', motion = {}) {
         const platform = this.addPlatform(x, y, width, height, type);
         platform.type = 'moving';
+        platform.baseType = type;
+        platform.isCloudPlatform = type === 'cloud';
 
         this.movingPlatforms.push({
             platform,
@@ -210,6 +282,19 @@ export class Level {
             time: 0
         });
 
+        return platform;
+    }
+
+    addBreakablePlatform(x, y, width, height, type = 'rope', options = {}) {
+        const platform = this.addPlatform(x, y, width, height, type);
+        platform.breakable = true;
+        platform.breakState = 'idle';
+        platform.breakDelay = options.breakDelay ?? 0.25;
+        platform.respawnDelay = options.respawnDelay ?? 5;
+        platform.breakTimer = 0;
+        platform.respawnTimer = 0;
+        platform.disabled = false;
+        platform.shakeTime = 0;
         return platform;
     }
 
@@ -278,6 +363,9 @@ export class Level {
         updateFallTracking();
 
         for (const platform of this.platforms) {
+            if (platform.disabled) {
+                continue;
+            }
             tryPreLandingSound(platform);
             if (player.didLandThisFrame) {
                 break;
@@ -286,6 +374,9 @@ export class Level {
 
         // First pass: Check wall collisions (higher priority)
         for (const platform of this.platforms) {
+            if (platform.disabled) {
+                continue;
+            }
             if (platform.type === 'wall' && checkAABBCollision(playerBounds, platform.bounds)) {
                 onWall = true;
                 // Handle wall collision normally
@@ -319,7 +410,13 @@ export class Level {
 
         // Second pass: Check ladder and other platforms (only if not on wall top)
         for (const platform of this.platforms) {
+            if (platform.disabled) {
+                continue;
+            }
             if (checkAABBCollision(playerBounds, platform.bounds)) {
+                if ((platform.type === 'cloud' || platform.isCloudPlatform) && playerVelocity.y > 0) {
+                    continue;
+                }
                 // Special handling for ladders - only if not standing on wall
                 if (platform.isLadder && !onWall) {
                     onLadder = true;
@@ -366,6 +463,11 @@ export class Level {
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
+                    if (platform.breakable && platform.breakState === 'idle') {
+                        platform.breakState = 'shaking';
+                        platform.breakTimer = platform.breakDelay;
+                        platform.shakeTime = 0;
+                    }
                     if (platform.type === 'launcher') {
                         onLauncher = platform;
                     }
@@ -388,6 +490,9 @@ export class Level {
                            (minOverlap === overlapRight && playerVelocity.x < 0)) {
                     // Only resolve horizontal collision if moving TOWARD the wall
                     // This prevents edge-glitching when walking off platforms
+                    if (platform.type === 'cloud' || platform.isCloudPlatform) {
+                        continue;
+                    }
                     resolveCollisionX(player.position, platform.bounds, playerVelocity);
                     player.velocity.x = 0;
                     player.mesh.position.x = player.position.x;
@@ -496,6 +601,50 @@ export class Level {
         }
     }
 
+    updateWindVisuals(deltaTime) {
+        if (!this.windStreaks.length) return;
+        this.windStreaks.forEach((streak) => {
+            const { mesh, bounds, speed, dir } = streak;
+            mesh.position.x += dir.x * speed * deltaTime;
+            mesh.position.y += dir.y * speed * deltaTime;
+            if (mesh.position.x < bounds.left) mesh.position.x = bounds.right;
+            if (mesh.position.x > bounds.right) mesh.position.x = bounds.left;
+            if (mesh.position.y < bounds.bottom) mesh.position.y = bounds.top;
+            if (mesh.position.y > bounds.top) mesh.position.y = bounds.bottom;
+        });
+    }
+
+    updateBreakablePlatforms(deltaTime) {
+        for (const platform of this.platforms) {
+            if (!platform || !platform.breakable || !platform.mesh) {
+                continue;
+            }
+            if (platform.breakState === 'shaking') {
+                platform.breakTimer = Math.max(0, platform.breakTimer - deltaTime);
+                platform.shakeTime += deltaTime;
+                platform.mesh.rotation.z = Math.sin(platform.shakeTime * 22) * 0.05;
+                platform.mesh.position.y = platform.baseY + Math.sin(platform.shakeTime * 30) * 0.08;
+                if (platform.breakTimer <= 0) {
+                    platform.breakState = 'broken';
+                    platform.respawnTimer = platform.respawnDelay;
+                    platform.disabled = true;
+                    platform.mesh.visible = false;
+                    platform.mesh.rotation.z = 0;
+                    platform.mesh.position.y = platform.baseY;
+                }
+            } else if (platform.breakState === 'broken') {
+                platform.respawnTimer = Math.max(0, platform.respawnTimer - deltaTime);
+                if (platform.respawnTimer <= 0) {
+                    platform.breakState = 'idle';
+                    platform.disabled = false;
+                    platform.mesh.visible = true;
+                    platform.mesh.rotation.z = 0;
+                    platform.mesh.position.y = platform.baseY;
+                }
+            }
+        }
+    }
+
     /**
      * Update level systems
      * @param {number} deltaTime - Time since last frame
@@ -504,6 +653,8 @@ export class Level {
         this.updateEnemies(deltaTime);
         this.updateMovingPlatforms(deltaTime);
         this.updateLaunchers(deltaTime);
+        this.updateWindVisuals(deltaTime);
+        this.updateBreakablePlatforms(deltaTime);
         this.updateFlags();
     }
 
@@ -881,8 +1032,8 @@ export class Level {
         const boundaryWidth = 1.5;
         const boundaryTop = groundSurfaceY + wallHeight + 18;
         const boundaryBottom = groundBottomY;
-        const leftBoundaryRight = leftCastleX - castleWallWidth / 2 - 4;
-        const rightBoundaryLeft = rightCastleX + castleWallWidth / 2 + 4;
+        const leftBoundaryRight = leftCastleX - castleWallWidth / 2;
+        const rightBoundaryLeft = rightCastleX + castleWallWidth / 2;
 
         this.platforms.push({
             mesh: null,
@@ -918,8 +1069,38 @@ export class Level {
         this.addPlatform(-6, 2.5, 3, 0.6, 'grass');
         this.addPlatform(6, 2.5, 3, 0.6, 'grass');
 
-        // Large midfield cloud platform (stand-in)
-        this.addPlatform(0, 18, 80, 1.2, 'cloud');
+        // Cloud platform split into 4 poofy sections (matching ground gaps)
+        const cloudY = 18;
+        const cloudHeight = 0.7;
+        const cloudSegments = [
+            { left: gapEdges[0].right, right: gapEdges[1].left },
+            { left: gapEdges[1].right, right: gapEdges[2].left }
+        ];
+        const cloudOffsets = [-0.1, 0.15];
+        const ropeHeight = 0.35;
+        const ropeGapRatio = 0.65;
+        cloudSegments.forEach((segment, index) => {
+            const offset = cloudOffsets[index] || 0;
+            const width = segment.right - segment.left;
+            if (width < 8) {
+                const center = (segment.left + segment.right) / 2;
+                this.addPlatform(center, cloudY + offset, width, cloudHeight, 'cloud');
+                return;
+            }
+            const splitGap = Math.max(4, width * ropeGapRatio);
+            const pieceWidth = (width - splitGap) / 2;
+            const leftCenter = segment.left + pieceWidth / 2;
+            const rightCenter = segment.right - pieceWidth / 2;
+            this.addPlatform(leftCenter, cloudY + offset, pieceWidth, cloudHeight, 'cloud');
+            this.addPlatform(rightCenter, cloudY + offset, pieceWidth, cloudHeight, 'cloud');
+
+            const ropeY = cloudY + offset + cloudHeight / 2 - ropeHeight / 2;
+            const ropeX = (leftCenter + rightCenter) / 2;
+            this.addBreakablePlatform(ropeX, ropeY, splitGap, ropeHeight, 'rope', {
+                breakDelay: 0.6,
+                respawnDelay: 5
+            });
+        });
 
         // Catapult launchers on top of each castle (inside edge)
         const launcherHeight = groundSurfaceY + wallHeight + 0.6;
@@ -929,5 +1110,109 @@ export class Level {
         leftLauncher.launchVelocity = { x: 10, y: 23 };
         const rightLauncher = this.addPlatform(rightLauncherX, launcherHeight, 4, 0.6, 'launcher');
         rightLauncher.launchVelocity = { x: -10, y: 23 };
+
+        // Landing cloud pads aligned to the launch arc (no extra jump needed)
+        const landingCloudY = 16.4;
+        const landingCloudWidth = 7.5;
+        const landingCloudHeight = 1.1;
+        const landingOffset = 13.5;
+        this.addPlatform(leftLauncherX + landingOffset, landingCloudY, landingCloudWidth, landingCloudHeight, 'cloud');
+        this.addPlatform(rightLauncherX - landingOffset, landingCloudY, landingCloudWidth, landingCloudHeight, 'cloud');
+
+        // Moving cloud bridges between landing pads and the main cloud platforms
+        const landingRightEdge = leftLauncherX + landingOffset + landingCloudWidth / 2;
+        const landingLeftEdge = rightLauncherX - landingOffset - landingCloudWidth / 2;
+        const leftMainCloudEdge = gapEdges[0].right;
+        const rightMainCloudEdge = gapEdges[2].left;
+        const bridgeWidth = 3;
+        const bridgeHeight = 0.5;
+        const bridgeY = landingCloudY - 0.1;
+
+        const leftGap = leftMainCloudEdge - landingRightEdge;
+        if (leftGap > 1) {
+            const bridgeBaseX = (landingRightEdge + leftMainCloudEdge) / 2;
+            const rangeX = Math.max(0.6, leftGap / 2 - 0.8);
+            this.addMovingPlatform(bridgeBaseX, bridgeY, bridgeWidth, bridgeHeight, 'cloud', {
+                rangeX,
+                speed: 1.0
+            });
+        }
+
+        const rightGap = landingLeftEdge - rightMainCloudEdge;
+        if (rightGap > 1) {
+            const bridgeBaseX = (landingLeftEdge + rightMainCloudEdge) / 2;
+            const rangeX = Math.max(0.6, rightGap / 2 - 0.8);
+            this.addMovingPlatform(bridgeBaseX, bridgeY, bridgeWidth, bridgeHeight, 'cloud', {
+                rangeX,
+                speed: 1.0,
+                phase: Math.PI / 2
+            });
+        }
+
+        const cloudTargetY = 18;
+        const windTop = cloudTargetY - 0.6;
+        const windBottom = cloudTargetY - 3.2;
+        this.addWindZone(
+            {
+                left: leftLauncherX - 5,
+                right: 6,
+                bottom: windBottom,
+                top: windTop
+            },
+            { x: 12, y: 3.5 }
+        );
+        this.addWindZone(
+            {
+                left: -6,
+                right: rightLauncherX + 5,
+                bottom: windBottom,
+                top: windTop
+            },
+            { x: -12, y: 3.5 }
+        );
+    }
+
+    addWindZone(bounds, force) {
+        this.windZones.push({ bounds, force });
+        const count = 10;
+        const dirLength = Math.hypot(force.x, force.y) || 1;
+        const dir = { x: force.x / dirLength, y: force.y / dirLength };
+        const angle = Math.atan2(dir.y, dir.x);
+        for (let i = 0; i < count; i++) {
+            const streakGeometry = new THREE.PlaneGeometry(2.4, 0.2);
+            const streakMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.25
+            });
+            const streak = new THREE.Mesh(streakGeometry, streakMaterial);
+            streak.rotation.z = angle;
+            streak.position.set(
+                bounds.left + Math.random() * (bounds.right - bounds.left),
+                bounds.bottom + Math.random() * (bounds.top - bounds.bottom),
+                0.2
+            );
+            this.group.add(streak);
+            this.windStreaks.push({
+                mesh: streak,
+                bounds,
+                speed: 6 + Math.random() * 4,
+                dir
+            });
+        }
+    }
+
+    applyWind(player, deltaTime) {
+        if (!player || !player.isAlive || player.isGrounded) return;
+        const pos = player.position;
+        for (const zone of this.windZones) {
+            if (pos.x >= zone.bounds.left &&
+                pos.x <= zone.bounds.right &&
+                pos.y >= zone.bounds.bottom &&
+                pos.y <= zone.bounds.top) {
+                player.velocity.x += zone.force.x * deltaTime;
+                player.velocity.y += zone.force.y * deltaTime;
+            }
+        }
     }
 }

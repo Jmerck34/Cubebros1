@@ -25,7 +25,8 @@ export class UIManager {
             e: {
                 slot: document.getElementById(getId('ability-e')),
                 overlay: document.getElementById(getId('cooldown-e')),
-                text: document.getElementById(getId('cooldown-text-e'))
+                text: document.getElementById(getId('cooldown-text-e')),
+                blockX: document.getElementById(getId('ability-block-e'))
             },
             r: {
                 slot: document.getElementById(getId('ability-r')),
@@ -52,6 +53,7 @@ export class UIManager {
 
         // Update charge shot meter (Archer)
         this.updateChargeMeter();
+        this.updateFlagBlock();
     }
 
     /**
@@ -130,5 +132,14 @@ export class UIManager {
         const clamped = Math.max(0, Math.min(1, ratio));
         chargeFill.style.width = `${clamped * 100}%`;
         chargeWrap.style.opacity = clamped > 0 || isCharging ? '1' : '0';
+    }
+
+    updateFlagBlock() {
+        const blockX = this.elements.e?.blockX;
+        const slot = this.elements.e?.slot;
+        if (!blockX || !slot) return;
+        const blocked = Boolean(this.hero?.isCarryingFlag && this.hero?.flagCarryBlocksAbility3);
+        blockX.style.display = blocked ? 'flex' : 'none';
+        slot.classList.toggle('flag-blocked', blocked);
     }
 }

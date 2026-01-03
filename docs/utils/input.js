@@ -369,6 +369,15 @@ export class InputManager {
     }
 
     /**
+     * Get gamepad bindings for an action
+     * @param {string} action
+     * @returns {string[]}
+     */
+    getGamepadBindings(action) {
+        return [...(this.gamepadBindings[action] || [])];
+    }
+
+    /**
      * Set a binding for an action
      * @param {string} action
      * @param {string} code
@@ -394,6 +403,29 @@ export class InputManager {
     }
 
     /**
+     * Set a gamepad binding for an action
+     * @param {string} action
+     * @param {string} code
+     * @param {number} slot
+     */
+    setGamepadBinding(action, code, slot = 0) {
+        Object.keys(this.gamepadBindings).forEach((key) => {
+            this.gamepadBindings[key] = this.gamepadBindings[key].filter((existing) => existing !== code);
+        });
+
+        if (!this.gamepadBindings[action]) {
+            this.gamepadBindings[action] = [];
+        }
+
+        if (this.gamepadBindings[action].length < slot + 1) {
+            this.gamepadBindings[action].length = slot + 1;
+        }
+
+        this.gamepadBindings[action][slot] = code;
+        this.gamepadBindings[action] = this.gamepadBindings[action].filter(Boolean);
+    }
+
+    /**
      * Clear a binding slot
      * @param {string} action
      * @param {number} slot
@@ -402,5 +434,15 @@ export class InputManager {
         if (!this.bindings[action]) return;
         this.bindings[action].splice(slot, 1);
         this.rebuildGameKeySet();
+    }
+
+    /**
+     * Clear a gamepad binding slot
+     * @param {string} action
+     * @param {number} slot
+     */
+    clearGamepadBinding(action, slot = 0) {
+        if (!this.gamepadBindings[action]) return;
+        this.gamepadBindings[action].splice(slot, 1);
     }
 }

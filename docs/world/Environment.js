@@ -765,6 +765,22 @@ export class Environment {
     createClouds() {
         const layers = [
             {
+                count: 10,
+                zMin: -58,
+                zMax: -52,
+                yMin: 14,
+                yMax: 22,
+                scaleMin: 0.22,
+                scaleMax: 0.4,
+                speedMin: 0.015,
+                speedMax: 0.035,
+                parallaxSpeed: 0.12,
+                baseColor: 0xdff0f9,
+                shadowColor: 0xb7d2e3,
+                highlightColor: 0xf7fbff,
+                opacity: 0.3
+            },
+            {
                 count: 6,
                 zMin: -48,
                 zMax: -40,

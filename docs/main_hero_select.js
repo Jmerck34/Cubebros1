@@ -24,7 +24,7 @@ import { updateDamageNumbers, clearDamageNumbers } from './utils/damageNumbers.j
 
 // Game state
 let gameStarted = false;
-let scene, camera, camera2, renderer, input, input2, level, environment, player, player2, uiManager, uiManager2, cameraFollow, cameraFollow2, parallaxManager, gameLoop, pauseMenu, debugMenu;
+let scene, camera, camera2, renderer, input, input2, level, environment, player, player2, uiManager, uiManager2, cameraFollow, cameraFollow2, parallaxManager, gameLoop, pauseMenus, debugMenu;
 let players = [];
 let inputs = [];
 let uiManagers = [];
@@ -34,7 +34,7 @@ let flagState = null;
 let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
 const VIEW_SIZE = 10;
-let healthPotion = null;
+let healthPotions = [];
 let menuRenderActive = false;
 let menuRenderHandle = null;
 
@@ -487,6 +487,16 @@ function clampFlagOutsideCastle(flag, position) {
     };
 }
 
+function isFlagOutsideCastle(flag, position) {
+    if (!flag || !position) return false;
+    const baseX = flag.base?.x;
+    if (!Number.isFinite(baseX)) return false;
+    const bounds = getCastleWallBounds(baseX);
+    if (!bounds) return false;
+    const isLeftCastle = baseX < 0;
+    return isLeftCastle ? position.x < bounds.left : position.x > bounds.right;
+}
+
 function getGroundDropPosition(position) {
     if (!level || !level.platforms || !level.platforms.length || !position) {
         return null;
@@ -695,6 +705,11 @@ function updateCTF(deltaTime, activePlayers, activeInputs) {
             flag.lob.x += flag.lob.vx * deltaTime;
             flag.lob.y += flag.lob.vy * deltaTime;
             flag.mesh.position.set(flag.lob.x, flag.lob.y, 0.45);
+
+            if (isFlagOutsideCastle(flag, flag.lob)) {
+                resetFlag(flag);
+                return;
+            }
 
             const landingPos = getFlagLandingPosition({ x: flag.lob.x, y: flag.lob.y }, flag.lob.vy);
             if (landingPos) {
@@ -1015,7 +1030,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     // Create level with platforms
     level = new Level(scene);
     level.createTestLevel({ includeInteractiveFlags: false });
-    healthPotion = createHealthPotion(level);
+    healthPotions = createHealthPotions(level);
 
     // Setup parallax manager (foreground/midground/background)
     parallaxManager = new ParallaxManager(camera);
@@ -1113,17 +1128,25 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     cameraFollow2 = cameraFollows[1] || null;
     updateAllCameraFrustums(window.innerWidth, window.innerHeight);
 
-    // Create pause menu
-    pauseMenu = new PauseMenu(
-        () => {
-            // Back to Menu callback
-            resetGame();
-        },
-        () => {
-            // Resume callback (optional - menu handles resume itself)
-        },
-        input
-    );
+    // Create pause menus (per player)
+    pauseMenus = [];
+    for (let i = 0; i < localPlayerCount; i += 1) {
+        pauseMenus[i] = new PauseMenu(
+            () => {
+                resetGame();
+            },
+            () => {},
+            inputs[i],
+            {
+                playerIndex: i,
+                showMenuButton: i === 0,
+                getViewport: () => {
+                    const size = renderer.getSize(new THREE.Vector2());
+                    return getViewportForIndex(i, localPlayerCount, size.x, size.y);
+                }
+            }
+        );
+    }
 
     // Create debug menu (or update player if it exists)
     if (!debugMenu) {
@@ -1152,12 +1175,14 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
             });
 
             handlePauseGamepadToggle();
-            if (pauseMenu) {
-                pauseMenu.handleGamepad(inputs);
-            }
+            pauseMenus?.forEach((menu) => {
+                if (menu) {
+                    menu.handleGamepad();
+                }
+            });
 
-            // Skip game updates if paused or debug menu is open
-            if ((pauseMenu && pauseMenu.isPaused()) || (debugMenu && debugMenu.isPaused())) {
+            // Skip game updates if debug menu is open
+            if (debugMenu && debugMenu.isPaused()) {
                 return;
             }
 
@@ -1183,8 +1208,19 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
             players.forEach((activePlayer, index) => {
                 const activeInput = inputs[index];
+                const menuPaused = pauseMenus?.[index]?.isPaused();
+                if (menuPaused) {
+                    activePlayer.forceControlsLocked = true;
+                    activePlayer.velocity.x = 0;
+                    activePlayer.velocity.y = 0;
+                    return;
+                }
+                activePlayer.forceControlsLocked = false;
                 if (activeInput) {
                     activePlayer.update(deltaTime, activeInput);
+                }
+                if (level && typeof level.applyWind === 'function') {
+                    level.applyWind(activePlayer, deltaTime);
                 }
             });
 
@@ -1222,7 +1258,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
             updateDamageNumbers(deltaTime);
             updateCTF(deltaTime, players, inputs);
-            updateHealthPotion(deltaTime, players);
+            updateHealthPotions(deltaTime, players);
 
             // Update environment animations
             environment.update(deltaTime);
@@ -1356,9 +1392,13 @@ function resetGame() {
     }
 
     // Destroy pause menu
-    if (pauseMenu) {
-        pauseMenu.destroy();
-        pauseMenu = null;
+    if (pauseMenus && pauseMenus.length) {
+        pauseMenus.forEach((menu) => {
+            if (menu) {
+                menu.destroy();
+            }
+        });
+        pauseMenus = [];
     }
 
     // Clear scene
@@ -1372,7 +1412,7 @@ function resetGame() {
     }
     clearCTF();
     clearDamageNumbers();
-    removeHealthPotion();
+    removeHealthPotions();
     parallaxManager = null;
     players = [];
     inputs = [];
@@ -1825,46 +1865,96 @@ function createHealthPotion(levelInstance) {
     };
 }
 
-function removeHealthPotion() {
-    if (healthPotion && healthPotion.mesh && healthPotion.mesh.parent) {
-        healthPotion.mesh.parent.remove(healthPotion.mesh);
-    }
-    healthPotion = null;
+function findGroundPlatform(levelInstance) {
+    if (!levelInstance || !Array.isArray(levelInstance.platforms)) return null;
+    const candidates = levelInstance.platforms.filter((platform) => {
+        if (!platform || !platform.bounds) return false;
+        return platform.type === 'ground';
+    });
+    if (!candidates.length) return null;
+    return candidates.reduce((best, platform) => {
+        if (!best) return platform;
+        const bestWidth = best.bounds.right - best.bounds.left;
+        const width = platform.bounds.right - platform.bounds.left;
+        if (width !== bestWidth) return width > bestWidth ? platform : best;
+        return platform.bounds.top < best.bounds.top ? platform : best;
+    }, null);
 }
 
-function updateHealthPotion(deltaTime, activePlayers) {
-    if (!healthPotion || !healthPotion.mesh) return;
-    if (!healthPotion.active) {
-        healthPotion.respawnTimer = Math.max(0, healthPotion.respawnTimer - deltaTime);
-        if (healthPotion.respawnTimer === 0) {
-            healthPotion.active = true;
-            healthPotion.mesh.visible = true;
-        }
-        return;
+function createGroundHealthPotion(levelInstance) {
+    if (!scene) return null;
+    const platform = findGroundPlatform(levelInstance);
+    if (!platform) return null;
+    const baseX = (platform.bounds.left + platform.bounds.right) / 2;
+    const baseY = platform.bounds.top + 0.45;
+    const potion = createHealthPotion({
+        platforms: [{ bounds: { left: baseX - 0.5, right: baseX + 0.5, top: baseY - 0.45, bottom: baseY - 1.2 } }]
+    });
+    if (potion) {
+        potion.base = { x: baseX, y: baseY };
+        potion.mesh.position.set(baseX, baseY, 0.2);
+        potion.bounds.left = baseX - 0.4;
+        potion.bounds.right = baseX + 0.4;
+        potion.bounds.top = baseY + 0.6;
+        potion.bounds.bottom = baseY - 0.2;
     }
+    return potion;
+}
 
-    healthPotion.bobTime += deltaTime;
-    const bobOffset = Math.sin(healthPotion.bobTime * 2.5) * 0.06;
-    healthPotion.mesh.position.y = healthPotion.base.y + bobOffset;
-    const { x, y } = healthPotion.mesh.position;
-    healthPotion.bounds.left = x - 0.4;
-    healthPotion.bounds.right = x + 0.4;
-    healthPotion.bounds.top = y + 0.6;
-    healthPotion.bounds.bottom = y - 0.2;
+function createHealthPotions(levelInstance) {
+    const potions = [];
+    const midfield = createHealthPotion(levelInstance);
+    if (midfield) potions.push(midfield);
+    const ground = createGroundHealthPotion(levelInstance);
+    if (ground) potions.push(ground);
+    return potions;
+}
 
-    for (const activePlayer of activePlayers) {
-        if (!activePlayer || !activePlayer.isAlive) continue;
-        if (!checkAABBCollision(activePlayer.getBounds(), healthPotion.bounds)) continue;
-        activePlayer.heal(30);
-        healthPotion.active = false;
-        healthPotion.respawnTimer = healthPotion.respawnDelay;
-        healthPotion.mesh.visible = false;
-        break;
+function removeHealthPotions() {
+    healthPotions.forEach((potion) => {
+        if (potion && potion.mesh && potion.mesh.parent) {
+            potion.mesh.parent.remove(potion.mesh);
+        }
+    });
+    healthPotions = [];
+}
+
+function updateHealthPotions(deltaTime, activePlayers) {
+    if (!healthPotions.length) return;
+    for (const potion of healthPotions) {
+        if (!potion || !potion.mesh) continue;
+        if (!potion.active) {
+            potion.respawnTimer = Math.max(0, potion.respawnTimer - deltaTime);
+            if (potion.respawnTimer === 0) {
+                potion.active = true;
+                potion.mesh.visible = true;
+            }
+            continue;
+        }
+
+        potion.bobTime += deltaTime;
+        const bobOffset = Math.sin(potion.bobTime * 2.5) * 0.06;
+        potion.mesh.position.y = potion.base.y + bobOffset;
+        const { x, y } = potion.mesh.position;
+        potion.bounds.left = x - 0.4;
+        potion.bounds.right = x + 0.4;
+        potion.bounds.top = y + 0.6;
+        potion.bounds.bottom = y - 0.2;
+
+        for (const activePlayer of activePlayers) {
+            if (!activePlayer || !activePlayer.isAlive) continue;
+            if (!checkAABBCollision(activePlayer.getBounds(), potion.bounds)) continue;
+            activePlayer.heal(30);
+            potion.active = false;
+            potion.respawnTimer = potion.respawnDelay;
+            potion.mesh.visible = false;
+            break;
+        }
     }
 }
 
 function handlePauseGamepadToggle() {
-    if (!pauseMenu) return;
+    if (!pauseMenus || !pauseMenus.length) return;
     for (let i = 0; i < localPlayerCount; i += 1) {
         const activeInput = inputs[i];
         if (!activeInput || typeof activeInput.isGamepadPressed !== 'function') {
@@ -1873,7 +1963,10 @@ function handlePauseGamepadToggle() {
         }
         const pressed = activeInput.isGamepadPressed('Button9');
         if (pressed && !lastPauseStartPressed[i]) {
-            pauseMenu.toggle();
+            const menu = pauseMenus[i];
+            if (menu) {
+                menu.toggle();
+            }
         }
         lastPauseStartPressed[i] = pressed;
     }
@@ -1908,10 +2001,13 @@ function stopMenuRender() {
 
 function updateMenuSplitState() {
     if (!heroMenu || !teamMenu) return;
-    const heroVisible = heroMenu.style.display === 'flex';
-    const teamVisible = teamMenu.style.display === 'flex';
-    const shouldShow = localPlayerCount === 2 && !gameStarted && (heroVisible || teamVisible);
+    const heroVisible = window.getComputedStyle(heroMenu).display !== 'none';
+    const teamVisible = window.getComputedStyle(teamMenu).display !== 'none';
+    const shouldShow = localPlayerCount === 2 && !gameStarted && teamVisible;
     document.body.classList.toggle('menu-split-active', shouldShow);
+    if (!gameStarted && (heroVisible || teamVisible)) {
+        document.body.classList.remove('split-screen-active', 'split-screen-quad');
+    }
 }
 
 function showReadyMenu() {
@@ -2006,6 +2102,16 @@ function handleMenuBack() {
     hideReadyMenu();
     updateCoopHeroSelectionUI();
     return true;
+}
+
+function shouldReturnToPlayerCount() {
+    if (!localMultiplayerEnabled) return false;
+    if (readyMenuActive) return false;
+    if (teamMenu && teamMenu.style.display === 'flex') return false;
+    const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
+    if (hasSelection) return false;
+    if (!heroMenu) return true;
+    return heroMenu.style.display !== 'none';
 }
 
 function getFirstConnectedPad() {
@@ -2179,20 +2285,17 @@ function pollMenuGamepad() {
     }
 
     if (localMultiplayerEnabled) {
-        if (heroMenu && heroMenu.style.display === 'flex') {
-            const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
-            if (!hasSelection) {
-                const pad = getFirstConnectedPad();
-                if (pad) {
-                    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
-                    if (backPressed && !menuBackLockedByPlayer[0]) {
-                        setPlayerCount(1);
-                        menuBackLockedByPlayer[0] = true;
-                        return;
-                    }
-                    if (!backPressed) {
-                        menuBackLockedByPlayer[0] = false;
-                    }
+        if (shouldReturnToPlayerCount()) {
+            const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
+            if (pad) {
+                const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+                if (backPressed && !menuBackLockedByPlayer[0]) {
+                    setPlayerCount(1);
+                    menuBackLockedByPlayer[0] = true;
+                    return;
+                }
+                if (!backPressed) {
+                    menuBackLockedByPlayer[0] = false;
                 }
             }
         }
@@ -2361,6 +2464,10 @@ window.addEventListener('load', () => {
             } else if (event.code === 'Escape' || event.code === 'Backspace') {
                 hideReadyMenu();
             }
+            return;
+        }
+        if ((event.code === 'Escape' || event.code === 'Backspace') && shouldReturnToPlayerCount()) {
+            setPlayerCount(1);
             return;
         }
         if (!teamMenu || teamMenu.style.display !== 'flex') return;

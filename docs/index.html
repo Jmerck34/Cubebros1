@@ -106,6 +106,11 @@
             display: block;
         }
 
+        body.menu-split-active #split-screen-border,
+        body.menu-split-active #split-screen-border-horizontal {
+            display: none;
+        }
+
         #menu-split-border {
             position: fixed;
             top: 0;
@@ -924,6 +929,27 @@
             color: rgba(255, 255, 255, 0.7);
         }
 
+        .ability-block-x {
+            position: absolute;
+            inset: 6px;
+            border-radius: 6px;
+            border: 3px solid rgba(255, 80, 80, 0.9);
+            color: #ff4b4b;
+            font-size: 36px;
+            font-weight: 900;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+        }
+
+        .ability-slot.flag-blocked {
+            border-color: rgba(255, 80, 80, 0.8);
+            box-shadow: 0 0 10px rgba(255, 80, 80, 0.7);
+        }
+
         .ultimate-charge {
             position: absolute;
             top: -5px;
@@ -1183,20 +1209,21 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-q"></div>
             <div class="cooldown-text" id="cooldown-text-q"></div>
-            <span style="font-size: 16px;">🖱️L</span>
-            <div class="ability-name">Q/Click</div>
+            <span>1</span>
+            <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w">
             <div class="cooldown-overlay" id="cooldown-w"></div>
             <div class="cooldown-text" id="cooldown-text-w"></div>
-            <span style="font-size: 16px;">🖱️R</span>
-            <div class="ability-name">RClick</div>
+            <span>2</span>
+            <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e">
             <div class="cooldown-overlay" id="cooldown-e"></div>
             <div class="cooldown-text" id="cooldown-text-e"></div>
-            <span>E</span>
-            <div class="ability-name">E</div>
+            <div class="ability-block-x" id="ability-block-e">✖</div>
+            <span>3</span>
+            <div class="ability-name">3</div>
         </div>
         <div class="ability-slot ultimate" id="ability-r">
             <div class="ultimate-charge">
@@ -1204,8 +1231,8 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-r"></div>
             <div class="cooldown-text" id="cooldown-text-r"></div>
-            <span>R</span>
-            <div class="ability-name">Ultimate</div>
+            <span>4</span>
+            <div class="ability-name">4</div>
         </div>
     </div>
 
@@ -1217,20 +1244,21 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-q-p2"></div>
             <div class="cooldown-text" id="cooldown-text-q-p2"></div>
-            <span>U</span>
-            <div class="ability-name">U</div>
+            <span>1</span>
+            <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w-p2">
             <div class="cooldown-overlay" id="cooldown-w-p2"></div>
             <div class="cooldown-text" id="cooldown-text-w-p2"></div>
-            <span>O</span>
-            <div class="ability-name">O</div>
+            <span>2</span>
+            <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e-p2">
             <div class="cooldown-overlay" id="cooldown-e-p2"></div>
             <div class="cooldown-text" id="cooldown-text-e-p2"></div>
-            <span>K</span>
-            <div class="ability-name">K</div>
+            <div class="ability-block-x" id="ability-block-e-p2">✖</div>
+            <span>3</span>
+            <div class="ability-name">3</div>
         </div>
         <div class="ability-slot ultimate" id="ability-r-p2">
             <div class="ultimate-charge">
@@ -1238,8 +1266,8 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-r-p2"></div>
             <div class="cooldown-text" id="cooldown-text-r-p2"></div>
-            <span>P</span>
-            <div class="ability-name">P</div>
+            <span>4</span>
+            <div class="ability-name">4</div>
         </div>
     </div>
 
@@ -1251,20 +1279,21 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-q-p3"></div>
             <div class="cooldown-text" id="cooldown-text-q-p3"></div>
-            <span>V</span>
-            <div class="ability-name">A1</div>
+            <span>1</span>
+            <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w-p3">
             <div class="cooldown-overlay" id="cooldown-w-p3"></div>
             <div class="cooldown-text" id="cooldown-text-w-p3"></div>
-            <span>B</span>
-            <div class="ability-name">A2</div>
+            <span>2</span>
+            <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e-p3">
             <div class="cooldown-overlay" id="cooldown-e-p3"></div>
             <div class="cooldown-text" id="cooldown-text-e-p3"></div>
-            <span>N</span>
-            <div class="ability-name">A3</div>
+            <div class="ability-block-x" id="ability-block-e-p3">✖</div>
+            <span>3</span>
+            <div class="ability-name">3</div>
         </div>
         <div class="ability-slot ultimate" id="ability-r-p3">
             <div class="ultimate-charge">
@@ -1272,8 +1301,8 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-r-p3"></div>
             <div class="cooldown-text" id="cooldown-text-r-p3"></div>
-            <span>M</span>
-            <div class="ability-name">Ult</div>
+            <span>4</span>
+            <div class="ability-name">4</div>
         </div>
     </div>
 
@@ -1285,20 +1314,21 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-q-p4"></div>
             <div class="cooldown-text" id="cooldown-text-q-p4"></div>
-            <span>7</span>
-            <div class="ability-name">A1</div>
+            <span>1</span>
+            <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w-p4">
             <div class="cooldown-overlay" id="cooldown-w-p4"></div>
             <div class="cooldown-text" id="cooldown-text-w-p4"></div>
-            <span>9</span>
-            <div class="ability-name">A2</div>
+            <span>2</span>
+            <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e-p4">
             <div class="cooldown-overlay" id="cooldown-e-p4"></div>
             <div class="cooldown-text" id="cooldown-text-e-p4"></div>
-            <span>5</span>
-            <div class="ability-name">A3</div>
+            <div class="ability-block-x" id="ability-block-e-p4">✖</div>
+            <span>3</span>
+            <div class="ability-name">3</div>
         </div>
         <div class="ability-slot ultimate" id="ability-r-p4">
             <div class="ultimate-charge">
@@ -1306,8 +1336,8 @@
             </div>
             <div class="cooldown-overlay" id="cooldown-r-p4"></div>
             <div class="cooldown-text" id="cooldown-text-r-p4"></div>
-            <span>0</span>
-            <div class="ability-name">Ult</div>
+            <span>4</span>
+            <div class="ability-name">4</div>
         </div>
     </div>
 

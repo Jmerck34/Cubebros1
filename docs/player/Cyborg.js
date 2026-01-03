@@ -373,6 +373,7 @@ export class Cyborg extends Hero {
         const fireballPos = { x: fireballGroup.position.x, y: fireballGroup.position.y };
         let rotationAngle = 0;
         const maxDistance = 12;
+        const level = this.level || { platforms: [] };
 
         // Animate fireball
         const fireballInterval = setInterval(() => {
@@ -452,6 +453,16 @@ export class Cyborg extends Hero {
                     console.log('ðŸ”¥ Fireball hit!');
                     hit = true;
                     break;
+                }
+            }
+
+            if (!hit && level.platforms) {
+                for (const platform of level.platforms) {
+                    if (!platform || !platform.bounds || platform.isLadder || platform.disabled) continue;
+                    if (checkAABBCollision(fireballBounds, platform.bounds)) {
+                        hit = true;
+                        break;
+                    }
                 }
             }
 
@@ -895,9 +906,9 @@ export class Cyborg extends Hero {
         const direction = this.beamAimDirection || { x: this.facingDirection, y: 0 };
         const perpendicular = { x: -direction.y, y: direction.x };
         const angle = Math.atan2(direction.y, direction.x);
-        const damage = 50;
-        const beamLength = 10;
-        const beamSpeed = 12;
+        const damage = 60;
+        const beamLength = 80;
+        const beamSpeed = 22;
         const maxTravel = 80;
 
         // Create beam group with multiple layers
@@ -943,9 +954,10 @@ export class Cyborg extends Hero {
         const glow = new THREE.Mesh(glowGeometry, glowMaterial);
         beamGroup.add(glow);
 
+        const halfLength = beamLength * 0.5;
         const beamPos = {
-            x: this.position.x + direction.x * 5,
-            y: this.position.y + direction.y * 5
+            x: this.position.x + direction.x * halfLength,
+            y: this.position.y + direction.y * halfLength
         };
         beamGroup.position.set(beamPos.x, beamPos.y, 0.2);
         beamGroup.rotation.z = angle;

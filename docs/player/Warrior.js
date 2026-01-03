@@ -30,7 +30,7 @@ export class Warrior extends Hero {
         this.swordComboStep = 0;
         this.swordComboTimers = [];
         this.swordComboWindowMs = 900;
-        this.swordComboResetAfterFinisherMs = 2000;
+        this.swordComboResetAfterFinisherMs = 1000;
         this.swordComboResetTimer = null;
         this.swordFinisherSpinDuration = 0.25;
         this.swordFinisherSpinElapsed = 0;
@@ -330,7 +330,7 @@ export class Warrior extends Hero {
                 this.swordFinisherSpinElapsed = this.swordFinisherSpinDuration;
             }
             if (isFinisher && this.abilities && this.abilities.q) {
-                this.abilities.q.currentCooldown = 2;
+                this.abilities.q.currentCooldown = 1;
                 this.abilities.q.isReady = false;
             }
         }, 140);
