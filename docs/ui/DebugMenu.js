@@ -265,7 +265,7 @@ export class DebugMenu {
         const abilityMap = {
             'Cyborg': ['Fireball', 'Freeze Blast', 'Bubble Shield', 'Kame Hame Ha'],
             'Warlock': ['Lightning Strike', 'Fear', 'Hover', 'Chaos Storm'],
-            'Warrior': ['Sword Slash', 'Shield Guard', 'Dash', 'Whirlwind'],
+            'Warrior': ['Sword Slash', 'Shield Bash', 'Dash', 'Whirlwind'],
             'Assassin': ['Dagger Combo', 'Throwing Stars', 'Shadow Walk', 'Assassinate'],
             'Archer': ['Shoot Arrow', 'Healing Potion', 'Teleport Arrow', 'Machine Bow']
         };

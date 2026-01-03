@@ -26,14 +26,14 @@ export class Warrior extends Hero {
         this.facingDirection = 1;
         this.dashResetCount = 0;
         this.shieldBashInvuln = 0;
-        this.shieldBlockTimer = 0;
-        this.shieldGuardRing = null;
         this.isSpinningUltimate = false;
         this.swordComboStep = 0;
         this.swordComboTimers = [];
         this.swordComboWindowMs = 900;
-        this.swordComboResetAfterFinisherMs = 3000;
+        this.swordComboResetAfterFinisherMs = 2000;
         this.swordComboResetTimer = null;
+        this.swordFinisherSpinDuration = 0.25;
+        this.swordFinisherSpinElapsed = 0;
 
         // Set warrior abilities
         this.initializeAbilities();
@@ -53,8 +53,6 @@ export class Warrior extends Hero {
         // Dash sound
         this.dashVolume = 0.08;
         this.initDashAudio();
-
-        this.initShieldGuardRing();
     }
 
     /**
@@ -181,11 +179,11 @@ export class Warrior extends Hero {
             return true;
         };
 
-        // W - Shield Guard (immobile + invincible)
-        const shieldBash = new Ability('Shield Guard', 8);
+        // W - Shield Bash (medium cooldown)
+        const shieldBash = new Ability('Shield Bash', 4);
         shieldBash.use = (hero) => {
             if (!Ability.prototype.use.call(shieldBash, hero)) return false;
-            hero.activateShieldGuard();
+            hero.shieldBashAttack();
             return true;
         };
 
@@ -311,7 +309,7 @@ export class Warrior extends Hero {
         const swings = [
             { start: -0.6, end: -2.0, offsetY: 0.0, tint: 0xbfe3ff, damageHits: 1 },   // First swing
             { start: -1.9, end: -0.1, offsetY: 0.15, tint: 0x99ccff, damageHits: 1 }, // Second swing
-            { start: -0.3, end: -2.6, offsetY: -0.1, tint: 0xfff1c7, damageHits: 3 }  // Big finisher
+            { start: 0.0, end: -Math.PI * 2, offsetY: -0.1, tint: 0xfff1c7, damageHits: 3 }  // Big finisher (360)
         ];
 
         this.swordComboTimers.forEach((timer) => clearTimeout(timer));
@@ -328,8 +326,11 @@ export class Warrior extends Hero {
             this.sword.rotation.z = swing.end;
             this.playSwordSwingSound();
             this.createCrescentSlash(true, swing.start, swing.end, this.swordComboStep, swing.offsetY, swing.tint, swing.damageHits);
+            if (isFinisher) {
+                this.swordFinisherSpinElapsed = this.swordFinisherSpinDuration;
+            }
             if (isFinisher && this.abilities && this.abilities.q) {
-                this.abilities.q.currentCooldown = 3;
+                this.abilities.q.currentCooldown = 2;
                 this.abilities.q.isReady = false;
             }
         }, 140);
@@ -356,16 +357,16 @@ export class Warrior extends Hero {
 
         // Sword tip is approximately 1.45 units from the warrior's center (0.85 blade + 0.6 from shoulder)
         const swordLength = 1.45;
-        const numSegments = 10;
-
         // The sword swings from about -0.87 radians (starting position) to -2.2 radians (end position)
         // This is approximately a 76-degree arc
         const startAngle = startAngleOverride !== null ? startAngleOverride : -0.87;
         const endAngle = endAngleOverride !== null ? endAngleOverride : -2.2;
+        const isFullSpin = Math.abs(endAngle - startAngle) >= Math.PI * 1.9;
+        const segmentCount = isFullSpin ? 18 : 10;
         const angleRange = endAngle - startAngle;
 
-        for (let i = 0; i < numSegments; i++) {
-            const t = i / (numSegments - 1);
+        for (let i = 0; i < segmentCount; i++) {
+            const t = i / (segmentCount - 1);
             const angle = startAngle + angleRange * t;
 
             // Calculate position of sword tip at this point in the arc
@@ -461,7 +462,8 @@ export class Warrior extends Hero {
             // Bash forward with force
             this.animateShieldTo(-1.0, -0.1, 0.3, 1.2, 120);
             this.animateSwordTo(1.0, -0.1, -0.3, 1.2, 120);
-            this.shieldBashInvuln = 0.25;
+            this.shieldBashInvuln = 0.5;
+            this.clearStatusEffects();
             this.createShieldBashWind(-this.facingDirection);
             this.createShieldBashWind(this.facingDirection);
             this.playShieldBashSound();
@@ -485,51 +487,6 @@ export class Warrior extends Hero {
             this.animateShieldTo(originalX, originalY, originalRot, 1, 140);
             this.animateSwordTo(swordOriginalX, swordOriginalY, swordOriginalRot, 1, 140);
         }, 350);
-    }
-
-    /**
-     * Shield Guard - W Ability (immobile + invincible)
-     */
-    activateShieldGuard() {
-        console.log('🛡️ SHIELD GUARD!');
-        this.shieldBlockTimer = 1.5;
-        this.shieldBashInvuln = 1.5;
-        if (typeof this.playShieldBashSound === 'function') {
-            this.playShieldBashSound();
-        }
-        this.animateShieldTo(-0.9, -0.05, 0.2, 1.1, 120);
-        this.animateSwordTo(0.7, -0.05, -0.2, 1, 120);
-        this.showShieldGuardRing(true);
-    }
-
-    initShieldGuardRing() {
-        if (!this.scene) return;
-        const ring = new THREE.Mesh(
-            new THREE.RingGeometry(0.9, 1.15, 32),
-            new THREE.MeshBasicMaterial({
-                color: 0x2f6cb0,
-                transparent: true,
-                opacity: 0.65,
-                side: THREE.DoubleSide
-            })
-        );
-        ring.position.set(this.position.x, this.position.y + 0.1, 0.6);
-        ring.visible = false;
-        this.scene.add(ring);
-        this.shieldGuardRing = ring;
-    }
-
-    updateShieldGuardRing() {
-        if (!this.shieldGuardRing) return;
-        const pulse = 0.05 + Math.sin(performance.now() * 0.01) * 0.05;
-        this.shieldGuardRing.position.set(this.position.x, this.position.y + 0.1, 0.6);
-        this.shieldGuardRing.scale.set(1 + pulse, 1 + pulse, 1);
-        this.shieldGuardRing.rotation.z = performance.now() * 0.002;
-    }
-
-    showShieldGuardRing(visible) {
-        if (!this.shieldGuardRing) return;
-        this.shieldGuardRing.visible = visible;
     }
 
     /**
@@ -714,9 +671,7 @@ export class Warrior extends Hero {
      * Update warrior - handle facing direction
      */
     update(deltaTime, input) {
-        const wasGuarding = this.shieldBlockTimer > 0;
-        const frozenPos = wasGuarding ? { x: this.position.x, y: this.position.y } : null;
-        this.forceControlsLocked = wasGuarding;
+        this.forceVisualTiltZ = this.swordFinisherSpinElapsed > 0;
         // Update facing direction based on movement
         if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
@@ -726,44 +681,32 @@ export class Warrior extends Hero {
 
         // Call parent update
         super.update(deltaTime, input);
-        if (this.shieldBlockTimer > 0) {
-            this.shieldBlockTimer = Math.max(0, this.shieldBlockTimer - deltaTime);
-            this.forceControlsLocked = true;
-            this.velocity.x = 0;
-            this.velocity.y = 0;
-            if (frozenPos) {
-                this.position.x = frozenPos.x;
-                this.position.y = frozenPos.y;
-                this.syncMeshPosition();
+        if (this.swordFinisherSpinElapsed > 0) {
+            this.swordFinisherSpinElapsed = Math.max(0, this.swordFinisherSpinElapsed - deltaTime);
+            const progress = 1 - (this.swordFinisherSpinElapsed / this.swordFinisherSpinDuration);
+            this.visualTiltZ = -progress * Math.PI * 2 * this.facingDirection;
+            if (this.swordFinisherSpinElapsed === 0) {
+                this.visualTiltZ = 0;
             }
-            this.updateShieldGuardRing();
-        } else {
-            this.showShieldGuardRing(false);
+            this.syncMeshPosition();
         }
         if (this.shieldBashInvuln > 0) {
             this.shieldBashInvuln -= deltaTime;
+            this.setEffectColor(0xffe066);
+            if (this.shieldBashInvuln <= 0) {
+                this.setEffectColor(this.baseColor);
+            }
         }
 
-    }
-
-    takeDamage(amount = 1) {
-        if (this.shieldBlockTimer > 0) {
-            return;
-        }
-        super.takeDamage(amount);
     }
 
     destroy() {
-        if (this.shieldGuardRing && this.shieldGuardRing.parent) {
-            this.shieldGuardRing.parent.remove(this.shieldGuardRing);
-        }
         this.swordComboTimers.forEach((timer) => clearTimeout(timer));
         this.swordComboTimers = [];
         if (this.swordComboResetTimer) {
             clearTimeout(this.swordComboResetTimer);
             this.swordComboResetTimer = null;
         }
-        this.shieldGuardRing = null;
         super.destroy();
     }
 

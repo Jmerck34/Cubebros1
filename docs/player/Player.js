@@ -953,6 +953,9 @@ export class Player {
 
         const moveAmount = Math.min(Math.abs(this.velocity.x) / PLAYER_SPEED, 1);
         const isGroundMove = wasGrounded && moveAmount > 0.05;
+        if (this.forceVisualTiltZ) {
+            this.visualBob = 0;
+        }
 
         if (isGroundMove) {
             const stride = this.animTime * 12;
@@ -961,20 +964,26 @@ export class Player {
             this.visualBob = hop * 0.08 * moveAmount;
             this.visualScaleY = 1 + stretch;
             this.visualScaleZ = 1 - stretch * 0.6;
-            this.visualTiltZ = -0.12 * Math.sign(this.velocity.x || 1) * moveAmount;
+            if (!this.forceVisualTiltZ) {
+                this.visualTiltZ = -0.12 * Math.sign(this.velocity.x || 1) * moveAmount;
+            }
         } else if (!wasGrounded) {
             const fallStretch = Math.min(Math.abs(this.velocity.y) * 0.02, 0.12);
             this.visualScaleY = 1 + fallStretch;
             this.visualScaleZ = 1 - fallStretch * 0.5;
             this.visualBob = 0;
-            this.visualTiltZ = -0.06 * Math.sign(this.velocity.x || 1) * moveAmount;
+            if (!this.forceVisualTiltZ) {
+                this.visualTiltZ = -0.06 * Math.sign(this.velocity.x || 1) * moveAmount;
+            }
         } else {
             // Gentle idle squash to avoid dead-still pose
             const breathe = Math.sin(this.animTime * 2) * 0.02;
             this.visualScaleY = 1 + breathe;
             this.visualScaleZ = 1 - breathe * 0.5;
             this.visualBob = 0;
-            this.visualTiltZ = 0;
+            if (!this.forceVisualTiltZ) {
+                this.visualTiltZ = 0;
+            }
         }
     }
 

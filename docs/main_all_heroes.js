@@ -173,7 +173,7 @@ console.log('');
 console.log('📋 HERO ABILITIES:');
 console.log('');
 console.log('⚔️ WARRIOR:');
-console.log('  Q/Click = Sword Slash | W = Shield Guard | E = Dash | R = Whirlwind');
+console.log('  Q/Click = Sword Slash | W = Shield Bash | E = Dash | R = Whirlwind');
 console.log('');
 console.log('🗡️ ASSASSIN:');
 console.log('  Q/Click = Dagger Combo (bleed) | W = Throwing Stars (slow) | E = Shadow Walk | R = Assassinate');
