@@ -123,6 +123,8 @@ export class Player {
         this.controlsInverted = false;
         this.controlsLocked = false;
         this.forceControlsLocked = false;
+        this.launcherChargeStart = null;
+        this.launcherCooldownUntil = 0;
 
         // Jump state for double jump
         this.maxJumps = 2;

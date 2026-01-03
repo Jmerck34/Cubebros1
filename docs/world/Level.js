@@ -1,6 +1,37 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { checkAABBCollision, resolveCollisionY, resolveCollisionX } from '../utils/collision.js';
 
+const FOREGROUND_PALETTE = {
+    groundBody: 0x7a3d2d,
+    groundTop: 0xa07745,
+    groundSide: 0x5a2c20,
+    grassBody: 0x6b3527,
+    grassTop: 0x7f965d,
+    grassSide: 0x4b241a,
+    stoneBody: 0x5a5166,
+    stoneTop: 0x4a4155,
+    stoneSide: 0x332b3f,
+    cloudBody: 0xf0e6db,
+    cloudTop: 0xf9f2e7,
+    cloudSide: 0xd2c2b3,
+    launcherBody: 0x4a2c21,
+    launcherTop: 0x9a5c3a,
+    launcherSide: 0x2a1913,
+    grassTuft: 0x5d7b4f,
+    dirtSpeck: 0x5a2f22,
+    stoneLine: 0x3b3346,
+    wallBlock: 0x6f687a,
+    wallMortar: 0x3a3342,
+    wallSpot: 0x8a8296,
+    ladderRail: 0x6f4a36,
+    ladderRung: 0x543625,
+    door: 0x4b2d22,
+    doorFrame: 0x26170f,
+    vine: 0x4b6a45,
+    leaf: 0x6f8b4b,
+    flagPole: 0x7a4d34
+};
+
 /**
  * Level - Manages platforms and level geometry
  * @class Level
@@ -34,20 +65,30 @@ export class Level {
 
         switch(type) {
             case 'ground':
-                bodyColor = 0x8f563b;  // Warm dirt
-                topColor = 0x2fa65c;   // Lush grass
-                sideColor = 0x6d3f2a;  // Dark dirt
+                bodyColor = FOREGROUND_PALETTE.groundBody;
+                topColor = FOREGROUND_PALETTE.groundTop;
+                sideColor = FOREGROUND_PALETTE.groundSide;
                 break;
             case 'stone':
-                bodyColor = 0x808080;  // Gray stone
-                topColor = 0x696969;   // Darker gray
-                sideColor = 0x505050;  // Very dark gray
+                bodyColor = FOREGROUND_PALETTE.stoneBody;
+                topColor = FOREGROUND_PALETTE.stoneTop;
+                sideColor = FOREGROUND_PALETTE.stoneSide;
+                break;
+            case 'cloud':
+                bodyColor = FOREGROUND_PALETTE.cloudBody;
+                topColor = FOREGROUND_PALETTE.cloudTop;
+                sideColor = FOREGROUND_PALETTE.cloudSide;
+                break;
+            case 'launcher':
+                bodyColor = FOREGROUND_PALETTE.launcherBody;
+                topColor = FOREGROUND_PALETTE.launcherTop;
+                sideColor = FOREGROUND_PALETTE.launcherSide;
                 break;
             case 'grass':
             default:
-                bodyColor = 0x7e4b32;  // Brown
-                topColor = 0x3bbb6b;   // Bright grass
-                sideColor = 0x5f3a28;  // Dark brown
+                bodyColor = FOREGROUND_PALETTE.grassBody;
+                topColor = FOREGROUND_PALETTE.grassTop;
+                sideColor = FOREGROUND_PALETTE.grassSide;
         }
 
         const bodyMaterial = new THREE.MeshBasicMaterial({ color: bodyColor });
@@ -75,7 +116,7 @@ export class Level {
             for (let i = 0; i < numTufts; i++) {
                 const tuftGeometry = new THREE.BoxGeometry(0.08, 0.15, 0.05);
                 const tuftMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x2f8f4e,
+                    color: FOREGROUND_PALETTE.grassTuft,
                     transparent: true,
                     opacity: 0.7
                 });
@@ -93,7 +134,7 @@ export class Level {
             for (let i = 0; i < speckCount; i++) {
                 const speckGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.02);
                 const speckMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x6f3b29,
+                    color: FOREGROUND_PALETTE.dirtSpeck,
                     transparent: true,
                     opacity: 0.6
                 });
@@ -111,12 +152,12 @@ export class Level {
         if (type === 'stone') {
             const numLines = Math.floor(width);
             for (let i = 0; i < numLines; i++) {
-                const lineGeometry = new THREE.BoxGeometry(width * 0.9, 0.03, 0.82);
-                const lineMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x505050,
-                    transparent: true,
-                    opacity: 0.3
-                });
+            const lineGeometry = new THREE.BoxGeometry(width * 0.9, 0.03, 0.82);
+            const lineMaterial = new THREE.MeshBasicMaterial({
+                color: FOREGROUND_PALETTE.stoneLine,
+                transparent: true,
+                opacity: 0.3
+            });
                 const line = new THREE.Mesh(lineGeometry, lineMaterial);
                 line.position.y = -height/2 + (i * height/numLines);
                 platformGroup.add(line);
@@ -134,7 +175,11 @@ export class Level {
                 top: y + height / 2,
                 bottom: y - height / 2
             },
-            type: type
+            type: type,
+            baseY: y,
+            baseScale: { x: 1, y: 1, z: 1 },
+            springTimer: 0,
+            springDuration: type === 'launcher' ? 0.45 : 0.25
         };
 
         this.platforms.push(platform);
@@ -180,6 +225,7 @@ export class Level {
         const playerBounds = player.getBounds();
         const playerVelocity = player.velocity;
         let onLadder = false;
+        let onLauncher = null;
         let onWall = false;
         const updateFallTracking = () => {
             if (!Number.isFinite(player.fallPeakY)) {
@@ -320,6 +366,9 @@ export class Level {
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
+                    if (platform.type === 'launcher') {
+                        onLauncher = platform;
+                    }
                     if (platform.type === 'moving') {
                         const prevX = platform.prevX ?? platform.mesh.position.x;
                         const prevY = platform.prevY ?? platform.mesh.position.y;
@@ -349,6 +398,24 @@ export class Level {
         // Reset ladder flag if not on ladder
         if (!onLadder) {
             player.onLadder = false;
+        }
+
+        if (!onLauncher) {
+            player.launcherChargeStart = null;
+        } else {
+            const now = performance.now();
+            if (!player.launcherCooldownUntil || now >= player.launcherCooldownUntil) {
+                const launch = onLauncher.launchVelocity || { x: 0, y: 16 };
+                player.velocity.x = launch.x;
+                player.velocity.y = launch.y;
+                player.isGrounded = false;
+                const maxJumps = Number.isFinite(player.maxJumps) ? player.maxJumps : 2;
+                player.jumpsRemaining = maxJumps;
+                player.jumpKeyWasPressed = false;
+                onLauncher.springTimer = onLauncher.springDuration;
+                player.launcherChargeStart = null;
+                player.launcherCooldownUntil = now + 600;
+            }
         }
 
         if (player.isGrounded) {
@@ -409,6 +476,26 @@ export class Level {
         }
     }
 
+    updateLaunchers(deltaTime) {
+        for (const platform of this.platforms) {
+            if (!platform || platform.type !== 'launcher' || !platform.mesh) {
+                continue;
+            }
+            if (platform.springTimer > 0) {
+                platform.springTimer = Math.max(0, platform.springTimer - deltaTime);
+                const t = 1 - (platform.springTimer / Math.max(0.001, platform.springDuration));
+                const pulse = Math.sin(Math.min(1, t) * Math.PI);
+                const scaleY = 1 + pulse * 0.9;
+                const scaleX = 1 - pulse * 0.18;
+                platform.mesh.scale.set(scaleX, scaleY, 1);
+                platform.mesh.position.y = platform.baseY + (scaleY - 1) * 0.55;
+            } else {
+                platform.mesh.scale.set(1, 1, 1);
+                platform.mesh.position.y = platform.baseY;
+            }
+        }
+    }
+
     /**
      * Update level systems
      * @param {number} deltaTime - Time since last frame
@@ -416,6 +503,7 @@ export class Level {
     update(deltaTime) {
         this.updateEnemies(deltaTime);
         this.updateMovingPlatforms(deltaTime);
+        this.updateLaunchers(deltaTime);
         this.updateFlags();
     }
 
@@ -440,14 +528,14 @@ export class Level {
 
             // Stone block
             const blockGeometry = new THREE.BoxGeometry(wallWidth, blockHeight, 0.8);
-            const blockMaterial = new THREE.MeshBasicMaterial({ color: 0x808080 });
+            const blockMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.wallBlock });
             const block = new THREE.Mesh(blockGeometry, blockMaterial);
             block.position.y = blockY;
             wallGroup.add(block);
 
             // Block mortar lines (darker)
             const mortarGeometry = new THREE.BoxGeometry(wallWidth + 0.05, 0.05, 0.82);
-            const mortarMaterial = new THREE.MeshBasicMaterial({ color: 0x404040 });
+            const mortarMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.wallMortar });
             const mortar = new THREE.Mesh(mortarGeometry, mortarMaterial);
             mortar.position.y = blockY + blockHeight/2;
             wallGroup.add(mortar);
@@ -456,7 +544,7 @@ export class Level {
             if (Math.random() > 0.5) {
                 const spotGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.81);
                 const spotMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x909090,
+                    color: FOREGROUND_PALETTE.wallSpot,
                     transparent: true,
                     opacity: 0.6
                 });
@@ -479,7 +567,7 @@ export class Level {
 
         // Left rail - positioned in front of wall (Z > 0.4)
         const leftRailGeometry = new THREE.BoxGeometry(0.08, ladderHeight, ladderDepth);
-        const railMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 }); // Brown wood
+        const railMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ladderRail });
         const leftRail = new THREE.Mesh(leftRailGeometry, railMaterial);
         leftRail.position.set(ladderX - ladderWidth/2, ladderHeight/2, 0.6);
         wallGroup.add(leftRail);
@@ -494,7 +582,7 @@ export class Level {
         for (let i = 0; i < numRungs; i++) {
             const rungY = (i + 0.5) * (ladderHeight / numRungs);
             const rungGeometry = new THREE.BoxGeometry(ladderWidth, 0.1, ladderDepth);
-            const rungMaterial = new THREE.MeshBasicMaterial({ color: 0x654321 }); // Darker brown
+            const rungMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ladderRung });
             const rung = new THREE.Mesh(rungGeometry, rungMaterial);
             rung.position.set(ladderX, rungY, 0.6);
             wallGroup.add(rung);
@@ -515,13 +603,13 @@ export class Level {
         const doorHeight = Math.min(3.2, wallHeight * 0.45);
         if (addDoor) {
             const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, 0.2);
-            const doorMaterial = new THREE.MeshBasicMaterial({ color: 0x5b3a29 });
+            const doorMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.door });
             const door = new THREE.Mesh(doorGeometry, doorMaterial);
             door.position.set(0, doorHeight / 2 + 0.1, 0.55);
             wallGroup.add(door);
 
             const doorFrameGeometry = new THREE.BoxGeometry(doorWidth + 0.2, doorHeight + 0.2, 0.1);
-            const doorFrameMaterial = new THREE.MeshBasicMaterial({ color: 0x2f1b12 });
+            const doorFrameMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.doorFrame });
             const doorFrame = new THREE.Mesh(doorFrameGeometry, doorFrameMaterial);
             doorFrame.position.set(0, doorHeight / 2 + 0.1, 0.52);
             wallGroup.add(doorFrame);
@@ -537,7 +625,7 @@ export class Level {
                 const vineY = (j / vineSegments) * wallHeight + Math.random() * 0.3;
                 const vineGeometry = new THREE.BoxGeometry(0.05, 0.3, 0.05);
                 const vineMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x2F4F2F,
+                    color: FOREGROUND_PALETTE.vine,
                     transparent: true,
                     opacity: 0.7
                 });
@@ -554,7 +642,7 @@ export class Level {
                 if (Math.random() > 0.6) {
                     const leafGeometry = new THREE.BoxGeometry(0.12, 0.08, 0.02);
                     const leafMaterial = new THREE.MeshBasicMaterial({
-                        color: 0x228B22,
+                        color: FOREGROUND_PALETTE.leaf,
                         transparent: true,
                         opacity: 0.8
                     });
@@ -614,7 +702,7 @@ export class Level {
         const flagGroup = new THREE.Group();
         const poleHeight = 1.1;
         const poleGeometry = new THREE.BoxGeometry(0.06, poleHeight, 0.06);
-        const poleMaterial = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
+        const poleMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.flagPole });
         const pole = new THREE.Mesh(poleGeometry, poleMaterial);
         pole.position.set(0, poleHeight / 2, 0.4);
         flagGroup.add(pole);
@@ -644,7 +732,7 @@ export class Level {
         const flagGroup = new THREE.Group();
         const poleHeight = 1.1;
         const poleGeometry = new THREE.BoxGeometry(0.06, poleHeight, 0.06);
-        const poleMaterial = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
+        const poleMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.flagPole });
         const pole = new THREE.Mesh(poleGeometry, poleMaterial);
         pole.position.set(0, poleHeight / 2, 0.4);
         flagGroup.add(pole);
@@ -761,10 +849,10 @@ export class Level {
         this.addPlatform((gapEdges[2].right + groundRight) / 2, groundCenterY, groundRight - gapEdges[2].right, groundHeight, 'ground');
 
         const wallHeight = 10.5;
-        const castleWallWidth = 7;
+        const castleWallWidth = 12;
 
         // Left castle
-        const leftCastleX = -60;
+        const leftCastleX = -52;
         this.addWallWithLadder(leftCastleX, groundSurfaceY, wallHeight, {
             wallWidth: castleWallWidth,
             ladderSide: 'right',
@@ -775,7 +863,7 @@ export class Level {
         }
 
         // Right castle
-        const rightCastleX = 60;
+        const rightCastleX = 52;
         this.addWallWithLadder(rightCastleX, groundSurfaceY, wallHeight, {
             wallWidth: castleWallWidth,
             ladderSide: 'left',
@@ -791,10 +879,10 @@ export class Level {
         };
 
         const boundaryWidth = 1.5;
-        const boundaryTop = groundSurfaceY + wallHeight + 6;
+        const boundaryTop = groundSurfaceY + wallHeight + 18;
         const boundaryBottom = groundBottomY;
-        const leftBoundaryRight = leftCastleX - castleWallWidth / 2;
-        const rightBoundaryLeft = rightCastleX + castleWallWidth / 2;
+        const leftBoundaryRight = leftCastleX - castleWallWidth / 2 - 4;
+        const rightBoundaryLeft = rightCastleX + castleWallWidth / 2 + 4;
 
         this.platforms.push({
             mesh: null,
@@ -829,5 +917,17 @@ export class Level {
         this.addPlatform(12, -0.5, 4, 0.6, 'stone');
         this.addPlatform(-6, 2.5, 3, 0.6, 'grass');
         this.addPlatform(6, 2.5, 3, 0.6, 'grass');
+
+        // Large midfield cloud platform (stand-in)
+        this.addPlatform(0, 18, 80, 1.2, 'cloud');
+
+        // Catapult launchers on top of each castle (inside edge)
+        const launcherHeight = groundSurfaceY + wallHeight + 0.6;
+        const leftLauncherX = leftCastleX - castleWallWidth / 2 + 1.8;
+        const rightLauncherX = rightCastleX + castleWallWidth / 2 - 1.8;
+        const leftLauncher = this.addPlatform(leftLauncherX, launcherHeight, 4, 0.6, 'launcher');
+        leftLauncher.launchVelocity = { x: 10, y: 23 };
+        const rightLauncher = this.addPlatform(rightLauncherX, launcherHeight, 4, 0.6, 'launcher');
+        rightLauncher.launchVelocity = { x: -10, y: 23 };
     }
 }

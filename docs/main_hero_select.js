@@ -1096,6 +1096,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     cameras[0] = camera;
     cameraFollow = new CameraFollow(camera, player);
     cameraFollow.setSmoothing(0.1);
+    cameraFollow.setVerticalFollow(2.5, 22);
     cameraFollows[0] = cameraFollow;
 
     for (let i = 1; i < localPlayerCount; i += 1) {
@@ -1105,6 +1106,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
         cameras[i] = cam;
         const follow = new CameraFollow(cam, players[i]);
         follow.setSmoothing(0.1);
+        follow.setVerticalFollow(2.5, 22);
         cameraFollows[i] = follow;
     }
     camera2 = cameras[1] || null;
