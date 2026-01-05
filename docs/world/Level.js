@@ -1230,6 +1230,14 @@ export class Level {
         );
     }
 
+    createArenaLevel(options = {}) {
+        this.createTestLevel(options);
+    }
+
+    createKothLevel(options = {}) {
+        this.createTestLevel(options);
+    }
+
     addWindZone(bounds, force) {
         this.windZones.push({ bounds, force });
         const count = 10;

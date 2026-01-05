@@ -19,8 +19,10 @@ import { checkAABBCollision } from './utils/collision.js';
 import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
 import { DebugMenu } from './ui/DebugMenu.js';
-import { DEATH_Y } from './core/constants.js';
 import { updateDamageNumbers, clearDamageNumbers } from './utils/damageNumbers.js';
+import { CaptureTheFlagMode } from './gameModes/CaptureTheFlagMode.js';
+import { ArenaMode } from './gameModes/ArenaMode.js';
+import { KingOfTheHillMode } from './gameModes/KingOfTheHillMode.js';
 
 // Game state
 let gameStarted = false;
@@ -30,14 +32,25 @@ let inputs = [];
 let uiManagers = [];
 let cameras = [];
 let cameraFollows = [];
-let flagState = null;
 let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
+let gameMode = null;
+let selectedGameMode = null;
+let modeMenu = null;
+let modeButtons = [];
+let modeFocusIndex = 0;
+let modeSelectLocked = false;
+let modeBackLocked = false;
 const VIEW_SIZE = 10;
 let healthPotions = [];
 let menuRenderActive = false;
 let menuRenderHandle = null;
 let ladderHint = null;
+let kothMeter = null;
+let kothMeterLabelBlue = null;
+let kothMeterLabelRed = null;
+let kothMeterFillBlue = null;
+let kothMeterFillRed = null;
 
 // Hero selection
 const MAX_PLAYERS = 4;
@@ -81,8 +94,9 @@ let readyConfirmButton = null;
 let readyMenuActive = false;
 let readyConfirmLocked = false;
 let readyCancelLocked = false;
+let mouseHeroSelectIndex = 0;
 let teamMenuItems = [];
-let teamFocusIndices = Array(MAX_PLAYERS).fill(0);
+let teamFocusIndices = Array(MAX_PLAYERS).fill(-1);
 let teamLastNavTimes = Array(MAX_PLAYERS).fill(0);
 let teamSelectLocked = Array(MAX_PLAYERS).fill(false);
 
@@ -242,589 +256,33 @@ function setScoreboardVisible(visible) {
     }
 }
 
-function updateScoreboard() {
+function updateScoreboard(scores = teamScores) {
+    if (!scores) return;
     if (scoreBlueEl) {
-        scoreBlueEl.textContent = `${teamScores.blue}`;
+        scoreBlueEl.textContent = `${scores.blue ?? 0}`;
     }
     if (scoreRedEl) {
-        scoreRedEl.textContent = `${teamScores.red}`;
+        scoreRedEl.textContent = `${scores.red ?? 0}`;
     }
 }
 
-function createFlag(team, base, color) {
-    const flagGroup = new THREE.Group();
-    const pole = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, 1.1, 0.06),
-        new THREE.MeshBasicMaterial({ color: 0x4a3a2a })
-    );
-    pole.position.y = 0.55;
-    flagGroup.add(pole);
-
-    const cloth = new THREE.Mesh(
-        new THREE.BoxGeometry(0.55, 0.35, 0.05),
-        new THREE.MeshBasicMaterial({ color })
-    );
-    cloth.position.set(0.32, 0.75, 0);
-    flagGroup.add(cloth);
-
-    flagGroup.position.set(base.x, base.y, 0.45);
-    scene.add(flagGroup);
-
-    const ringGeometry = new THREE.RingGeometry(0.9, 1.35, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.35,
-        side: THREE.DoubleSide
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.position.set(base.x, base.y, 0.05);
-    ring.visible = false;
-    scene.add(ring);
-
-    const chargeGroup = new THREE.Group();
-    const chargeWidth = 1.4;
-    const chargeHeight = 0.16;
-    const chargeBack = new THREE.Mesh(
-        new THREE.PlaneGeometry(chargeWidth, chargeHeight),
-        new THREE.MeshBasicMaterial({ color: 0x0c0c0c, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
-    );
-    const chargeFill = new THREE.Mesh(
-        new THREE.PlaneGeometry(chargeWidth, chargeHeight),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
-    );
-    chargeGroup.add(chargeBack);
-    chargeGroup.add(chargeFill);
-    chargeGroup.position.set(base.x, base.y + 1.5, 0.5);
-    chargeGroup.visible = false;
-    chargeFill.scale.x = 0;
-    chargeFill.visible = false;
-    scene.add(chargeGroup);
-
-    return {
-        team,
-        base,
-        mesh: flagGroup,
-        ring,
-        chargeGroup,
-        chargeFill,
-        chargeWidth,
-        carrier: null,
-        isAtBase: true,
-        dropped: false,
-        lob: null,
-        returnProgress: 0,
-        returnTimer: 0,
-        pickupCooldown: 0,
-        lastCarrierPosition: { x: base.x, y: base.y }
-    };
-}
-
-function initCTF(levelInstance) {
-    const spawns = levelInstance.flagSpawns || {
-        blue: { x: -60, y: 3 },
-        red: { x: 60, y: 3 }
-    };
-    teamScores = { blue: 0, red: 0 };
-    updateScoreboard();
-    setScoreboardVisible(true);
-
-    flagState = {
-        returnDelay: 10,
-        returnRadius: 1.3,
-        baseRadius: 1.8,
-        bases: {
-            blue: { x: spawns.blue.x, y: spawns.blue.y },
-            red: { x: spawns.red.x, y: spawns.red.y }
-        },
-        flags: {
-            blue: createFlag('blue', spawns.blue, 0x2f6cb0),
-            red: createFlag('red', spawns.red, 0xcc2f2f)
-        }
-    };
-}
-
-function clearCTF() {
-    if (flagState && flagState.flags) {
-        Object.values(flagState.flags).forEach((flag) => {
-            if (flag.mesh && flag.mesh.parent) {
-                flag.mesh.parent.remove(flag.mesh);
-            }
-            if (flag.ring && flag.ring.parent) {
-                flag.ring.parent.remove(flag.ring);
-            }
-        });
-    }
-    flagState = null;
-    setScoreboardVisible(false);
-}
-
-function getFlagBounds(flag) {
-    const x = flag.mesh.position.x;
-    const y = flag.mesh.position.y;
-    return {
-        left: x - 0.4,
-        right: x + 0.4,
-        top: y + 0.9,
-        bottom: y - 0.2
-    };
-}
-
-function setFlagCarrier(flag, carrier) {
-    flag.carrier = carrier;
-    flag.isAtBase = false;
-    flag.dropped = false;
-    flag.lob = null;
-    flag.returnProgress = 0;
-    flag.returnTimer = 0;
-    flag.pickupCooldown = 0;
-    if (flag.ring) {
-        flag.ring.visible = false;
-    }
-    if (flag.chargeGroup) {
-        flag.chargeGroup.visible = false;
-    }
-    flag.lastCarrierPosition = { x: carrier.position.x, y: carrier.position.y };
-    carrier.isCarryingFlag = true;
-    carrier.flagCarryTeam = flag.team;
-}
-
-function clearFlagCarrier(flag, carrier) {
-    if (carrier) {
-        carrier.isCarryingFlag = false;
-        carrier.flagCarryTeam = null;
-    }
-    flag.carrier = null;
-}
-
-function resetFlag(flag) {
-    clearFlagCarrier(flag, flag.carrier);
-    flag.isAtBase = true;
-    flag.dropped = false;
-    flag.lob = null;
-    flag.returnProgress = 0;
-    flag.returnTimer = 0;
-    flag.pickupCooldown = 0;
-    flag.mesh.position.set(flag.base.x, flag.base.y, 0.45);
-    if (flag.ring) {
-        flag.ring.visible = false;
-        flag.ring.position.set(flag.base.x, flag.base.y, 0.05);
-    }
-    if (flag.chargeGroup) {
-        flag.chargeGroup.visible = false;
-        flag.chargeGroup.position.set(flag.base.x, flag.base.y + 1.5, 0.5);
-    }
-    flag.lastCarrierPosition = { x: flag.base.x, y: flag.base.y };
-}
-
-function getNearestLedgePosition(position) {
-    if (!level || !level.platforms || !level.platforms.length || !position) {
-        return position;
-    }
-
-    let best = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    level.platforms.forEach((platform) => {
-        if (!platform || !platform.bounds || platform.isLadder || !platform.mesh) {
-            return;
-        }
-        const bounds = platform.bounds;
-        const width = bounds.right - bounds.left;
-        if (!Number.isFinite(width) || width <= 0) {
-            return;
-        }
-        const inset = Math.min(0.4, width * 0.25);
-        const clampedX = Math.min(bounds.right - inset, Math.max(bounds.left + inset, position.x));
-        const candidate = {
-            x: clampedX,
-            y: bounds.top + 0.6
-        };
-        const dx = candidate.x - position.x;
-        const dy = candidate.y - position.y;
-        const dist = dx * dx + dy * dy;
-        if (dist < bestDistance) {
-            bestDistance = dist;
-            best = candidate;
-        }
-    });
-
-    return best || position;
-}
-
-function getCastleWallBounds(baseX) {
-    if (!level || !level.platforms || !level.platforms.length || !Number.isFinite(baseX)) {
-        return null;
-    }
-    let closest = null;
-    let closestDist = Number.POSITIVE_INFINITY;
-    level.platforms.forEach((platform) => {
-        if (!platform || platform.type !== 'wall' || !platform.bounds || !platform.mesh) {
-            return;
-        }
-        const centerX = (platform.bounds.left + platform.bounds.right) / 2;
-        const dist = Math.abs(centerX - baseX);
-        if (dist < closestDist) {
-            closestDist = dist;
-            closest = platform.bounds;
-        }
-    });
-    return closest;
-}
-
-function clampFlagOutsideCastle(flag, position) {
-    if (!flag || !position) return position;
-    const baseX = flag.base?.x;
-    if (!Number.isFinite(baseX)) return position;
-    const bounds = getCastleWallBounds(baseX);
-    if (!bounds) return position;
-    const isLeftCastle = baseX < 0;
-    const outside = isLeftCastle ? position.x < bounds.left : position.x > bounds.right;
-    if (!outside) return position;
-    const inset = 0.6;
-    const innerEdgeX = isLeftCastle ? bounds.right - inset : bounds.left + inset;
-    return {
-        x: innerEdgeX,
-        y: bounds.top + 0.6
-    };
-}
-
-function isFlagOutsideCastle(flag, position) {
-    if (!flag || !position) return false;
-    const baseX = flag.base?.x;
-    if (!Number.isFinite(baseX)) return false;
-    const bounds = getCastleWallBounds(baseX);
-    if (!bounds) return false;
-    const isLeftCastle = baseX < 0;
-    return isLeftCastle ? position.x < bounds.left : position.x > bounds.right;
-}
-
-function getGroundDropPosition(position) {
-    if (!level || !level.platforms || !level.platforms.length || !position) {
-        return null;
-    }
-
-    const threshold = position.y + 0.5;
-    let best = null;
-    let bestTop = -Infinity;
-
-    level.platforms.forEach((platform) => {
-        if (!platform || !platform.bounds || platform.isLadder || !platform.mesh) {
-            return;
-        }
-        const bounds = platform.bounds;
-        if (bounds.top > threshold) {
-            return;
-        }
-        const width = bounds.right - bounds.left;
-        if (!Number.isFinite(width) || width <= 0) {
-            return;
-        }
-        const inset = Math.min(0.4, width * 0.25);
-        if (position.x < bounds.left + inset || position.x > bounds.right - inset) {
-            return;
-        }
-        if (bounds.top > bestTop) {
-            bestTop = bounds.top;
-            best = {
-                x: position.x,
-                y: bounds.top + 0.6
-            };
-        }
-    });
-
-    return best;
-}
-
-function getFlagLandingPosition(position, velocityY) {
-    if (!level || !level.platforms || !level.platforms.length || !position) {
-        return null;
-    }
-
-    if (velocityY > 0.1) {
-        return null;
-    }
-
-    const flagBounds = {
-        left: position.x - 0.3,
-        right: position.x + 0.3,
-        top: position.y + 0.45,
-        bottom: position.y - 0.35
-    };
-
-    let landingPlatform = null;
-    let bestTop = -Infinity;
-    level.platforms.forEach((platform) => {
-        if (!platform || !platform.bounds || platform.isLadder || !platform.mesh) {
-            return;
-        }
-        if (checkAABBCollision(flagBounds, platform.bounds)) {
-            if (platform.bounds.top > bestTop) {
-                bestTop = platform.bounds.top;
-                landingPlatform = platform;
-            }
-        }
-    });
-
-    if (!landingPlatform) {
-        return null;
-    }
-
-    const bounds = landingPlatform.bounds;
-    const width = bounds.right - bounds.left;
-    const inset = Math.min(0.4, width * 0.25);
-    const clampedX = Math.min(bounds.right - inset, Math.max(bounds.left + inset, position.x));
-    return {
-        x: clampedX,
-        y: bounds.top + 0.6
-    };
-}
-
-function dropFlagAt(flag, dropPos) {
-    const resolvedPos = dropPos || flag.lastCarrierPosition || flag.base;
-    const groundedPos = getGroundDropPosition(resolvedPos);
-    const initialPos = groundedPos || getNearestLedgePosition(resolvedPos) || resolvedPos;
-    const finalPos = clampFlagOutsideCastle(flag, initialPos);
-    flag.lob = null;
-    clearFlagCarrier(flag, flag.carrier);
-    flag.isAtBase = false;
-    flag.dropped = true;
-    flag.returnTimer = flagState.returnDelay;
-    flag.pickupCooldown = 0.25;
-    flag.mesh.position.set(finalPos.x, finalPos.y, 0.45);
-    if (flag.ring) {
-        flag.ring.visible = true;
-        flag.ring.position.set(finalPos.x, finalPos.y, 0.05);
-    }
-    if (flag.chargeGroup) {
-        flag.chargeGroup.visible = true;
-        flag.chargeGroup.position.set(finalPos.x, finalPos.y + 1.5, 0.5);
-    }
-    flag.lastCarrierPosition = { x: finalPos.x, y: finalPos.y };
-}
-
-function dropFlag(flag) {
-    dropFlagAt(flag, flag.lastCarrierPosition || flag.base);
-}
-
-function startFlagLob(flag, carrier) {
-    if (!flag || !carrier) return;
-    const aim = typeof carrier.getAimDirection === 'function' ? carrier.getAimDirection() : null;
-    const useAim = carrier.hasAimInput && aim;
-    const direction = useAim ? aim : { x: carrier.facingDirection || 1, y: 0 };
-    const length = Math.hypot(direction.x, direction.y);
-    const dir = length > 0.001 ? { x: direction.x / length, y: direction.y / length } : { x: 1, y: 0 };
-    const origin = {
-        x: carrier.position.x + dir.x * 0.6,
-        y: carrier.position.y + 0.8
-    };
-
-    const speed = 7.5;
-    let velocityY = useAim ? dir.y * speed : 5.4;
-    if (!Number.isFinite(velocityY) || velocityY < 2.5) {
-        velocityY = 4.8;
-    }
-
-    flag.lob = {
-        x: origin.x,
-        y: origin.y,
-        vx: dir.x * speed,
-        vy: velocityY
-    };
-    flag.returnProgress = 0;
-
-    clearFlagCarrier(flag, carrier);
-    flag.isAtBase = false;
-    flag.dropped = true;
-    flag.returnTimer = flagState.returnDelay;
-    flag.pickupCooldown = 0.25;
-    flag.lastCarrierPosition = { x: origin.x, y: origin.y };
-    flag.mesh.position.set(origin.x, origin.y, 0.45);
-    if (flag.ring) {
-        flag.ring.visible = false;
-    }
-    if (flag.chargeGroup) {
-        flag.chargeGroup.visible = false;
+function setKothMeterVisible(visible) {
+    if (kothMeter) {
+        kothMeter.style.display = visible ? 'flex' : 'none';
     }
 }
 
-function isPlayerInBase(player, team) {
-    if (!flagState) return false;
-    const base = flagState.bases[team];
-    if (!base) return false;
-    const radius = flagState.baseRadius;
-    const baseBounds = {
-        left: base.x - radius,
-        right: base.x + radius,
-        top: base.y + radius,
-        bottom: base.y - radius
-    };
-    return checkAABBCollision(player.getBounds(), baseBounds);
+function updateKothMeter({ team, score, max }) {
+    if (!kothMeter || !kothMeterLabelBlue || !kothMeterLabelRed || !kothMeterFillBlue || !kothMeterFillRed) return;
+    const safeMax = Number.isFinite(max) ? max : 50;
+    const blueScore = Number.isFinite(score?.blue) ? Math.max(0, Math.min(safeMax, score.blue)) : 0;
+    const redScore = Number.isFinite(score?.red) ? Math.max(0, Math.min(safeMax, score.red)) : 0;
+    kothMeterLabelBlue.textContent = `BLUE ${blueScore}/${safeMax}`;
+    kothMeterLabelRed.textContent = `RED ${redScore}/${safeMax}`;
+    kothMeterFillBlue.style.width = `${safeMax > 0 ? (blueScore / safeMax) * 100 : 0}%`;
+    kothMeterFillRed.style.width = `${safeMax > 0 ? (redScore / safeMax) * 100 : 0}%`;
 }
 
-function updateCTF(deltaTime, activePlayers, activeInputs) {
-    if (!flagState) return;
-    const players = (activePlayers || []).map((activePlayer, index) => ({
-        player: activePlayer,
-        input: activeInputs ? activeInputs[index] : null
-    })).filter((entry) => entry.player);
-
-    const playerInputs = players.map(({ player: activePlayer, input: activeInput }) => {
-        const dropPressed = activeInput?.isFlagDropPressed?.() || false;
-        const dropJustPressed = dropPressed && !activePlayer.flagDropWasPressed;
-        return { player: activePlayer, input: activeInput, dropPressed, dropJustPressed };
-    });
-
-    playerInputs.forEach(({ player: activePlayer, dropPressed, dropJustPressed }) => {
-        activePlayer.flagCarryBlocksAbility3 = Boolean(activePlayer.isCarryingFlag);
-        if (activePlayer.isCarryingFlag && dropJustPressed) {
-            const carriedFlag = flagState.flags[activePlayer.flagCarryTeam];
-            if (carriedFlag && carriedFlag.carrier === activePlayer) {
-                carriedFlag.lastCarrierPosition = { x: activePlayer.position.x, y: activePlayer.position.y };
-                startFlagLob(carriedFlag, activePlayer);
-            }
-        }
-    });
-
-    Object.values(flagState.flags).forEach((flag) => {
-        if (flag.carrier) {
-            if (flag.carrier.isAlive) {
-                flag.lastCarrierPosition = { x: flag.carrier.position.x, y: flag.carrier.position.y };
-                flag.mesh.position.set(flag.carrier.position.x, flag.carrier.position.y + 1.0, 0.45);
-            } else {
-                if (flag.carrier.lastDeathWasPit) {
-                    const fallbackPos = flag.lastCarrierPosition || flag.base;
-                    const ledgePos = getNearestLedgePosition(fallbackPos);
-                    flag.returnProgress = 0;
-                    dropFlagAt(flag, ledgePos);
-                } else {
-                    flag.returnProgress = 0;
-                    dropFlag(flag);
-                }
-            }
-        } else if (flag.lob) {
-            flag.lob.vy -= 20 * deltaTime;
-            flag.lob.x += flag.lob.vx * deltaTime;
-            flag.lob.y += flag.lob.vy * deltaTime;
-            flag.mesh.position.set(flag.lob.x, flag.lob.y, 0.45);
-
-            if (isFlagOutsideCastle(flag, flag.lob)) {
-                resetFlag(flag);
-                return;
-            }
-
-            const landingPos = getFlagLandingPosition({ x: flag.lob.x, y: flag.lob.y }, flag.lob.vy);
-            if (landingPos) {
-                dropFlagAt(flag, landingPos);
-                return;
-            }
-
-            if (flag.lob.y < DEATH_Y) {
-                dropFlagAt(flag, { x: flag.lob.x, y: flag.lob.y });
-                return;
-            }
-        } else if (flag.dropped) {
-            if (flag.ring) {
-                flag.ring.position.set(flag.mesh.position.x, flag.mesh.position.y, 0.05);
-            }
-            if (flag.chargeGroup) {
-                flag.chargeGroup.position.set(flag.mesh.position.x, flag.mesh.position.y + 1.5, 0.5);
-            }
-            if (flag.pickupCooldown > 0) {
-                flag.pickupCooldown -= deltaTime;
-            }
-        }
-    });
-
-    playerInputs.forEach(({ player: activePlayer, dropPressed }) => {
-        if (!activePlayer.isAlive) return;
-        Object.values(flagState.flags).forEach((flag) => {
-            if (flag.carrier) return;
-            const flagBounds = getFlagBounds(flag);
-            if (!checkAABBCollision(activePlayer.getBounds(), flagBounds)) return;
-
-            if (flag.team === activePlayer.team) {
-                return;
-            } else if (!activePlayer.isCarryingFlag) {
-                if (flag.dropped && !dropPressed) {
-                    return;
-                }
-                if (flag.pickupCooldown > 0) {
-                    return;
-                }
-                setFlagCarrier(flag, activePlayer);
-            }
-        });
-    });
-
-    Object.values(flagState.flags).forEach((flag) => {
-        if (!flag.dropped || flag.carrier || flag.lob) {
-            if (flag.chargeGroup) {
-                flag.chargeGroup.visible = false;
-            }
-            return;
-        }
-        const radius = flagState.returnRadius;
-        const ringBounds = {
-            left: flag.mesh.position.x - radius,
-            right: flag.mesh.position.x + radius,
-            top: flag.mesh.position.y + radius,
-            bottom: flag.mesh.position.y - radius
-        };
-
-        let friendlyInRing = false;
-        let enemyInRing = false;
-
-        players.forEach(({ player: activePlayer }) => {
-            if (!activePlayer.isAlive) return;
-            if (!checkAABBCollision(activePlayer.getBounds(), ringBounds)) return;
-            if (activePlayer.team === flag.team) {
-                friendlyInRing = true;
-            } else {
-                enemyInRing = true;
-            }
-        });
-
-        const rate = 1 / flagState.returnDelay;
-        if (friendlyInRing && !enemyInRing) {
-            flag.returnProgress = Math.min(1, (flag.returnProgress || 0) + deltaTime * rate);
-        } else if (!friendlyInRing && !enemyInRing) {
-            const decay = rate * 0.6;
-            flag.returnProgress = Math.max(0, (flag.returnProgress || 0) - deltaTime * decay);
-        }
-
-        if (flag.chargeGroup && flag.chargeFill) {
-            const progress = Math.max(0, Math.min(1, flag.returnProgress || 0));
-            flag.chargeGroup.visible = true;
-            flag.chargeFill.visible = progress > 0.01;
-            flag.chargeFill.scale.x = progress;
-            flag.chargeFill.position.x = (-flag.chargeWidth / 2) + (flag.chargeWidth * progress) / 2;
-        }
-
-        if (flag.returnProgress >= 1) {
-            resetFlag(flag);
-        }
-    });
-
-    playerInputs.forEach(({ player: activePlayer }) => {
-        if (!activePlayer.isCarryingFlag || !activePlayer.isAlive) return;
-        const enemyTeam = activePlayer.flagCarryTeam;
-        if (!enemyTeam || enemyTeam === activePlayer.team) return;
-        const ownFlag = flagState.flags[activePlayer.team];
-        if (!ownFlag || !ownFlag.isAtBase) return;
-        if (!isPlayerInBase(activePlayer, activePlayer.team)) return;
-
-        teamScores[activePlayer.team] += 1;
-        updateScoreboard();
-        resetFlag(flagState.flags[enemyTeam]);
-        activePlayer.isCarryingFlag = false;
-        activePlayer.flagCarryTeam = null;
-    });
-
-    playerInputs.forEach(({ player: activePlayer, dropPressed }) => {
-        activePlayer.flagDropWasPressed = dropPressed;
-    });
-}
 
 function getConnectedGamepadInfo() {
     if (!navigator.getGamepads) return [];
@@ -984,7 +442,9 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     if (teamMenu) {
         teamMenu.style.display = 'none';
     }
+    hideModeMenu();
     hideReadyMenu();
+    hideModeMenu();
     updateMenuSplitState();
     document.getElementById('ability-ui').style.display = 'flex';
     const abilityUiP2 = document.getElementById('ability-ui-p2');
@@ -1031,7 +491,13 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
     // Create level with platforms
     level = new Level(scene);
-    level.createTestLevel({ includeInteractiveFlags: false });
+    if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
+        level.createKothLevel({ includeInteractiveFlags: false });
+    } else if (selectedGameMode === 'arena' && typeof level.createArenaLevel === 'function') {
+        level.createArenaLevel({ includeInteractiveFlags: false });
+    } else {
+        level.createTestLevel({ includeInteractiveFlags: false });
+    }
     healthPotions = createHealthPotions(level);
 
     // Setup parallax manager (foreground/midground/background)
@@ -1165,7 +631,41 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
         }
     });
 
-    initCTF(level);
+    if (gameMode) {
+        gameMode.destroy();
+    }
+    if (selectedGameMode === 'ctf') {
+        gameMode = new CaptureTheFlagMode({
+            scene,
+            level,
+            onScoreboardVisible: setScoreboardVisible,
+            onScoreChange: (scores) => {
+                teamScores = { ...scores };
+                updateScoreboard(teamScores);
+            }
+        });
+    } else if (selectedGameMode === 'koth') {
+        gameMode = new KingOfTheHillMode({
+            scene,
+            level,
+            onScoreboardVisible: setScoreboardVisible,
+            onScoreChange: (scores) => {
+                teamScores = { ...scores };
+                updateScoreboard(teamScores);
+            },
+            onMeterUpdate: updateKothMeter
+        });
+    } else {
+        gameMode = new ArenaMode({
+            onScoreboardVisible: setScoreboardVisible,
+            onScoreChange: (scores) => {
+                teamScores = { ...scores };
+                updateScoreboard(teamScores);
+            }
+        });
+    }
+    gameMode.init();
+    setKothMeterVisible(selectedGameMode === 'koth');
 
     // Game Loop
     gameLoop = new GameLoop(
@@ -1259,7 +759,9 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
             });
 
             updateDamageNumbers(deltaTime);
-            updateCTF(deltaTime, players, inputs);
+            if (gameMode) {
+                gameMode.update(deltaTime, players, inputs);
+            }
             updateHealthPotions(deltaTime, players);
             updateLadderHint(players);
 
@@ -1369,6 +871,52 @@ function hideTeamMenu() {
     updateMenuSplitState();
 }
 
+function showModeMenu() {
+    hideReadyMenu();
+    if (modeMenu) {
+        modeMenu.style.display = 'flex';
+    }
+    if (heroMenu) {
+        heroMenu.style.display = 'none';
+    }
+    if (teamMenu) {
+        teamMenu.style.display = 'none';
+    }
+    modeFocusIndex = -1;
+    updateModeMenuFocus();
+    updateMenuSplitState();
+}
+
+function hideModeMenu() {
+    if (modeMenu) {
+        modeMenu.style.display = 'none';
+    }
+    updateMenuSplitState();
+}
+
+function updateModeMenuFocus() {
+    if (!modeButtons.length) return;
+    modeButtons.forEach((button, index) => {
+        button.classList.toggle('menu-focus', index === modeFocusIndex);
+    });
+}
+
+function moveModeMenuFocus(delta) {
+    if (!modeButtons.length) return;
+    if (modeFocusIndex < 0) {
+        modeFocusIndex = 0;
+    } else {
+        modeFocusIndex = (modeFocusIndex + delta + modeButtons.length) % modeButtons.length;
+    }
+    updateModeMenuFocus();
+}
+
+function selectGameMode(modeKey) {
+    selectedGameMode = modeKey;
+    hideModeMenu();
+    showTeamMenu();
+}
+
 function handleTeamSelect(team, playerIndex = 1) {
     if (!localMultiplayerEnabled) {
         selectedTeams[0] = team;
@@ -1413,7 +961,11 @@ function resetGame() {
         });
         scene.clear();
     }
-    clearCTF();
+    if (gameMode) {
+        gameMode.destroy();
+        gameMode = null;
+    }
+    setKothMeterVisible(false);
     clearDamageNumbers();
     removeHealthPotions();
     parallaxManager = null;
@@ -1465,6 +1017,8 @@ function setPlayerCount(count) {
     pendingHeroClasses.fill(null);
     heroLocked.fill(false);
     selectedTeams.fill(null);
+    selectedGameMode = null;
+    mouseHeroSelectIndex = 0;
     hideReadyMenu();
 
     if (twoPlayerToggle) {
@@ -1549,7 +1103,7 @@ function togglePlayerCount(count) {
 function selectHeroForPlayer(HeroClass, playerIndex = 1) {
     if (!localMultiplayerEnabled) {
         pendingHeroClasses[0] = HeroClass;
-        showTeamMenu();
+        showModeMenu();
         return;
     }
 
@@ -1568,7 +1122,23 @@ function selectHeroForPlayer(HeroClass, playerIndex = 1) {
 }
 
 function handleHeroSelect(HeroClass) {
-    selectHeroForPlayer(HeroClass, 1);
+    if (!localMultiplayerEnabled) {
+        selectHeroForPlayer(HeroClass, 1);
+        return;
+    }
+    const total = Math.max(1, localPlayerCount);
+    let targetIndex = -1;
+    for (let i = 0; i < total; i += 1) {
+        if (!pendingHeroClasses[i]) {
+            targetIndex = i;
+            break;
+        }
+    }
+    if (targetIndex === -1) {
+        targetIndex = mouseHeroSelectIndex % total;
+    }
+    selectHeroForPlayer(HeroClass, targetIndex + 1);
+    mouseHeroSelectIndex = (targetIndex + 1) % total;
 }
 
 function buildMenuItems() {
@@ -1734,6 +1304,7 @@ function initCoopHeroMenu() {
         heroFocusEnterOrder[i] = 0;
     }
     heroFocusOrderCounter = 0;
+    mouseHeroSelectIndex = 0;
     heroCardItems.forEach((item) => {
         item.classList.remove('menu-focus');
     });
@@ -1817,7 +1388,7 @@ function buildTeamMenuItems() {
     teamMenuItems = [];
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
         teamMenuItems[i] = [teamButtonBlue[i], teamButtonRed[i]].filter(Boolean);
-        teamFocusIndices[i] = 0;
+        teamFocusIndices[i] = -1;
         updateTeamMenuFocus(i + 1);
     }
 }
@@ -1825,7 +1396,7 @@ function buildTeamMenuItems() {
 function updateTeamMenuFocus(playerIndex) {
     const index = playerIndex - 1;
     const items = teamMenuItems[index] || [];
-    const focusIndex = teamFocusIndices[index] || 0;
+    const focusIndex = teamFocusIndices[index];
     const className = `menu-focus-p${playerIndex}`;
     items.forEach((item, index) => {
         item.classList.toggle(className, index === focusIndex);
@@ -1836,7 +1407,11 @@ function moveTeamMenuFocus(playerIndex, delta) {
     const index = playerIndex - 1;
     const items = teamMenuItems[index] || [];
     if (!items.length) return;
-    const next = teamFocusIndices[index] + delta;
+    let current = teamFocusIndices[index];
+    if (!Number.isFinite(current)) {
+        current = 0;
+    }
+    const next = current + delta;
     teamFocusIndices[index] = Math.max(0, Math.min(items.length - 1, next));
     updateTeamMenuFocus(playerIndex);
 }
@@ -2053,9 +1628,10 @@ function updateMenuSplitState() {
     if (!heroMenu || !teamMenu) return;
     const heroVisible = window.getComputedStyle(heroMenu).display !== 'none';
     const teamVisible = window.getComputedStyle(teamMenu).display !== 'none';
+    const modeVisible = modeMenu ? window.getComputedStyle(modeMenu).display !== 'none' : false;
     const shouldShow = localPlayerCount === 2 && !gameStarted && teamVisible;
     document.body.classList.toggle('menu-split-active', shouldShow);
-    if (!gameStarted && (heroVisible || teamVisible)) {
+    if (!gameStarted && (heroVisible || teamVisible || modeVisible)) {
         document.body.classList.remove('split-screen-active', 'split-screen-quad');
     }
 }
@@ -2085,7 +1661,7 @@ function confirmReadyStart() {
         }
     }
     hideReadyMenu();
-    showTeamMenu();
+    showModeMenu();
 }
 
 function updateReadyMenuState() {
@@ -2218,6 +1794,7 @@ function handleMenuBack() {
 function shouldReturnToPlayerCount() {
     if (!localMultiplayerEnabled) return false;
     if (readyMenuActive) return false;
+    if (modeMenu && modeMenu.style.display === 'flex') return false;
     if (teamMenu && teamMenu.style.display === 'flex') return false;
     const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
     if (hasSelection) return false;
@@ -2382,6 +1959,12 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
     if (left || right || up || down) {
         const lastNav = teamLastNavTimes[index] || 0;
         if (now - lastNav > MENU_NAV_COOLDOWN_MS) {
+            if (teamFocusIndices[index] < 0) {
+                teamFocusIndices[index] = 0;
+                updateTeamMenuFocus(playerIndex);
+                teamLastNavTimes[index] = now;
+                return;
+            }
             const delta = (right || down) ? 1 : -1;
             moveTeamMenuFocus(playerIndex, delta);
             teamLastNavTimes[index] = now;
@@ -2390,7 +1973,13 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
 
     const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
     if (selectPressed && !teamSelectLocked[index]) {
-        const team = (teamFocusIndices[index] || 0) === 0 ? 'blue' : 'red';
+        if (teamFocusIndices[index] < 0) {
+            teamFocusIndices[index] = 0;
+            updateTeamMenuFocus(playerIndex);
+            teamSelectLocked[index] = true;
+            return;
+        }
+        const team = teamFocusIndices[index] === 0 ? 'blue' : 'red';
         handleTeamSelect(team, playerIndex);
         teamSelectLocked[index] = true;
     } else if (!selectPressed) {
@@ -2400,6 +1989,55 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
 
 function pollSingleTeamMenuGamepad() {
     pollTeamMenuGamepadForPlayer(getAssignedPadForPlayer(1) || getFirstConnectedPad(), 1);
+}
+
+function pollModeMenuGamepad() {
+    const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
+    if (!pad) return;
+    const now = performance.now();
+    const axisX = pad.axes[0] || 0;
+    const axisY = pad.axes[1] || 0;
+
+    const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
+    const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
+    const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
+    const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+
+    if ((up || down || left || right) && now - menuLastNavTime > MENU_NAV_COOLDOWN_MS) {
+        const delta = (down || right) ? 1 : -1;
+        moveModeMenuFocus(delta);
+        menuLastNavTime = now;
+    }
+
+    const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    if (selectPressed && !modeSelectLocked) {
+        if (modeFocusIndex < 0) {
+            modeFocusIndex = 0;
+            updateModeMenuFocus();
+            modeSelectLocked = true;
+            return;
+        }
+        const selected = modeButtons[modeFocusIndex];
+        if (selected && typeof selected.click === 'function') {
+            selected.click();
+        }
+        modeSelectLocked = true;
+    } else if (!selectPressed) {
+        modeSelectLocked = false;
+    }
+
+    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+    if (backPressed && !modeBackLocked) {
+        hideModeMenu();
+        if (heroMenu) {
+            heroMenu.style.display = 'flex';
+        }
+        updateCoopHeroSelectionUI();
+        updateMenuSplitState();
+        modeBackLocked = true;
+    } else if (!backPressed) {
+        modeBackLocked = false;
+    }
 }
 
 function pollCoopTeamMenuGamepads() {
@@ -2413,6 +2051,10 @@ function pollMenuGamepad() {
     if (gameStarted || !navigator.getGamepads) return;
     if (readyMenuActive) {
         pollReadyMenuGamepad();
+        return;
+    }
+    if (modeMenu && modeMenu.style.display === 'flex') {
+        pollModeMenuGamepad();
         return;
     }
     if (teamMenu && teamMenu.style.display === 'flex') {
@@ -2489,6 +2131,25 @@ window.addEventListener('load', () => {
     readyMenu = document.getElementById('ready-menu');
     readyConfirmButton = document.getElementById('ready-confirm');
     ladderHint = document.getElementById('ladder-hint');
+    kothMeter = document.getElementById('koth-meter');
+    kothMeterLabelBlue = document.getElementById('koth-meter-label-blue');
+    kothMeterLabelRed = document.getElementById('koth-meter-label-red');
+    kothMeterFillBlue = document.getElementById('koth-meter-fill-blue');
+    kothMeterFillRed = document.getElementById('koth-meter-fill-red');
+    modeMenu = document.getElementById('mode-menu');
+    const modeCtfButton = document.getElementById('mode-ctf');
+    const modeArenaButton = document.getElementById('mode-arena');
+    const modeKothButton = document.getElementById('mode-koth');
+    modeButtons = [modeCtfButton, modeArenaButton, modeKothButton].filter(Boolean);
+    if (modeCtfButton) {
+        modeCtfButton.addEventListener('click', () => selectGameMode('ctf'));
+    }
+    if (modeArenaButton) {
+        modeArenaButton.addEventListener('click', () => selectGameMode('arena'));
+    }
+    if (modeKothButton) {
+        modeKothButton.addEventListener('click', () => selectGameMode('koth'));
+    }
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');
     p3GamepadSelect = document.getElementById('p3-gamepad-select');
