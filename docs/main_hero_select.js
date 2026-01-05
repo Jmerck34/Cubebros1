@@ -37,6 +37,7 @@ const VIEW_SIZE = 10;
 let healthPotions = [];
 let menuRenderActive = false;
 let menuRenderHandle = null;
+let ladderHint = null;
 
 // Hero selection
 const MAX_PLAYERS = 4;
@@ -1260,6 +1261,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
             updateDamageNumbers(deltaTime);
             updateCTF(deltaTime, players, inputs);
             updateHealthPotions(deltaTime, players);
+            updateLadderHint(players);
 
             // Update environment animations
             environment.update(deltaTime);
@@ -1320,7 +1322,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 }
 
 function getTeamSpawn(levelInstance, team) {
-    const spawns = levelInstance.flagSpawns || {};
+    const spawns = levelInstance.playerSpawns || levelInstance.flagSpawns || {};
     const fallback = { x: 0, y: 0 };
     if (team === 'red') {
         return spawns.red || fallback;
@@ -1685,6 +1687,41 @@ function updateAllHeroFocusTags() {
         const stackIndex = group.indexOf(i + 1);
         updateHeroFocusTag(i + 1, stackIndex === -1 ? 0 : stackIndex, group.length);
     }
+}
+
+function updateLadderHint(activePlayers) {
+    if (!ladderHint || !level || !Array.isArray(level.platforms)) {
+        return;
+    }
+    let show = false;
+    const padding = 0.6;
+    const ladders = level.platforms.filter((platform) => platform && (platform.type === 'ladder' || platform.isLadder));
+    if (ladders.length) {
+        (activePlayers || []).some((activePlayer) => {
+            if (!activePlayer || !activePlayer.isAlive) return false;
+            if (activePlayer.onLadder) {
+                show = true;
+                return true;
+            }
+            const playerBounds = activePlayer.getBounds();
+            return ladders.some((platform) => {
+                const bounds = platform.bounds;
+                if (!bounds) return false;
+                const expanded = {
+                    left: bounds.left - padding,
+                    right: bounds.right + padding,
+                    top: bounds.top + padding,
+                    bottom: bounds.bottom - padding
+                };
+                if (checkAABBCollision(playerBounds, expanded)) {
+                    show = true;
+                    return true;
+                }
+                return false;
+            });
+        });
+    }
+    ladderHint.style.display = show && gameStarted ? 'block' : 'none';
 }
 
 function initCoopHeroMenu() {
@@ -2451,6 +2488,7 @@ window.addEventListener('load', () => {
     gamepadAssign = document.getElementById('gamepad-assign');
     readyMenu = document.getElementById('ready-menu');
     readyConfirmButton = document.getElementById('ready-confirm');
+    ladderHint = document.getElementById('ladder-hint');
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');
     p3GamepadSelect = document.getElementById('p3-gamepad-select');

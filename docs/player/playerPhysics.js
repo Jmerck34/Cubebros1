@@ -44,6 +44,9 @@ export function handleJump(player, input) {
         if ('landSoundReady' in player) {
             player.landSoundReady = true;
         }
+        if (typeof player.setFallDamageGrace === 'function') {
+            player.setFallDamageGrace(0.35);
+        }
         player.velocity.y = JUMP_VELOCITY * jumpMultiplier;
         player.jumpsRemaining--;
         player.isGrounded = false;

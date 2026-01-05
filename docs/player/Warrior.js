@@ -497,6 +497,9 @@ export class Warrior extends Hero {
 
         // Dash in the direction the warrior is facing
         const dashDistance = 3.2;
+        if (typeof this.setFallDamageGrace === 'function') {
+            this.setFallDamageGrace(0.45);
+        }
         const startX = this.position.x;
         const endX = startX + this.facingDirection * dashDistance;
 

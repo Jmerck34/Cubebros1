@@ -456,6 +456,9 @@ export class Warlock extends Hero {
         console.log('☁️ HOVER!');
 
         this.isHovering = true;
+        if (typeof this.setFallDamageGrace === 'function') {
+            this.setFallDamageGrace(0.6);
+        }
         this.hoverToggleCooldownUntil = performance.now() + 200;
 
         // Create dark cloud group (similar to background clouds but faded black)

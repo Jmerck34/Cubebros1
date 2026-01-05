@@ -152,6 +152,25 @@
             display: block;
         }
 
+        #ladder-hint {
+            position: fixed;
+            left: 50%;
+            bottom: 110px;
+            transform: translateX(-50%);
+            background: rgba(10, 14, 22, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #e6f1ff;
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+            display: none;
+            z-index: 950;
+            pointer-events: none;
+        }
+
         /* Hero Selection Menu */
         #hero-menu {
             position: fixed;
@@ -1037,6 +1056,7 @@
         <span class="menu-split-label left">Player 1</span>
         <span class="menu-split-label right">Player 2</span>
     </div>
+    <div id="ladder-hint" aria-hidden="true">Hold Jump to Climb</div>
     <div id="team-scoreboard" aria-live="polite">
         <div class="score-card blue">
             <span>Blue</span>

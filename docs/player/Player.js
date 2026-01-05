@@ -173,6 +173,8 @@ export class Player {
         this.hasEverGrounded = false;
         this.fallPeakY = this.position.y;
         this.fallDistance = 0;
+        this.fallDamageGraceTimer = 0;
+        this.fallDamageReset = false;
         this.initJumpAudio();
         this.initLandAudio();
         this.initRespawnIndicator();
@@ -724,6 +726,9 @@ export class Player {
         if (this.landSoundCooldown > 0) {
             this.landSoundCooldown = Math.max(0, this.landSoundCooldown - deltaTime);
         }
+        if (this.fallDamageGraceTimer > 0) {
+            this.fallDamageGraceTimer = Math.max(0, this.fallDamageGraceTimer - deltaTime);
+        }
 
         if (!this.isAlive) {
             this.respawnTimer = Math.max(0, this.respawnTimer - deltaTime);
@@ -1042,6 +1047,16 @@ export class Player {
             this.lastDeathWasPit = false;
             this.die();
         }
+    }
+
+    /**
+     * Prevent fall damage briefly (used for last-second jumps/dashes/hover).
+     * @param {number} seconds
+     */
+    setFallDamageGrace(seconds = 0.3) {
+        const value = Number.isFinite(seconds) ? seconds : 0.3;
+        this.fallDamageGraceTimer = Math.max(this.fallDamageGraceTimer || 0, value);
+        this.fallDamageReset = true;
     }
 
     /**

@@ -319,6 +319,12 @@ export class Level {
             if (!Number.isFinite(player.fallDistance)) {
                 player.fallDistance = 0;
             }
+            if (player.fallDamageReset) {
+                player.fallPeakY = player.position.y;
+                player.fallDistance = 0;
+                player.fallDamageReset = false;
+                return;
+            }
             if (player.wasGrounded) {
                 player.fallPeakY = player.position.y;
                 player.fallDistance = 0;
@@ -342,6 +348,25 @@ export class Level {
                 player.landSoundReady = false;
                 const fallDistance = Number.isFinite(player.fallDistance) ? player.fallDistance : 0;
                 player.playLandSound(impactSpeed, fallDistance);
+            }
+        };
+        const applyFallDamage = (impactSpeed = 0) => {
+            if (typeof player.takeDamage !== 'function') return;
+            if (player.fallDamageGraceTimer > 0 || player.isHovering) {
+                return;
+            }
+            const fallDistance = Number.isFinite(player.fallDistance) ? player.fallDistance : 0;
+            const fallDamageThreshold = 17;
+            const impactThreshold = 8;
+            if (impactSpeed < impactThreshold) {
+                return;
+            }
+            if (fallDistance >= fallDamageThreshold) {
+                player.takeDamage(40);
+            } else if (fallDistance >= fallDamageThreshold * (2 / 3)) {
+                player.takeDamage(10);
+            } else if (fallDistance >= fallDamageThreshold * 0.5) {
+                player.takeDamage(5);
             }
         };
         const tryPreLandingSound = (platform) => {
@@ -394,6 +419,7 @@ export class Level {
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
+                    applyFallDamage(impactSpeed);
                 } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
@@ -463,6 +489,7 @@ export class Level {
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
+                    applyFallDamage(impactSpeed);
                     if (platform.breakable && platform.breakState === 'idle') {
                         platform.breakState = 'shaking';
                         platform.breakTimer = platform.breakDelay;
@@ -668,13 +695,16 @@ export class Level {
     addWallWithLadder(x, baseY, wallHeight, options = {}) {
         const wallGroup = new THREE.Group();
         const wallWidth = options.wallWidth ?? 1.5;
+        const visualOffset = options.visualOffset ?? 0;
+        const visualHeightOffset = options.visualHeightOffset ?? 0;
         const ladderSide = options.ladderSide ?? 'right';
         const addDoor = options.addDoor ?? false;
 
         // Main wall body (stone blocks)
         const numBlocks = Math.floor(wallHeight / 0.8);
+        const blockHeight = 0.8;
+        const actualVisualTopLocal = numBlocks * blockHeight - blockHeight / 2;
         for (let i = 0; i < numBlocks; i++) {
-            const blockHeight = 0.8;
             const blockY = i * blockHeight;
 
             // Stone block
@@ -707,6 +737,20 @@ export class Level {
                 );
                 wallGroup.add(spot);
             }
+        }
+
+        if (visualHeightOffset > 0) {
+            const capGeometry = new THREE.BoxGeometry(wallWidth, visualHeightOffset, 0.8);
+            const capMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.wallBlock });
+            const cap = new THREE.Mesh(capGeometry, capMaterial);
+            cap.position.set(0, actualVisualTopLocal + visualHeightOffset / 2, 0);
+            wallGroup.add(cap);
+
+            const capMortarGeometry = new THREE.BoxGeometry(wallWidth + 0.05, 0.05, 0.82);
+            const capMortarMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.wallMortar });
+            const capMortar = new THREE.Mesh(capMortarGeometry, capMortarMaterial);
+            capMortar.position.set(0, actualVisualTopLocal + visualHeightOffset, 0);
+            wallGroup.add(capMortar);
         }
 
         // LADDER on the side
@@ -805,11 +849,12 @@ export class Level {
         }
 
         // Position the entire wall - blocks are built from 0 upward, so position at baseY
-        wallGroup.position.set(x, baseY, 0);
+        wallGroup.position.set(x, baseY + visualOffset, 0);
         this.group.add(wallGroup);
 
         // Calculate actual visual top based on blocks (each 0.8 high, positioned at center)
-        const actualVisualTop = baseY + (numBlocks * 0.8);
+        const actualVisualTop = baseY + actualVisualTopLocal;
+        const surfaceEpsilon = 0.05;
 
         // Add collision platform for the wall - matches actual visual top
         const platform = {
@@ -817,7 +862,7 @@ export class Level {
             bounds: {
                 left: x - wallWidth / 2,
                 right: x + wallWidth / 2,
-                top: actualVisualTop, // Collision matches actual block positions
+                top: actualVisualTop + surfaceEpsilon, // Slight lift to avoid overlap
                 bottom: baseY
             },
             type: 'wall'
@@ -849,7 +894,7 @@ export class Level {
      * @param {number} wallHeight - Height of the castle wall
      * @param {number} color - Flag color
      */
-    addCastleFlag(x, baseY, wallHeight, color) {
+    addCastleFlag(x, baseY, wallHeight, color, wallTopOverride = null) {
         const flagGroup = new THREE.Group();
         const poleHeight = 1.1;
         const poleGeometry = new THREE.BoxGeometry(0.06, poleHeight, 0.06);
@@ -866,7 +911,8 @@ export class Level {
         cloth.position.set(0.32, 0.75, 0.45);
         flagGroup.add(cloth);
 
-        const flagBaseY = baseY + wallHeight - 0.2;
+        const wallTop = Number.isFinite(wallTopOverride) ? wallTopOverride : baseY + wallHeight;
+        const flagBaseY = wallTop + 0.05;
         flagGroup.position.set(x, flagBaseY, 0.9);
         this.group.add(flagGroup);
     }
@@ -879,7 +925,7 @@ export class Level {
      * @param {number} color - Flag color
      * @param {string} team - Team label
      */
-    addInteractiveFlag(x, baseY, wallHeight, color, team) {
+    addInteractiveFlag(x, baseY, wallHeight, color, team, wallTopOverride = null) {
         const flagGroup = new THREE.Group();
         const poleHeight = 1.1;
         const poleGeometry = new THREE.BoxGeometry(0.06, poleHeight, 0.06);
@@ -896,7 +942,8 @@ export class Level {
         cloth.position.set(0.32, 0.75, 0.45);
         flagGroup.add(cloth);
 
-        const flagBaseY = baseY + wallHeight - 0.2;
+        const wallTop = Number.isFinite(wallTopOverride) ? wallTopOverride : baseY + wallHeight;
+        const flagBaseY = wallTop + 0.05;
         flagGroup.position.set(x, flagBaseY, 0.9);
         this.group.add(flagGroup);
 
@@ -1004,29 +1051,39 @@ export class Level {
 
         // Left castle
         const leftCastleX = -52;
-        this.addWallWithLadder(leftCastleX, groundSurfaceY, wallHeight, {
+        const leftWallPlatform = this.addWallWithLadder(leftCastleX, groundSurfaceY, wallHeight, {
             wallWidth: castleWallWidth,
             ladderSide: 'right',
-            addDoor: true
+            addDoor: true,
+            visualOffset: 0,
+            visualHeightOffset: 0.25
         });
         if (includeInteractiveFlags) {
-            this.addInteractiveFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0, 'blue');
+            this.addInteractiveFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0, 'blue', leftWallPlatform?.bounds?.top);
         }
 
         // Right castle
         const rightCastleX = 52;
-        this.addWallWithLadder(rightCastleX, groundSurfaceY, wallHeight, {
+        const rightWallPlatform = this.addWallWithLadder(rightCastleX, groundSurfaceY, wallHeight, {
             wallWidth: castleWallWidth,
             ladderSide: 'left',
-            addDoor: true
+            addDoor: true,
+            visualOffset: 0,
+            visualHeightOffset: 0.25
         });
         if (includeInteractiveFlags) {
-            this.addInteractiveFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f, 'red');
+            this.addInteractiveFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f, 'red', rightWallPlatform?.bounds?.top);
         }
 
+        const leftWallTop = leftWallPlatform?.bounds?.top ?? (groundSurfaceY + wallHeight);
+        const rightWallTop = rightWallPlatform?.bounds?.top ?? (groundSurfaceY + wallHeight);
         this.flagSpawns = {
-            blue: { x: leftCastleX, y: groundSurfaceY + wallHeight + 0.6 },
-            red: { x: rightCastleX, y: groundSurfaceY + wallHeight + 0.6 }
+            blue: { x: leftCastleX, y: leftWallTop + 0.05 },
+            red: { x: rightCastleX, y: rightWallTop + 0.05 }
+        };
+        this.playerSpawns = {
+            blue: { x: leftCastleX, y: leftWallTop + 0.5 },
+            red: { x: rightCastleX, y: rightWallTop + 0.5 }
         };
 
         const boundaryWidth = 1.5;
@@ -1103,12 +1160,13 @@ export class Level {
         });
 
         // Catapult launchers on top of each castle (inside edge)
-        const launcherHeight = groundSurfaceY + wallHeight + 0.6;
         const leftLauncherX = leftCastleX - castleWallWidth / 2 + 1.8;
         const rightLauncherX = rightCastleX + castleWallWidth / 2 - 1.8;
-        const leftLauncher = this.addPlatform(leftLauncherX, launcherHeight, 4, 0.6, 'launcher');
+        const leftLauncherHeight = leftWallTop + 0.3;
+        const rightLauncherHeight = rightWallTop + 0.3;
+        const leftLauncher = this.addPlatform(leftLauncherX, leftLauncherHeight, 4, 0.6, 'launcher');
         leftLauncher.launchVelocity = { x: 10, y: 23 };
-        const rightLauncher = this.addPlatform(rightLauncherX, launcherHeight, 4, 0.6, 'launcher');
+        const rightLauncher = this.addPlatform(rightLauncherX, rightLauncherHeight, 4, 0.6, 'launcher');
         rightLauncher.launchVelocity = { x: -10, y: 23 };
 
         // Landing cloud pads aligned to the launch arc (no extra jump needed)
