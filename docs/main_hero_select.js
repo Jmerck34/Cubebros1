@@ -1841,7 +1841,7 @@ function getAssignedPadForPlayer(playerIndex) {
 }
 
 function pollSingleMenuGamepad() {
-    const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
+    const pad = getAssignedPadForPlayer(1);
     if (!pad) return;
 
     const now = performance.now();
@@ -1957,9 +1957,7 @@ function pollHeroMenuGamepadForPlayer(pad, playerIndex) {
 function pollCoopHeroMenuGamepads() {
     for (let i = 0; i < localPlayerCount; i += 1) {
         const playerIndex = i + 1;
-        const pad = playerIndex === 1
-            ? (getAssignedPadForPlayer(playerIndex) || getFirstConnectedPad())
-            : getAssignedPadForPlayer(playerIndex);
+        const pad = getAssignedPadForPlayer(playerIndex);
         pollHeroMenuGamepadForPlayer(pad, playerIndex);
     }
 }
@@ -2008,11 +2006,11 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
 }
 
 function pollSingleTeamMenuGamepad() {
-    pollTeamMenuGamepadForPlayer(getAssignedPadForPlayer(1) || getFirstConnectedPad(), 1);
+    pollTeamMenuGamepadForPlayer(getAssignedPadForPlayer(1), 1);
 }
 
 function pollModeMenuGamepad() {
-    const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
+    const pad = getAssignedPadForPlayer(1);
     if (!pad) return;
     const now = performance.now();
     const axisX = pad.axes[0] || 0;
@@ -2109,7 +2107,7 @@ function pollMenuGamepad() {
 }
 
 function pollReadyMenuGamepad() {
-    const pad = getAssignedPadForPlayer(1) || getFirstConnectedPad();
+    const pad = getAssignedPadForPlayer(1);
     if (!pad) return;
 
     const confirmPressed = pad.buttons[0] && pad.buttons[0].pressed;
@@ -2288,9 +2286,25 @@ window.addEventListener('load', () => {
             }
             return;
         }
-        if ((event.code === 'Escape' || event.code === 'Backspace') && shouldReturnToPlayerCount()) {
-            setPlayerCount(1);
-            return;
+        if (event.code === 'Escape' || event.code === 'Backspace') {
+            if (modeMenu && modeMenu.style.display === 'flex') {
+                hideModeMenu();
+                if (heroMenu) {
+                    heroMenu.style.display = 'flex';
+                }
+                updateCoopHeroSelectionUI();
+                updateMenuSplitState();
+                return;
+            }
+            if (teamMenu && teamMenu.style.display === 'flex') {
+                hideTeamMenu();
+                showModeMenu();
+                return;
+            }
+            if (shouldReturnToPlayerCount()) {
+                setPlayerCount(1);
+                return;
+            }
         }
         if (!teamMenu || teamMenu.style.display !== 'flex') return;
         if (!localMultiplayerEnabled) {

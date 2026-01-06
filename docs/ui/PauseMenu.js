@@ -183,12 +183,13 @@ export class PauseMenu {
         });
 
         // ESC key to close
-        document.addEventListener('keydown', (e) => {
+        this.keydownHandler = (e) => {
             if (e.key === 'Escape' && this.isOpen) {
                 this.close();
                 if (this.onResume) this.onResume();
             }
-        });
+        };
+        document.addEventListener('keydown', this.keydownHandler);
     }
 
     /**
@@ -375,6 +376,10 @@ export class PauseMenu {
         this.cancelKeybind();
         if (this.resizeHandler) {
             window.removeEventListener('resize', this.resizeHandler);
+        }
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+            this.keydownHandler = null;
         }
         if (this.menuButton && this.menuButton.parentNode) {
             this.menuButton.parentNode.removeChild(this.menuButton);

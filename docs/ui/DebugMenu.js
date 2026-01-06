@@ -602,13 +602,14 @@ export class DebugMenu {
      * Setup keyboard listener for "=" key
      */
     setupKeyboardListener() {
-        document.addEventListener('keydown', (e) => {
+        this.keydownHandler = (e) => {
             if (e.key === '=' || e.key === '+') {
                 this.toggle();
             } else if (e.key === 'Escape' && this.isOpen) {
                 this.close();
             }
-        });
+        };
+        document.addEventListener('keydown', this.keydownHandler);
     }
 
     /**
@@ -821,6 +822,10 @@ export class DebugMenu {
      */
     destroy() {
         this.removeTrainingDummy();
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+            this.keydownHandler = null;
+        }
         if (this.overlay && this.overlay.parentNode) {
             this.overlay.parentNode.removeChild(this.overlay);
         }
