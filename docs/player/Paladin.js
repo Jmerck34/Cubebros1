@@ -93,7 +93,7 @@ export class Paladin extends Hero {
             return true;
         };
 
-        const chainMace = new Ability('Chain Mace', 4.5, false, 2);
+        const chainMace = new Ability('Chain Mace', 1.5, false, 2);
         chainMace.use = (hero) => {
             if (!Ability.prototype.use.call(chainMace, hero)) return false;
             hero.chainMaceAttack();
