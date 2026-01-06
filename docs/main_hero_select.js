@@ -1214,6 +1214,12 @@ function updateHeroFocusTag(playerIndex, stackIndex = 0, stackCount = 1) {
         tag.style.opacity = '0';
         return;
     }
+    const assignments = resolveGamepadAssignments();
+    const assignment = assignments[playerIndex - 1];
+    if (assignment && !assignment.enabled) {
+        tag.style.opacity = '0';
+        return;
+    }
 
     const focusIndex = menuFocusIndices[playerIndex - 1] || 0;
     const card = heroCardItems[focusIndex];

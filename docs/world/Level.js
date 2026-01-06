@@ -350,9 +350,12 @@ export class Level {
                 player.playLandSound(impactSpeed, fallDistance);
             }
         };
-        const applyFallDamage = (impactSpeed = 0) => {
+        const applyFallDamage = (impactSpeed = 0, platform = null) => {
             if (typeof player.takeDamage !== 'function') return;
             if (player.fallDamageGraceTimer > 0 || player.isHovering) {
+                return;
+            }
+            if (platform && platform.type === 'launcher') {
                 return;
             }
             const fallDistance = Number.isFinite(player.fallDistance) ? player.fallDistance : 0;
@@ -419,7 +422,7 @@ export class Level {
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
-                    applyFallDamage(impactSpeed);
+                    applyFallDamage(impactSpeed, platform);
                 } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
@@ -489,7 +492,7 @@ export class Level {
                     player.isGrounded = true;
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
-                    applyFallDamage(impactSpeed);
+                    applyFallDamage(impactSpeed, platform);
                     if (platform.breakable && platform.breakState === 'idle') {
                         platform.breakState = 'shaking';
                         platform.breakTimer = platform.breakDelay;

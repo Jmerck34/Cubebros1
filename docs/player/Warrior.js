@@ -402,17 +402,23 @@ export class Warrior extends Hero {
 
         // Deal damage if specified
         if (dealDamage) {
-            const rangeScale = comboIndex === 2 ? 1.35 : 1;
+            const rangeScale = comboIndex === 2 ? 1.6 : 1;
             const heightScale = comboIndex === 2 ? 1.2 : 1;
             const slashRange = 2.5 * rangeScale; // Increased from 1.5 to extend further beyond the sword
             const slashHeight = 1.5 * heightScale; // Increased vertical range
-            const slashBounds = {
-                left: this.position.x + (this.facingDirection > 0 ? -0.3 : -slashRange),
-                right: this.position.x + (this.facingDirection > 0 ? slashRange : 0.3),
-                top: this.position.y + slashHeight,
-                bottom: this.position.y - slashHeight
-            };
-            this.damageEnemiesInArea(slashBounds, this.abilities.q, damageHits);
+            const isRadialFinisher = comboIndex === 2 && isFullSpin;
+            if (isRadialFinisher) {
+                const finisherRadius = slashRange + 0.8;
+                this.miniWhirlwindHit(finisherRadius, this.abilities.q, damageHits);
+            } else {
+                const slashBounds = {
+                    left: this.position.x + (this.facingDirection > 0 ? -0.3 : -slashRange),
+                    right: this.position.x + (this.facingDirection > 0 ? slashRange : 0.3),
+                    top: this.position.y + slashHeight,
+                    bottom: this.position.y - slashHeight
+                };
+                this.damageEnemiesInArea(slashBounds, this.abilities.q, damageHits);
+            }
         }
 
         // Animate - fade out and scale up (faster fade)
@@ -793,6 +799,56 @@ export class Warrior extends Hero {
                 console.log('💥 Ability hit enemy!');
             }
         }
+    }
+
+    /**
+     * Damage all enemies within a circular radius around the warrior.
+     * @param {number} radius - Radius in world units
+     * @param {Ability} ability - Ability to scale damage with debug multipliers
+     * @param {number} baseHits - Hit count for multi-hit abilities
+     */
+    damageEnemiesInRadius(radius, ability = null, baseHits = 1) {
+        const radiusSq = radius * radius;
+        for (const enemy of this.getDamageTargets()) {
+            if (!enemy.isAlive) continue;
+            const enemyBounds = enemy.getBounds();
+            const closestX = Math.max(enemyBounds.left, Math.min(this.position.x, enemyBounds.right));
+            const closestY = Math.max(enemyBounds.bottom, Math.min(this.position.y, enemyBounds.top));
+            const dx = closestX - this.position.x;
+            const dy = closestY - this.position.y;
+            if ((dx * dx + dy * dy) <= radiusSq) {
+                this.applyAbilityDamage(ability, enemy, baseHits);
+                if (enemy.type !== 'player') {
+                    this.addUltimateCharge(this.ultimateChargePerKill);
+                }
+                if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
+                    this.abilities.e.currentCooldown = 0;
+                    this.abilities.e.isReady = true;
+                    this.dashResetCount += 1;
+                }
+                console.log('💥 Ability hit enemy!');
+            }
+        }
+    }
+
+    /**
+     * Mini whirlwind-style hit for the finisher.
+     * @param {number} radius - Radius in world units
+     * @param {Ability} ability - Ability to scale damage
+     * @param {number} baseHits - Hit count for multi-hit abilities
+     */
+    miniWhirlwindHit(radius, ability = null, baseHits = 1) {
+        const pulseCount = 3;
+        const pulseInterval = 60;
+        this.createWhirlwindEffect(radius * 0.55, pulseCount * pulseInterval + 80);
+        let pulses = 0;
+        const hitInterval = setInterval(() => {
+            pulses += 1;
+            this.damageEnemiesInRadius(radius, ability, baseHits);
+            if (pulses >= pulseCount) {
+                clearInterval(hitInterval);
+            }
+        }, pulseInterval);
     }
 
     /**
