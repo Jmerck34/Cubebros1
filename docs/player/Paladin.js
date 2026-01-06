@@ -79,7 +79,7 @@ export class Paladin extends Hero {
      * Initialize Paladin abilities
      */
     initializeAbilities() {
-        const crushingMace = new Ability('Crushing Mace', 1.8, false, 2);
+        const crushingMace = new Ability('Crushing Mace', 1, false, 2);
         crushingMace.use = (hero) => {
             if (!Ability.prototype.use.call(crushingMace, hero)) return false;
             hero.crushingMaceAttack();
@@ -276,8 +276,8 @@ export class Paladin extends Hero {
         const useAim = this.hasAimInput;
         const direction = useAim ? { x: aim.x, y: aim.y } : { x: this.facingDirection, y: 0 };
         const castDirection = { x: direction.x, y: direction.y };
-        const speed = 14;
-        const maxRange = 9;
+        const speed = 21;
+        const maxRange = 10.8;
         const level = this.level || { platforms: [] };
 
         const head = new THREE.Mesh(
