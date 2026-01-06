@@ -342,6 +342,9 @@ export class Warlock extends Hero {
                 if (!enemy.isAlive) continue;
 
                 const enemyBounds = enemy.getBounds();
+                if (this.isPositionBlockedByProtectionDome(enemy.position)) {
+                    continue;
+                }
                 if (checkAABBCollision(lightningBounds, enemyBounds)) {
                     this.applyAbilityDamage(this.abilities.q, enemy, 1);
                     if (enemy.type !== 'player') {

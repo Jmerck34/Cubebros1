@@ -284,6 +284,12 @@ export class Archer extends Hero {
                 bottom: arrowGroup.position.y - 0.08
             };
 
+            if (this.isPositionBlockedByProtectionDome(arrowGroup.position)) {
+                clearInterval(arrowInterval);
+                this.mesh.parent.remove(arrowGroup);
+                return;
+            }
+
             for (const enemy of this.getDamageTargets()) {
                 if (!enemy.isAlive) continue;
                 if (hitEnemies.has(enemy)) continue;

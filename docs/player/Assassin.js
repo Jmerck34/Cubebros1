@@ -534,6 +534,12 @@ export class Assassin extends Hero {
                     bottom: starY - 0.45
                 };
 
+                if (this.isPositionBlockedByProtectionDome({ x: starX, y: starY })) {
+                    clearInterval(starInterval);
+                    this.mesh.parent.remove(star);
+                    return;
+                }
+
                 let hitPlatform = false;
                 if (level.platforms) {
                     for (const platform of level.platforms) {

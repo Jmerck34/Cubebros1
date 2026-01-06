@@ -259,6 +259,27 @@ export class Hero extends Player {
     }
 
     /**
+     * Check if a position is blocked by an enemy protection dome.
+     * @param {{x:number,y:number}} position
+     * @returns {Object|null}
+     */
+    isPositionBlockedByProtectionDome(position) {
+        if (!position || !Player.getProtectionDomes) return null;
+        const domes = Player.getProtectionDomes();
+        const team = this.team;
+        for (const dome of domes) {
+            if (!dome || !dome.owner || !dome.owner.team) continue;
+            if (dome.owner.team === team) continue;
+            const dx = position.x - dome.owner.position.x;
+            const dy = position.y - dome.owner.position.y;
+            if ((dx * dx + dy * dy) <= (dome.radius * dome.radius)) {
+                return dome;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Get valid damage targets (enemies + opposing players)
      * @returns {Array}
      */

@@ -441,18 +441,23 @@ export class Cyborg extends Hero {
             };
 
             let hit = false;
-            for (const enemy of this.getDamageTargets()) {
-                if (!enemy.isAlive) continue;
+            if (this.isPositionBlockedByProtectionDome(fireballGroup.position)) {
+                hit = true;
+            }
+            if (!hit) {
+                for (const enemy of this.getDamageTargets()) {
+                    if (!enemy.isAlive) continue;
 
-                const enemyBounds = enemy.getBounds();
-                if (checkAABBCollision(fireballBounds, enemyBounds)) {
-                    this.applyAbilityDamage(this.abilities.q, enemy, 2);
-                    if (enemy.type !== 'player') {
-                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    const enemyBounds = enemy.getBounds();
+                    if (checkAABBCollision(fireballBounds, enemyBounds)) {
+                        this.applyAbilityDamage(this.abilities.q, enemy, 2);
+                        if (enemy.type !== 'player') {
+                            this.addUltimateCharge(this.ultimateChargePerKill);
+                        }
+                        console.log('ðŸ”¥ Fireball hit!');
+                        hit = true;
+                        break;
                     }
-                    console.log('ðŸ”¥ Fireball hit!');
-                    hit = true;
-                    break;
                 }
             }
 
@@ -1014,6 +1019,15 @@ export class Cyborg extends Hero {
                 // Fade out particles as they travel
                 p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
             });
+
+            if (this.isPositionBlockedByProtectionDome(beamPos)) {
+                clearInterval(particleInterval);
+                this.mesh.parent.remove(beamGroup);
+                beamParticles.forEach(p => {
+                    if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+                });
+                return;
+            }
 
             // Beam damage area
             const halfLength = beamLength * 0.5;

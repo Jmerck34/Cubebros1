@@ -66,6 +66,22 @@ export class Player {
         return Array.from(Player.instances || []);
     }
 
+    static getProtectionDomes() {
+        return Array.from(Player.protectionDomes || []);
+    }
+
+    static addProtectionDome(dome) {
+        if (!Player.protectionDomes) {
+            Player.protectionDomes = new Set();
+        }
+        Player.protectionDomes.add(dome);
+    }
+
+    static removeProtectionDome(dome) {
+        if (!Player.protectionDomes) return;
+        Player.protectionDomes.delete(dome);
+    }
+
     constructor(scene, startX = 0, startY = 0) {
         // Store scene reference for health bar
         this.scene = scene;
@@ -120,6 +136,8 @@ export class Player {
         this.mindControlTimer = 0;
         this.slowTimer = 0;
         this.slowMultiplier = 1;
+        this.crippleTimer = 0;
+        this.jumpDisabled = false;
         this.controlsInverted = false;
         this.controlsLocked = false;
         this.forceControlsLocked = false;
@@ -344,6 +362,9 @@ export class Player {
         if (this.mindControlTimer > 0) {
             this.mindControlTimer = Math.max(0, this.mindControlTimer - deltaTime);
         }
+        if (this.crippleTimer > 0) {
+            this.crippleTimer = Math.max(0, this.crippleTimer - deltaTime);
+        }
 
         if (this.stunTimer > 0) {
             if (!this.isStunned) {
@@ -370,6 +391,7 @@ export class Player {
 
         this.controlsLocked = this.stunTimer > 0 || this.frozenTimer > 0;
         this.controlsInverted = this.mindControlTimer > 0;
+        this.jumpDisabled = this.crippleTimer > 0;
 
         const tint = this.bleedFlashTimer > 0
             ? 0xff6666
@@ -377,9 +399,11 @@ export class Player {
                 ? 0x88ddff
                 : (this.stunTimer > 0
                     ? 0xffdd55
-                    : (this.fearTimer > 0
-                        ? 0xff6666
-                        : (this.mindControlTimer > 0 ? 0x9400d3 : this.baseColor))));
+                    : (this.crippleTimer > 0
+                        ? 0x8a939a
+                        : (this.fearTimer > 0
+                            ? 0xff6666
+                            : (this.mindControlTimer > 0 ? 0x9400d3 : this.baseColor)))));
         this.setEffectColor(tint);
     }
 
@@ -602,6 +626,15 @@ export class Player {
     }
 
     /**
+     * Apply cripple (disable jumping).
+     * @param {number} durationSeconds
+     */
+    setCripple(durationSeconds = 1.5) {
+        if (!this.isAlive) return;
+        this.crippleTimer = Math.max(this.crippleTimer, durationSeconds);
+    }
+
+    /**
      * Clear all status effects.
      */
     clearStatusEffects() {
@@ -614,6 +647,8 @@ export class Player {
         this.mindControlTimer = 0;
         this.slowTimer = 0;
         this.slowMultiplier = 1;
+        this.crippleTimer = 0;
+        this.jumpDisabled = false;
         this.controlsLocked = false;
         this.controlsInverted = false;
         this.fearDirection = 0;

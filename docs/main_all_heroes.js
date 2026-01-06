@@ -11,6 +11,7 @@ import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
+import { Paladin } from './player/Paladin.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
@@ -93,6 +94,9 @@ const player = new Warrior(scene, 0, 0);
 
 // Option 5: Archer (Bow & Arrow)
 // const player = new Archer(scene, 0, 0);
+
+// Option 6: Paladin (Shield & Mace)
+// const player = new Paladin(scene, 0, 0);
 
 // Connect player to enemy list for ability damage detection
 player.enemies = level.enemies;

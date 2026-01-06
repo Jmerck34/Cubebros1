@@ -11,6 +11,7 @@ import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
+import { Paladin } from './player/Paladin.js';
 import { Level } from './world/Level.js';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
@@ -117,7 +118,8 @@ const HERO_NAMES = {
     [Assassin.name]: '🗡️ ASSASSIN',
     [Cyborg.name]: '🤖 CYBORG',
     [Archer.name]: '🏹 ARCHER',
-    [Warlock.name]: '💀 WARLOCK'
+    [Warlock.name]: '💀 WARLOCK',
+    [Paladin.name]: '🛡️ PALADIN'
 };
 
 const HERO_CLASS_MAP = {
@@ -125,7 +127,8 @@ const HERO_CLASS_MAP = {
     assassin: Assassin,
     cyborg: Cyborg,
     archer: Archer,
-    warlock: Warlock
+    warlock: Warlock,
+    paladin: Paladin
 };
 
 const HERO_KEY_BY_CLASS = new Map(Object.entries(HERO_CLASS_MAP).map(([key, value]) => [value, key]));
@@ -737,11 +740,22 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
                 for (let j = i + 1; j < players.length; j += 1) {
                     const a = players[i];
                     const b = players[j];
-                    if (a.team === b.team) continue;
-                    if (checkAABBCollision(a.getBounds(), b.getBounds())) {
-                        a.applyEnemyContact(b);
-                        b.applyEnemyContact(a);
+                    if (!a.isAlive || !b.isAlive) continue;
+                    const aBounds = a.getBounds();
+                    const bBounds = b.getBounds();
+                    if (!checkAABBCollision(aBounds, bBounds)) {
+                        continue;
                     }
+                    const overlapX = Math.min(aBounds.right, bBounds.right) - Math.max(aBounds.left, bBounds.left);
+                    if (overlapX <= 0) continue;
+                    const direction = a.position.x <= b.position.x ? -1 : 1;
+                    const push = overlapX / 2 + 0.01;
+                    a.position.x += direction * push;
+                    b.position.x -= direction * push;
+                    a.velocity.x = 0;
+                    b.velocity.x = 0;
+                    a.mesh.position.x = a.position.x;
+                    b.mesh.position.x = b.position.x;
                 }
             }
 
@@ -2335,6 +2349,10 @@ window.addEventListener('load', () => {
 
     document.getElementById('select-archer').addEventListener('click', () => {
         handleHeroSelect(Archer);
+    });
+
+    document.getElementById('select-paladin').addEventListener('click', () => {
+        handleHeroSelect(Paladin);
     });
 
     startMenuRender();

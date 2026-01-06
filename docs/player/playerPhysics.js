@@ -26,6 +26,10 @@ export function applyGravity(player, deltaTime) {
  */
 export function handleJump(player, input) {
     const jumpPressed = input.isJumpPressed();
+    if (player.jumpDisabled) {
+        player.jumpKeyWasPressed = jumpPressed;
+        return;
+    }
 
     // Reset jumps when grounded
     if (player.isGrounded) {
