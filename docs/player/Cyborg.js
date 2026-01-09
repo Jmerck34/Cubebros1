@@ -372,8 +372,8 @@ export class Cyborg extends Hero {
         const speed = 12;
         const fireballPos = { x: fireballGroup.position.x, y: fireballGroup.position.y };
         let rotationAngle = 0;
-        const maxDistance = 12;
         const level = this.level || { platforms: [] };
+        const maxDistance = 12;
 
         // Animate fireball
         const fireballInterval = setInterval(() => {

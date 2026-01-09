@@ -7,6 +7,7 @@ import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
 import { getAimDirection } from './utils/aim.js';
 import { updateDamageNumbers } from './utils/damageNumbers.js';
+import { PlayerStateOverlay } from './ui/PlayerStateOverlay.js';
 import { Warrior } from './player/Warrior.js';
 import { Level } from './world/Level.js?v=20260109';
 import { CameraFollow } from './camera/CameraFollow.js';
@@ -57,6 +58,7 @@ level.addEnemy(goomba3);
 
 // Create warrior hero
 const player = new Warrior(scene, 0, 0);
+const playerStateOverlay = new PlayerStateOverlay(() => player);
 
 // Connect player to enemy list for ability damage detection
 player.enemies = level.enemies;
@@ -135,6 +137,7 @@ const gameLoop = new GameLoop(
         uiManager.update();
 
         updateDamageNumbers(deltaTime);
+        playerStateOverlay.update();
     },
     // Render callback
     () => {

@@ -20,6 +20,7 @@ import { checkAABBCollision } from './utils/collision.js';
 import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
 import { DebugMenu } from './ui/DebugMenu.js';
+import { PlayerStateOverlay } from './ui/PlayerStateOverlay.js';
 import { updateDamageNumbers, clearDamageNumbers } from './utils/damageNumbers.js';
 import { CaptureTheFlagMode } from './gameModes/CaptureTheFlagMode.js';
 import { ArenaMode } from './gameModes/ArenaMode.js';
@@ -38,6 +39,7 @@ let cameraFollows = [];
 let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
 let gameMode = null;
+let playerStateOverlay = null;
 let selectedGameMode = null;
 let modeMenu = null;
 let modeButtons = [];
@@ -702,6 +704,9 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     } else {
         debugMenu.setPlayer(player);
     }
+    if (!playerStateOverlay) {
+        playerStateOverlay = new PlayerStateOverlay(() => players[0] || player || null);
+    }
 
     // Apply debug menu physics multipliers to all players
     const physicsMultipliers = debugMenu.getPhysicsMultipliers();
@@ -869,6 +874,9 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
             }
             updateHealthPotions(deltaTime, players);
             updateLadderHint(players);
+            if (playerStateOverlay) {
+                playerStateOverlay.update();
+            }
 
             // Update environment animations
             if (environment) {

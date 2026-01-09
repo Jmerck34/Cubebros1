@@ -2,9 +2,11 @@ export const gameTestMap = {
     key: 'game-test',
     platforms: [
         { x: 0, y: -5, width: 40, height: 5, type: 'ground' },
-        { x: -8, y: 1.0, width: 6, height: 0.6, type: 'stone' },
         { x: 0, y: 1.0, width: 6, height: 0.6, type: 'stone' },
         { x: 8, y: 1.0, width: 6, height: 0.6, type: 'stone' }
+    ],
+    oneWayPlatforms: [
+        { x: -8, y: 1.0, width: 6, height: 0.6, type: 'stone' }
     ],
     playerSpawns: {
         blue: { x: -6, y: -2.0 },

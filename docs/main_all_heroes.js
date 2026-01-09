@@ -18,6 +18,7 @@ import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
 import { updateDamageNumbers } from './utils/damageNumbers.js';
+import { PlayerStateOverlay } from './ui/PlayerStateOverlay.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -82,6 +83,7 @@ level.addEnemy(goomba5);
 
 // Option 1: Warrior (Sword & Shield)
 const player = new Warrior(scene, 0, 0);
+const playerStateOverlay = new PlayerStateOverlay(() => player);
 
 // Option 2: Assassin (Dual Daggers)
 // const player = new Assassin(scene, 0, 0);
@@ -178,6 +180,7 @@ const gameLoop = new GameLoop(
         uiManager.update();
 
         updateDamageNumbers(deltaTime);
+        playerStateOverlay.update();
 
         // Update environment animations
         environment.update(deltaTime);

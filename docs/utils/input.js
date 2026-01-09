@@ -8,6 +8,9 @@ export class InputManager {
         this.mouseButtons = {};
         this.mousePosition = { x: 0, y: 0 };
         this.hasMousePosition = false;
+        this.prevActionStates = {};
+        this.justPressed = {};
+        this.downTapQueued = false;
         const defaultBindings = {
             left: ['ArrowLeft', 'KeyA'],
             right: ['ArrowRight', 'KeyD'],
@@ -72,6 +75,9 @@ export class InputManager {
             // Prevent default browser behavior for game keys
             if (this.isGameKey(event.code)) {
                 event.preventDefault();
+            }
+            if (!event.repeat && this.isBindingKey('down', event.code)) {
+                this.downTapQueued = true;
             }
         });
 
@@ -148,12 +154,14 @@ export class InputManager {
     update() {
         if (!this.gamepadEnabled) {
             this.gamepad = null;
+            this.updateActionStates();
             return;
         }
 
         if (!navigator.getGamepads) {
             this.gamepad = null;
             this.gamepadIndex = null;
+            this.updateActionStates();
             return;
         }
 
@@ -162,11 +170,13 @@ export class InputManager {
             const pad = pads[this.gamepadIndex];
             if (pad && pad.connected) {
                 this.gamepad = pad;
+                this.updateActionStates();
                 return;
             }
 
             this.gamepad = null;
             if (this.gamepadIndexLocked) {
+                this.updateActionStates();
                 return;
             }
             this.gamepadIndex = null;
@@ -180,6 +190,23 @@ export class InputManager {
                 break;
             }
         }
+        this.updateActionStates();
+    }
+
+    /**
+     * Update per-frame action state transitions.
+     */
+    updateActionStates() {
+        const actions = new Set([
+            ...Object.keys(this.bindings),
+            ...Object.keys(this.gamepadBindings)
+        ]);
+        actions.forEach((action) => {
+            const isPressed = this.isActionPressed(action);
+            const wasPressed = this.prevActionStates[action] || false;
+            this.justPressed[action] = isPressed && !wasPressed;
+            this.prevActionStates[action] = isPressed;
+        });
     }
 
     /**
@@ -221,6 +248,29 @@ export class InputManager {
      */
     isDownPressed() {
         return this.isActionPressed('down');
+    }
+
+    /**
+     * Check if down key was just pressed this frame
+     * @returns {boolean}
+     */
+    isDownJustPressed() {
+        if (this.downTapQueued) {
+            this.downTapQueued = false;
+            return true;
+        }
+        return Boolean(this.justPressed && this.justPressed.down);
+    }
+
+    /**
+     * Check if a keyboard code belongs to a bound action.
+     * @param {string} action
+     * @param {string} code
+     * @returns {boolean}
+     */
+    isBindingKey(action, code) {
+        const codes = this.bindings[action] || [];
+        return codes.includes(code);
     }
 
     /**

@@ -402,6 +402,8 @@ export class Level {
         let onLadder = false;
         let onLauncher = null;
         let onWall = false;
+        let onOneWayPlatform = false;
+        const oneWayDropDelayMs = 500;
         const updateFallTracking = () => {
             if (!Number.isFinite(player.fallPeakY)) {
                 player.fallPeakY = player.position.y;
@@ -578,15 +580,30 @@ export class Level {
                 if (dropThroughActive) {
                     continue;
                 }
-                if (allowDrop && player.input && player.input.isDownPressed && player.input.isDownPressed()) {
-                    const nearTop = Math.abs(playerBounds.bottom - platform.bounds.top) < 0.12;
-                    if (player.isGrounded || (nearTop && playerVelocity.y <= 0)) {
-                        player.dropThroughUntil = now + dropWindow;
-                        player.isGrounded = false;
-                        player.position.y -= 0.06;
-                        player.mesh.position.y = player.position.y;
-                        continue;
+                const downTapped = Boolean(player.dropTapUntil && now <= player.dropTapUntil);
+                const eligibleStanding = overlaps
+                    && playerVelocity.y <= 0
+                    && playerBounds.bottom >= platform.bounds.top - 0.12;
+                if (eligibleStanding) {
+                    onOneWayPlatform = true;
+                    if (!Number.isFinite(player.oneWayGroundedAt) || player.oneWayGroundedAt <= 0) {
+                        player.oneWayGroundedAt = now;
                     }
+                }
+                const groundedOnOneWay = player.isGrounded && eligibleStanding;
+                const groundedDelayMet = groundedOnOneWay
+                    && Number.isFinite(player.oneWayGroundedAt)
+                    && now - player.oneWayGroundedAt >= oneWayDropDelayMs;
+                const downHeld = player.input
+                    && player.input.isDownPressed
+                    && player.input.isDownPressed();
+                if (allowDrop && downHeld && groundedDelayMet) {
+                    player.dropThroughUntil = now + dropWindow;
+                    player.oneWayGroundedAt = 0;
+                    player.isGrounded = false;
+                    player.position.y -= 0.06;
+                    player.mesh.position.y = player.position.y;
+                    continue;
                 }
                 if (!solidFromAbove || playerVelocity.y > 0) {
                     continue;
@@ -599,6 +616,10 @@ export class Level {
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
                     player.isGrounded = true;
+                    onOneWayPlatform = true;
+                    if (!Number.isFinite(player.oneWayGroundedAt) || player.oneWayGroundedAt <= 0) {
+                        player.oneWayGroundedAt = now;
+                    }
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
                     applyFallDamage(impactSpeed, platform);
@@ -674,6 +695,10 @@ export class Level {
 
         // Reset ladder flag if not on ladder
         player.onLadder = Boolean(onLadder);
+        player.onOneWay = Boolean(onOneWayPlatform);
+        if (!onOneWayPlatform) {
+            player.oneWayGroundedAt = 0;
+        }
 
         if (onLauncher) {
             const now = performance.now();
