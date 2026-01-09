@@ -25,6 +25,7 @@ import { CaptureTheFlagMode } from './gameModes/CaptureTheFlagMode.js';
 import { ArenaMode } from './gameModes/ArenaMode.js';
 import { KingOfTheHillMode } from './gameModes/KingOfTheHillMode.js';
 import { GameTestMode } from './gameModes/GameTestMode.js';
+import { hilltowerMaskConfig } from './world/maps/hilltowerMap.js';
 
 // Game state
 let gameStarted = false;
@@ -43,6 +44,12 @@ let modeButtons = [];
 let modeFocusIndex = 0;
 let modeSelectLocked = false;
 let modeBackLocked = false;
+let testMapMenu = null;
+let testMapButtons = [];
+let testMapFocusIndex = 0;
+let testMapSelectLocked = false;
+let testMapBackLocked = false;
+let selectedTestMapKey = '3p';
 const VIEW_SIZE = 10;
 let healthPotions = [];
 let menuRenderActive = false;
@@ -71,6 +78,7 @@ let p1GamepadSelect, p2GamepadSelect, p3GamepadSelect, p4GamepadSelect;
 let p2GamepadRow, p3GamepadRow, p4GamepadRow;
 let controllerToggleButton, gamepadAssign;
 let controllerMenuVisible = true;
+let controllerIndicatorsActive = false;
 let teamMenu;
 let teamMenuPanels = [];
 let teamMenuTitles = [];
@@ -209,6 +217,29 @@ function updateCameraFrustum(targetCamera, width, height) {
     targetCamera.top = VIEW_SIZE;
     targetCamera.bottom = -VIEW_SIZE;
     targetCamera.updateProjectionMatrix();
+}
+
+function applyMapCameraConfig(targetCamera, follow, config) {
+    if (!targetCamera || !follow) return;
+    const cfg = config || {};
+    const smoothing = Number.isFinite(cfg.smoothing) ? cfg.smoothing : 0.1;
+    follow.setSmoothing(smoothing);
+    if ('followVertical' in cfg) {
+        follow.setFollowVertical(cfg.followVertical);
+    }
+    const verticalStart = Number.isFinite(cfg.verticalFollowStart) ? cfg.verticalFollowStart : 2.5;
+    const verticalMax = Number.isFinite(cfg.verticalFollowMaxOffset) ? cfg.verticalFollowMaxOffset : 22;
+    follow.setVerticalFollow(verticalStart, verticalMax);
+    if (cfg.offset) {
+        follow.setOffset(cfg.offset);
+    }
+    if (cfg.bounds) {
+        follow.setBounds(cfg.bounds);
+    }
+    if (Number.isFinite(cfg.zoom)) {
+        targetCamera.zoom = cfg.zoom;
+        targetCamera.updateProjectionMatrix();
+    }
 }
 
 function getViewportForIndex(index, playerCount, fullWidth, fullHeight) {
@@ -353,6 +384,7 @@ function refreshGamepadSelects(force = false) {
         const p4Value = p4GamepadSelect.value || p4GamepadPreference;
         p4GamepadPreference = buildGamepadSelectOptions(p4GamepadSelect, p4Value, pads, 'Auto (fourth controller)');
     }
+    updateControllerIndicatorVisibility();
 }
 
 function updateGamepadSelectVisibility() {
@@ -384,6 +416,33 @@ function setControllerMenuVisible(visible) {
     if (controllerToggleButton) {
         controllerToggleButton.textContent = visible ? 'Controllers: On' : 'Controllers: Off';
         controllerToggleButton.setAttribute('aria-pressed', String(visible));
+    }
+}
+
+function shouldShowControllerIndicators() {
+    const pads = getConnectedGamepadInfo();
+    if (pads.length > 0) {
+        return true;
+    }
+    const preferences = [p1GamepadPreference, p2GamepadPreference, p3GamepadPreference, p4GamepadPreference]
+        .slice(0, localPlayerCount);
+    return preferences.some((pref) => pref && pref !== 'none' && pref !== 'auto');
+}
+
+function updateControllerIndicatorVisibility() {
+    controllerIndicatorsActive = shouldShowControllerIndicators();
+    if (heroFocusLayer) {
+        heroFocusLayer.style.display = controllerIndicatorsActive ? 'block' : 'none';
+    }
+    if (!controllerIndicatorsActive) {
+        heroFocusTags.forEach((tag) => {
+            if (tag) {
+                tag.style.opacity = '0';
+            }
+        });
+        heroCardItems.forEach((item) => {
+            item.classList.remove('menu-focus-p1', 'menu-focus-p2', 'menu-focus-p3', 'menu-focus-p4');
+        });
     }
 }
 
@@ -435,7 +494,7 @@ function resolveGamepadAssignments() {
 }
 
 // Start game with selected hero
-function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
+async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
     // Hide menu
     if (heroMenu) {
@@ -501,8 +560,14 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
     // Create level with platforms
     level = new Level(scene);
-    if (selectedGameMode === 'game-test' && typeof level.createGameTestLevel === 'function') {
-        level.createGameTestLevel();
+    if (selectedGameMode === 'game-test') {
+        if (selectedTestMapKey === 'hilltower' && typeof level.createGameTestMaskLevel === 'function') {
+            await level.createGameTestMaskLevel(hilltowerMaskConfig);
+        } else if (typeof level.createGameTestLevel === 'function') {
+            level.createGameTestLevel();
+        }
+    } else if (selectedGameMode === 'ctf') {
+        level.createTestLevel({ includeInteractiveFlags: false, mapKey: 'ogmap' });
     } else if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
         level.createKothLevel({ includeInteractiveFlags: false, mapKey: 'koth' });
     } else if (selectedGameMode === 'arena' && typeof level.createArenaLevel === 'function') {
@@ -594,8 +659,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     cameraFollows = [];
     cameras[0] = camera;
     cameraFollow = new CameraFollow(camera, player);
-    cameraFollow.setSmoothing(0.1);
-    cameraFollow.setVerticalFollow(2.5, 22);
+    applyMapCameraConfig(camera, cameraFollow, level.cameraConfig);
     cameraFollows[0] = cameraFollow;
 
     for (let i = 1; i < localPlayerCount; i += 1) {
@@ -604,8 +668,7 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
         cam.lookAt(0, 0, 0);
         cameras[i] = cam;
         const follow = new CameraFollow(cam, players[i]);
-        follow.setSmoothing(0.1);
-        follow.setVerticalFollow(2.5, 22);
+        applyMapCameraConfig(cam, follow, level.cameraConfig);
         cameraFollows[i] = follow;
     }
     camera2 = cameras[1] || null;
@@ -919,6 +982,9 @@ function showModeMenu() {
     if (modeMenu) {
         modeMenu.style.display = 'flex';
     }
+    if (testMapMenu) {
+        testMapMenu.style.display = 'none';
+    }
     if (heroMenu) {
         heroMenu.style.display = 'none';
     }
@@ -954,10 +1020,65 @@ function moveModeMenuFocus(delta) {
     updateModeMenuFocus();
 }
 
+function showTestMapMenu() {
+    hideReadyMenu();
+    if (testMapMenu) {
+        testMapMenu.style.display = 'flex';
+    }
+    if (heroMenu) {
+        heroMenu.style.display = 'none';
+    }
+    if (teamMenu) {
+        teamMenu.style.display = 'none';
+    }
+    if (selectedTestMapKey && testMapButtons.length) {
+        const matchIndex = testMapButtons.findIndex((button) => button?.id === `map-${selectedTestMapKey}`);
+        testMapFocusIndex = matchIndex >= 0 ? matchIndex : -1;
+    } else {
+        testMapFocusIndex = -1;
+    }
+    updateTestMapMenuFocus();
+    updateMenuSplitState();
+}
+
+function hideTestMapMenu() {
+    if (testMapMenu) {
+        testMapMenu.style.display = 'none';
+    }
+    updateMenuSplitState();
+}
+
+function updateTestMapMenuFocus() {
+    if (!testMapButtons.length) return;
+    testMapButtons.forEach((button, index) => {
+        button.classList.toggle('menu-focus', index === testMapFocusIndex);
+    });
+}
+
+function moveTestMapMenuFocus(delta) {
+    if (!testMapButtons.length) return;
+    if (testMapFocusIndex < 0) {
+        testMapFocusIndex = 0;
+    } else {
+        testMapFocusIndex = (testMapFocusIndex + delta + testMapButtons.length) % testMapButtons.length;
+    }
+    updateTestMapMenuFocus();
+}
+
+function selectTestMap(mapKey) {
+    selectedTestMapKey = mapKey;
+    hideTestMapMenu();
+    showTeamMenu();
+}
+
 function selectGameMode(modeKey) {
     selectedGameMode = modeKey;
     hideModeMenu();
-    showTeamMenu();
+    if (modeKey === 'game-test') {
+        showTestMapMenu();
+    } else {
+        showTeamMenu();
+    }
 }
 
 function handleTeamSelect(team, playerIndex = 1) {
@@ -1248,11 +1369,16 @@ function ensureHeroIndicators() {
         }
     });
     updateAllHeroFocusTags();
+    updateControllerIndicatorVisibility();
 }
 
 function updateHeroFocusTag(playerIndex, stackIndex = 0, stackCount = 1) {
     const tag = heroFocusTags[playerIndex - 1];
     if (!tag || !heroGridSingle) return;
+    if (!shouldShowControllerIndicators()) {
+        tag.style.opacity = '0';
+        return;
+    }
     if (!localMultiplayerEnabled || playerIndex > localPlayerCount || !heroCardItems.length || !heroMenu || heroMenu.style.display === 'none') {
         tag.style.opacity = '0';
         return;
@@ -1372,7 +1498,11 @@ function updateCoopHeroFocus(playerIndex) {
     }
     const className = `menu-focus-p${playerIndex}`;
     heroCardItems.forEach((item, index) => {
-        item.classList.toggle(className, index === focusIndex);
+        if (shouldShowControllerIndicators()) {
+            item.classList.toggle(className, index === focusIndex);
+        } else {
+            item.classList.remove(className);
+        }
     });
     const focused = heroCardItems[focusIndex];
     if (focused && typeof focused.scrollIntoView === 'function') {
@@ -1678,9 +1808,10 @@ function updateMenuSplitState() {
     const heroVisible = window.getComputedStyle(heroMenu).display !== 'none';
     const teamVisible = window.getComputedStyle(teamMenu).display !== 'none';
     const modeVisible = modeMenu ? window.getComputedStyle(modeMenu).display !== 'none' : false;
+    const testMapVisible = testMapMenu ? window.getComputedStyle(testMapMenu).display !== 'none' : false;
     const shouldShow = localPlayerCount === 2 && !gameStarted && teamVisible;
     document.body.classList.toggle('menu-split-active', shouldShow);
-    if (!gameStarted && (heroVisible || teamVisible || modeVisible)) {
+    if (!gameStarted && (heroVisible || teamVisible || modeVisible || testMapVisible)) {
         document.body.classList.remove('split-screen-active', 'split-screen-quad');
     }
 }
@@ -1734,6 +1865,13 @@ function updateReadyMenuState() {
 }
 
 function updateMenuFocus() {
+    const showIndicators = shouldShowControllerIndicators();
+    if (!showIndicators) {
+        menuItems.forEach((item) => {
+            item.classList.remove('menu-focus');
+        });
+        return;
+    }
     menuItems.forEach((item, index) => {
         if (index === menuFocusIndex) {
             item.classList.add('menu-focus');
@@ -1844,6 +1982,7 @@ function shouldReturnToPlayerCount() {
     if (!localMultiplayerEnabled) return false;
     if (readyMenuActive) return false;
     if (modeMenu && modeMenu.style.display === 'flex') return false;
+    if (testMapMenu && testMapMenu.style.display === 'flex') return false;
     if (teamMenu && teamMenu.style.display === 'flex') return false;
     const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
     if (hasSelection) return false;
@@ -2087,6 +2226,51 @@ function pollModeMenuGamepad() {
     }
 }
 
+function pollTestMapMenuGamepad() {
+    const pad = getAssignedPadForPlayer(1);
+    if (!pad) return;
+    const now = performance.now();
+    const axisX = pad.axes[0] || 0;
+    const axisY = pad.axes[1] || 0;
+
+    const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
+    const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
+    const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
+    const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+
+    if ((up || down || left || right) && now - menuLastNavTime > MENU_NAV_COOLDOWN_MS) {
+        const delta = (down || right) ? 1 : -1;
+        moveTestMapMenuFocus(delta);
+        menuLastNavTime = now;
+    }
+
+    const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    if (selectPressed && !testMapSelectLocked) {
+        if (testMapFocusIndex < 0) {
+            testMapFocusIndex = 0;
+            updateTestMapMenuFocus();
+            testMapSelectLocked = true;
+            return;
+        }
+        const selected = testMapButtons[testMapFocusIndex];
+        if (selected && typeof selected.click === 'function') {
+            selected.click();
+        }
+        testMapSelectLocked = true;
+    } else if (!selectPressed) {
+        testMapSelectLocked = false;
+    }
+
+    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+    if (backPressed && !testMapBackLocked) {
+        hideTestMapMenu();
+        showModeMenu();
+        testMapBackLocked = true;
+    } else if (!backPressed) {
+        testMapBackLocked = false;
+    }
+}
+
 function pollCoopTeamMenuGamepads() {
     for (let i = 0; i < localPlayerCount; i += 1) {
         const playerIndex = i + 1;
@@ -2102,6 +2286,10 @@ function pollMenuGamepad() {
     }
     if (modeMenu && modeMenu.style.display === 'flex') {
         pollModeMenuGamepad();
+        return;
+    }
+    if (testMapMenu && testMapMenu.style.display === 'flex') {
+        pollTestMapMenuGamepad();
         return;
     }
     if (teamMenu && teamMenu.style.display === 'flex') {
@@ -2201,6 +2389,16 @@ window.addEventListener('load', () => {
     if (modeTestButton) {
         modeTestButton.addEventListener('click', () => selectGameMode('game-test'));
     }
+    testMapMenu = document.getElementById('test-map-menu');
+    const map3pButton = document.getElementById('map-3p');
+    const mapHilltowerButton = document.getElementById('map-hilltower');
+    testMapButtons = [map3pButton, mapHilltowerButton].filter(Boolean);
+    if (map3pButton) {
+        map3pButton.addEventListener('click', () => selectTestMap('3p'));
+    }
+    if (mapHilltowerButton) {
+        mapHilltowerButton.addEventListener('click', () => selectTestMap('hilltower'));
+    }
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');
     p3GamepadSelect = document.getElementById('p3-gamepad-select');
@@ -2273,21 +2471,29 @@ window.addEventListener('load', () => {
     if (p1GamepadSelect) {
         p1GamepadSelect.addEventListener('change', () => {
             p1GamepadPreference = p1GamepadSelect.value;
+            updateControllerIndicatorVisibility();
+            updateAllHeroFocusTags();
         });
     }
     if (p2GamepadSelect) {
         p2GamepadSelect.addEventListener('change', () => {
             p2GamepadPreference = p2GamepadSelect.value;
+            updateControllerIndicatorVisibility();
+            updateAllHeroFocusTags();
         });
     }
     if (p3GamepadSelect) {
         p3GamepadSelect.addEventListener('change', () => {
             p3GamepadPreference = p3GamepadSelect.value;
+            updateControllerIndicatorVisibility();
+            updateAllHeroFocusTags();
         });
     }
     if (p4GamepadSelect) {
         p4GamepadSelect.addEventListener('change', () => {
             p4GamepadPreference = p4GamepadSelect.value;
+            updateControllerIndicatorVisibility();
+            updateAllHeroFocusTags();
         });
     }
     if (readyConfirmButton) {
@@ -2327,6 +2533,11 @@ window.addEventListener('load', () => {
                 }
                 updateCoopHeroSelectionUI();
                 updateMenuSplitState();
+                return;
+            }
+            if (testMapMenu && testMapMenu.style.display === 'flex') {
+                hideTestMapMenu();
+                showModeMenu();
                 return;
             }
             if (teamMenu && teamMenu.style.display === 'flex') {

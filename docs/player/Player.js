@@ -831,7 +831,8 @@ export class Player {
         applyGravity(this, deltaTime);
 
         // Check death zone
-        if (this.position.y < DEATH_Y) {
+        const deathY = Number.isFinite(this.level?.deathY) ? this.level.deathY : DEATH_Y;
+        if (this.position.y < deathY) {
             this.lastDeathWasPit = true;
             this.die();
         }

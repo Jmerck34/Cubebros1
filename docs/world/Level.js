@@ -2,7 +2,12 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { checkAABBCollision, resolveCollisionY, resolveCollisionX } from '../utils/collision.js';
 import { SolidBody } from './SolidBody.js';
 import { SolidPlatform } from './SolidPlatform.js';
+import { OneWayPlatform } from './OneWayPlatform.js';
 import { Ladder } from './Ladder.js';
+import { MapBuilder } from './MapBuilder.js';
+import { MaskMapBuilder } from './MaskMapBuilder.js';
+import { gameTestMap } from './maps/gameTestMap.js';
+import { hilltowerMaskConfig } from './maps/hilltowerMap.js';
 
 const FOREGROUND_PALETTE = {
     groundBody: 0x8f563b,
@@ -56,7 +61,10 @@ export class Level {
         this.windZones = [];
         this.windStreaks = [];
         this.bodies = [];
+        this.travellers = [];
         this.mapKey = null;
+        this.cameraConfig = null;
+        this.deathY = null;
     }
 
     /**
@@ -264,6 +272,65 @@ export class Level {
         this.bodies.push(platform.body);
         this.platforms.push(platform);
         return platform;
+    }
+
+    addOneWayPlatform(x, y, width, height, type = 'grass') {
+        const platform = this.addPlatform(x, y, width, height, type);
+        if (platform.body) {
+            this.bodies = this.bodies.filter((body) => body !== platform.body);
+        }
+        platform.body = new OneWayPlatform({
+            bounds: platform.bounds,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(platform.body);
+        platform.isOneWay = true;
+        return platform;
+    }
+
+    addLadderZone(x, y, width, height) {
+        const ladderGroup = new THREE.Group();
+        const railGeometry = new THREE.BoxGeometry(0.08, height, 0.12);
+        const railMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ladderRail });
+        const leftRail = new THREE.Mesh(railGeometry, railMaterial);
+        leftRail.position.set(-width / 2 + 0.08, 0, 0.2);
+        ladderGroup.add(leftRail);
+        const rightRail = new THREE.Mesh(railGeometry, railMaterial);
+        rightRail.position.set(width / 2 - 0.08, 0, 0.2);
+        ladderGroup.add(rightRail);
+
+        const rungCount = Math.max(2, Math.floor(height / 0.6));
+        const rungGeometry = new THREE.BoxGeometry(width * 0.9, 0.08, 0.1);
+        const rungMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ladderRung });
+        for (let i = 0; i < rungCount; i++) {
+            const rung = new THREE.Mesh(rungGeometry, rungMaterial);
+            const t = rungCount === 1 ? 0.5 : i / (rungCount - 1);
+            rung.position.set(0, -height / 2 + t * height, 0.2);
+            ladderGroup.add(rung);
+        }
+
+        ladderGroup.position.set(x, y, 0);
+        this.group.add(ladderGroup);
+
+        const ladderPlatform = {
+            mesh: ladderGroup,
+            bounds: {
+                left: x - width / 2,
+                right: x + width / 2,
+                top: y + height / 2,
+                bottom: y - height / 2
+            },
+            type: 'ladder',
+            isLadder: true
+        };
+
+        ladderPlatform.body = new Ladder({
+            bounds: ladderPlatform.bounds,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(ladderPlatform.body);
+        this.platforms.push(ladderPlatform);
+        return ladderPlatform;
     }
 
     /**
@@ -484,6 +551,14 @@ export class Level {
                 // Skip wall collision (already handled in first pass)
                 if (platform.type === 'wall') {
                     continue;
+                }
+                if (platform.isOneWay) {
+                    if (playerVelocity.y > 0) {
+                        continue;
+                    }
+                    if (playerBounds.bottom < platform.bounds.top - 0.08) {
+                        continue;
+                    }
                 }
 
                 // Normal platform collision
@@ -1274,28 +1349,14 @@ export class Level {
 
     createGameTestLevel() {
         this.mapKey = 'game-test';
-        const groundSurfaceY = -2.5;
-        const groundBottomY = -7.5;
-        const groundHeight = groundSurfaceY - groundBottomY;
-        const groundCenterY = groundSurfaceY - groundHeight / 2;
-        const groundWidth = 40;
+        MapBuilder.build(this, gameTestMap);
+    }
 
-        this.addPlatform(0, groundCenterY, groundWidth, groundHeight, 'ground');
-
-        const floatingY = 1.0;
-        const floatingWidth = 6;
-        const floatingHeight = 0.6;
-        const spacing = 8;
-
-        this.addPlatform(-spacing, floatingY, floatingWidth, floatingHeight, 'stone');
-        this.addPlatform(0, floatingY, floatingWidth, floatingHeight, 'stone');
-        this.addPlatform(spacing, floatingY, floatingWidth, floatingHeight, 'stone');
-
-        this.playerSpawns = {
-            blue: { x: -6, y: groundSurfaceY + 0.5 },
-            red: { x: 6, y: groundSurfaceY + 0.5 }
-        };
-        this.flagSpawns = { ...this.playerSpawns };
+    async createGameTestMaskLevel(config = hilltowerMaskConfig) {
+        this.mapKey = config.key;
+        const mapData = await MaskMapBuilder.build(config);
+        if (!mapData) return;
+        MapBuilder.build(this, mapData);
     }
 
     createArenaLevel(options = {}) {

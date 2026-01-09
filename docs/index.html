@@ -235,7 +235,8 @@
             flex-wrap: wrap;
         }
 
-        #mode-menu {
+        #mode-menu,
+        #test-map-menu {
             position: fixed;
             top: 0;
             left: 0;
@@ -252,13 +253,15 @@
             padding: 40px 20px;
         }
 
-        #mode-menu h2 {
+        #mode-menu h2,
+        #test-map-menu h2 {
             color: #ffffff;
             font-size: 36px;
             text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
         }
 
-        #mode-menu p {
+        #mode-menu p,
+        #test-map-menu p {
             color: #ccc;
             font-size: 16px;
         }
@@ -1320,6 +1323,16 @@
             <button id="mode-arena" class="mode-button" type="button">Arena</button>
             <button id="mode-koth" class="mode-button" type="button">King of the Hill</button>
             <button id="mode-test" class="mode-button" type="button">Game Test</button>
+        </div>
+        <p class="team-controls">D-pad/Stick + A to select | B to go back</p>
+    </div>
+
+    <div id="test-map-menu">
+        <h2>SELECT GAME TEST MAP</h2>
+        <p>Choose which playtest layout to load.</p>
+        <div class="mode-buttons">
+            <button id="map-3p" class="mode-button" type="button">3P</button>
+            <button id="map-hilltower" class="mode-button" type="button">Hill Tower</button>
         </div>
         <p class="team-controls">D-pad/Stick + A to select | B to go back</p>
     </div>

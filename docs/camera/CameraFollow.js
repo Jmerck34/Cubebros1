@@ -11,6 +11,8 @@ export class CameraFollow {
         this.smoothing = 0; // 0 = instant follow, 0.1 = smooth
         this.verticalFollowStart = 2.5;
         this.verticalFollowMaxOffset = 3;
+        this.followVertical = false;
+        this.bounds = null;
     }
 
     /**
@@ -29,6 +31,23 @@ export class CameraFollow {
     setVerticalFollow(startY, maxOffset) {
         this.verticalFollowStart = startY;
         this.verticalFollowMaxOffset = maxOffset;
+    }
+
+    setFollowVertical(enabled) {
+        this.followVertical = Boolean(enabled);
+    }
+
+    setOffset(offset) {
+        if (!offset) return;
+        this.offset = {
+            x: Number.isFinite(offset.x) ? offset.x : this.offset.x,
+            y: Number.isFinite(offset.y) ? offset.y : this.offset.y,
+            z: Number.isFinite(offset.z) ? offset.z : this.offset.z
+        };
+    }
+
+    setBounds(bounds) {
+        this.bounds = bounds || null;
     }
 
     /**
@@ -63,10 +82,20 @@ export class CameraFollow {
             return;
         }
 
-        const targetX = ((minX + maxX) * 0.5) + this.offset.x;
+        let targetX = ((minX + maxX) * 0.5) + this.offset.x;
         let targetY = this.offset.y;
-        if (maxY > this.verticalFollowStart) {
+        if (this.followVertical) {
+            targetY = maxY + this.offset.y;
+        } else if (maxY > this.verticalFollowStart) {
             targetY += Math.min(this.verticalFollowMaxOffset, maxY - this.verticalFollowStart);
+        }
+        if (this.bounds) {
+            if (Number.isFinite(this.bounds.left) && Number.isFinite(this.bounds.right)) {
+                targetX = Math.min(this.bounds.right, Math.max(this.bounds.left, targetX));
+            }
+            if (Number.isFinite(this.bounds.bottom) && Number.isFinite(this.bounds.top)) {
+                targetY = Math.min(this.bounds.top, Math.max(this.bounds.bottom, targetY));
+            }
         }
 
         if (this.smoothing > 0) {

@@ -106,7 +106,28 @@ const uiManager = new UIManager(player);
 
 // Setup camera follow
 const cameraFollow = new CameraFollow(camera, player);
-cameraFollow.setSmoothing(0.1); // Smooth camera movement
+if (level.cameraConfig) {
+    const cfg = level.cameraConfig;
+    cameraFollow.setSmoothing(Number.isFinite(cfg.smoothing) ? cfg.smoothing : 0.1);
+    if ('followVertical' in cfg) {
+        cameraFollow.setFollowVertical(cfg.followVertical);
+    }
+    const verticalStart = Number.isFinite(cfg.verticalFollowStart) ? cfg.verticalFollowStart : 2.5;
+    const verticalMax = Number.isFinite(cfg.verticalFollowMaxOffset) ? cfg.verticalFollowMaxOffset : 22;
+    cameraFollow.setVerticalFollow(verticalStart, verticalMax);
+    if (cfg.offset) {
+        cameraFollow.setOffset(cfg.offset);
+    }
+    if (cfg.bounds) {
+        cameraFollow.setBounds(cfg.bounds);
+    }
+    if (Number.isFinite(cfg.zoom)) {
+        camera.zoom = cfg.zoom;
+        camera.updateProjectionMatrix();
+    }
+} else {
+    cameraFollow.setSmoothing(0.1); // Smooth camera movement
+}
 
 // Handle window resize
 window.addEventListener('resize', () => {
