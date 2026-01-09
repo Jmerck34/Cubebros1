@@ -555,10 +555,7 @@ export class Level {
 
                 // Ladder physics: climb with jump
                 if (player.input) {
-                    // Slow fall on ladder
-                    if (player.velocity.y < 0) {
-                        player.velocity.y *= 0.3; // Reduced fall speed
-                    }
+                    // Let players fall at full speed while on ladder
 
                     // Climb up with W/Space
                     if (player.input.isJumpPressed()) {

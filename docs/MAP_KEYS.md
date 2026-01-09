@@ -51,3 +51,5 @@ Color codes used by the Hilltower PNG mask:
 - `#FF00EA` Player size reference
 - `#8E00FF` Blue team spawn
 - `#FF006C` Red team spawn
+
+See `threejs-platformer/docs/MAP_MOVING_PLATFORMS.md` for moving platform + traveller rules.
