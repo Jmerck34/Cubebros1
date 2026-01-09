@@ -12,6 +12,7 @@ export class InputManager {
             left: ['ArrowLeft', 'KeyA'],
             right: ['ArrowRight', 'KeyD'],
             jump: ['Space', 'KeyW'],
+            down: ['ArrowDown', 'KeyS'],
             ability1: ['Mouse0', 'KeyQ'],
             ability2: ['Mouse2'],
             ability3: ['KeyE'],
@@ -34,6 +35,7 @@ export class InputManager {
             left: ['Axis0-', 'DPadLeft'],
             right: ['Axis0+', 'DPadRight'],
             jump: ['Button0'],
+            down: ['Axis1+', 'DPadDown'],
             ability1: ['Button2'],
             ability2: ['Button1'],
             ability3: ['Button3'],
@@ -211,6 +213,14 @@ export class InputManager {
      */
     isJumpPressed() {
         return this.isActionPressed('jump');
+    }
+
+    /**
+     * Check if down key is pressed
+     * @returns {boolean}
+     */
+    isDownPressed() {
+        return this.isActionPressed('down');
     }
 
     /**

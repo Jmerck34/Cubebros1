@@ -12,7 +12,7 @@ import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
 import { Paladin } from './player/Paladin.js';
-import { Level } from './world/Level.js';
+import { Level } from './world/Level.js?v=20260109';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
@@ -431,6 +431,7 @@ function shouldShowControllerIndicators() {
 
 function updateControllerIndicatorVisibility() {
     controllerIndicatorsActive = shouldShowControllerIndicators();
+    document.body.classList.toggle('controller-indicators-active', controllerIndicatorsActive);
     if (heroFocusLayer) {
         heroFocusLayer.style.display = controllerIndicatorsActive ? 'block' : 'none';
     }
@@ -1865,13 +1866,6 @@ function updateReadyMenuState() {
 }
 
 function updateMenuFocus() {
-    const showIndicators = shouldShowControllerIndicators();
-    if (!showIndicators) {
-        menuItems.forEach((item) => {
-            item.classList.remove('menu-focus');
-        });
-        return;
-    }
     menuItems.forEach((item, index) => {
         if (index === menuFocusIndex) {
             item.classList.add('menu-focus');

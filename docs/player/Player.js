@@ -752,6 +752,7 @@ export class Player {
      */
     update(deltaTime, input) {
         const wasGrounded = this.isGrounded;
+        this.prevPosition = { ...this.position };
         this.wasGrounded = this.isGrounded;
         this.didLandThisFrame = false;
 

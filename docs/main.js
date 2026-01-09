@@ -8,7 +8,7 @@ import { UIManager } from './utils/ui.js';
 import { getAimDirection } from './utils/aim.js';
 import { updateDamageNumbers } from './utils/damageNumbers.js';
 import { Warrior } from './player/Warrior.js';
-import { Level } from './world/Level.js';
+import { Level } from './world/Level.js?v=20260109';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
 

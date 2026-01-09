@@ -161,7 +161,9 @@ export class MaskMapBuilder {
             travellers: [],
             playerSpawns: config.playerSpawns || null,
             flagSpawns: config.flagSpawns || null,
-            camera: config.camera || null
+            camera: config.camera || null,
+            travelPlatform: config.travelPlatform || null,
+            travelSpeed: config.travelSpeed || null
         };
 
         regions.forEach(({ type, region }) => {
@@ -183,6 +185,47 @@ export class MaskMapBuilder {
                 mapData.travellers.push({ start, end });
             }
         });
+
+        if (config.mergeSolids && mapData.platforms.length) {
+            const gap = Number.isFinite(config.mergeSolids.gap) ? config.mergeSolids.gap : 0.4;
+            const heightTolerance = Number.isFinite(config.mergeSolids.heightTolerance) ? config.mergeSolids.heightTolerance : 0.15;
+            const byRow = [...mapData.platforms].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+            const merged = [];
+            for (const platform of byRow) {
+                const left = platform.x - platform.width / 2;
+                const right = platform.x + platform.width / 2;
+                const top = platform.y + platform.height / 2;
+                const bottom = platform.y - platform.height / 2;
+                let didMerge = false;
+                for (const target of merged) {
+                    if (target.type !== platform.type) continue;
+                    const tLeft = target.x - target.width / 2;
+                    const tRight = target.x + target.width / 2;
+                    const tTop = target.y + target.height / 2;
+                    const tBottom = target.y - target.height / 2;
+                    if (Math.abs(tTop - top) > heightTolerance || Math.abs(tBottom - bottom) > heightTolerance) {
+                        continue;
+                    }
+                    const gapDistance = Math.min(Math.abs(left - tRight), Math.abs(tLeft - right));
+                    const overlaps = !(right < tLeft - gap || left > tRight + gap);
+                    if (!overlaps || gapDistance > gap) continue;
+                    const mergedLeft = Math.min(left, tLeft);
+                    const mergedRight = Math.max(right, tRight);
+                    const mergedTop = (tTop + top) / 2;
+                    const mergedBottom = (tBottom + bottom) / 2;
+                    target.x = (mergedLeft + mergedRight) / 2;
+                    target.y = (mergedTop + mergedBottom) / 2;
+                    target.width = mergedRight - mergedLeft;
+                    target.height = mergedTop - mergedBottom;
+                    didMerge = true;
+                    break;
+                }
+                if (!didMerge) {
+                    merged.push({ ...platform });
+                }
+            }
+            mapData.platforms = merged;
+        }
 
         if (config.autoBounds) {
             const allBounds = [];

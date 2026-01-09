@@ -12,7 +12,7 @@ import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
 import { Paladin } from './player/Paladin.js';
-import { Level } from './world/Level.js';
+import { Level } from './world/Level.js?v=20260109';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';

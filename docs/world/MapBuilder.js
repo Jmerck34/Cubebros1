@@ -27,6 +27,25 @@ export class MapBuilder {
 
         if (Array.isArray(mapData.travellers)) {
             level.travellers = mapData.travellers.map((traveller) => ({ ...traveller }));
+            const platformConfig = mapData.travelPlatform || { width: 3, height: 0.6, type: 'stone' };
+            const speed = Number.isFinite(mapData.travelSpeed) ? mapData.travelSpeed : 1.0;
+            level.travellers.forEach((traveller) => {
+                if (!traveller || !traveller.start || !traveller.end) return;
+                const baseX = (traveller.start.x + traveller.end.x) / 2;
+                const baseY = (traveller.start.y + traveller.end.y) / 2;
+                const rangeX = (traveller.end.x - traveller.start.x) / 2;
+                const rangeY = (traveller.end.y - traveller.start.y) / 2;
+                if (typeof level.addMovingPlatform === 'function') {
+                    level.addMovingPlatform(
+                        baseX,
+                        baseY,
+                        platformConfig.width,
+                        platformConfig.height,
+                        platformConfig.type || 'stone',
+                        { rangeX, rangeY, speed }
+                    );
+                }
+            });
         }
 
         if (mapData.playerSpawns) {

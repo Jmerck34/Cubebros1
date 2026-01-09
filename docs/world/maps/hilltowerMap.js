@@ -6,6 +6,16 @@ export const hilltowerMaskConfig = {
     autoBounds: true,
     boundsPadding: { x: 2, y: 2 },
     killFloorPadding: 6,
+    travelPlatform: {
+        width: 2.8,
+        height: 0.6,
+        type: 'stone'
+    },
+    travelSpeed: 1.0,
+    mergeSolids: {
+        gap: 0.6,
+        heightTolerance: 0.2
+    },
     camera: {
         smoothing: 0.1,
         followVertical: true,

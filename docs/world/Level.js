@@ -355,10 +355,10 @@ export class Level {
             platform,
             baseX: x,
             baseY: y,
-            rangeX: motion.rangeX ?? 0,
-            rangeY: motion.rangeY ?? 0,
-            speed: motion.speed ?? 1.2,
-            phase: motion.phase ?? Math.random() * Math.PI * 2,
+            rangeX: motion.rangeX != null ? motion.rangeX : 0,
+            rangeY: motion.rangeY != null ? motion.rangeY : 0,
+            speed: motion.speed != null ? motion.speed : 1.2,
+            phase: motion.phase != null ? motion.phase : Math.random() * Math.PI * 2,
             time: 0
         });
 
@@ -369,8 +369,8 @@ export class Level {
         const platform = this.addPlatform(x, y, width, height, type);
         platform.breakable = true;
         platform.breakState = 'idle';
-        platform.breakDelay = options.breakDelay ?? 0.25;
-        platform.respawnDelay = options.respawnDelay ?? 5;
+        platform.breakDelay = options.breakDelay != null ? options.breakDelay : 0.25;
+        platform.respawnDelay = options.respawnDelay != null ? options.respawnDelay : 5;
         platform.breakTimer = 0;
         platform.respawnTimer = 0;
         platform.disabled = false;
@@ -389,6 +389,16 @@ export class Level {
 
         const playerBounds = player.getBounds();
         const playerVelocity = player.velocity;
+        const hitboxScaleY = player.hitboxScale && Number.isFinite(player.hitboxScale.y) ? player.hitboxScale.y : 1;
+        const halfHeight = 0.5 * hitboxScaleY;
+        const prevPositionY = player.prevPosition ? player.prevPosition.y : undefined;
+        const prevY = Number.isFinite(prevPositionY) ? prevPositionY : player.position.y;
+        const prevBottom = prevY - halfHeight;
+        const now = performance.now();
+        if (player.dropThroughUntil && now >= player.dropThroughUntil) {
+            player.dropThroughUntil = 0;
+        }
+        const dropThroughActive = Boolean(player.dropThroughUntil && now < player.dropThroughUntil);
         let onLadder = false;
         let onLauncher = null;
         let onWall = false;
@@ -522,58 +532,67 @@ export class Level {
             if (platform.disabled) {
                 continue;
             }
-            if (checkAABBCollision(playerBounds, platform.bounds)) {
-                if ((platform.type === 'cloud' || platform.isCloudPlatform) && playerVelocity.y > 0) {
+            const overlaps = checkAABBCollision(playerBounds, platform.bounds);
+            const horizontalOverlap = playerBounds.right > platform.bounds.left &&
+                playerBounds.left < platform.bounds.right;
+            const isOneWay = Boolean(platform.isOneWay);
+            const oneWayCrossing = isOneWay &&
+                playerVelocity.y < 0 &&
+                !dropThroughActive &&
+                horizontalOverlap &&
+                prevBottom >= platform.bounds.top &&
+                playerBounds.bottom <= platform.bounds.top;
+            if (!overlaps && !oneWayCrossing) {
+                continue;
+            }
+            if ((platform.type === 'cloud' || platform.isCloudPlatform) && playerVelocity.y > 0) {
+                continue;
+            }
+            // Special handling for ladders - only if not standing on wall
+            if (platform.isLadder && !onWall && overlaps) {
+                onLadder = true;
+                player.onLadder = true;
+
+                // Ladder physics: climb with jump
+                if (player.input) {
+                    // Slow fall on ladder
+                    if (player.velocity.y < 0) {
+                        player.velocity.y *= 0.3; // Reduced fall speed
+                    }
+
+                    // Climb up with W/Space
+                    if (player.input.isJumpPressed()) {
+                        player.velocity.y = 5; // Climb up speed
+                        player.isGrounded = false;
+                    }
+                }
+                continue; // Don't apply normal collision for ladder
+            }
+
+            // Skip wall collision (already handled in first pass)
+            if (platform.type === 'wall') {
+                continue;
+            }
+            if (platform.isOneWay) {
+                const oneWayBody = platform.body || null;
+                const allowDrop = oneWayBody ? oneWayBody.allowDropThrough : true;
+                const dropWindow = oneWayBody ? oneWayBody.dropThroughWindowMs : 200;
+                const solidFromAbove = oneWayBody ? oneWayBody.solidFromAbove : true;
+                if (dropThroughActive) {
                     continue;
                 }
-                // Special handling for ladders - only if not standing on wall
-                if (platform.isLadder && !onWall) {
-                    onLadder = true;
-                    player.onLadder = true;
-
-                    // Ladder physics: climb with jump
-                    if (player.input) {
-                        // Slow fall on ladder
-                        if (player.velocity.y < 0) {
-                            player.velocity.y *= 0.3; // Reduced fall speed
-                        }
-
-                        // Climb up with W/Space
-                        if (player.input.isJumpPressed()) {
-                            player.velocity.y = 5; // Climb up speed
-                            player.isGrounded = false;
-                        }
-
-                    }
-                    continue; // Don't apply normal collision for ladder
-                }
-
-                // Skip wall collision (already handled in first pass)
-                if (platform.type === 'wall') {
+                if (allowDrop && player.input && player.input.isDownPressed && player.input.isDownPressed() && player.isGrounded) {
+                    player.dropThroughUntil = now + dropWindow;
+                    player.isGrounded = false;
                     continue;
                 }
-                if (platform.isOneWay) {
-                    if (playerVelocity.y > 0) {
-                        continue;
-                    }
-                    if (playerBounds.bottom < platform.bounds.top - 0.08) {
-                        continue;
-                    }
+                if (!solidFromAbove || playerVelocity.y > 0) {
+                    continue;
                 }
-
-                // Normal platform collision
-                // Determine collision direction based on velocity and overlap
-                const overlapLeft = playerBounds.right - platform.bounds.left;
-                const overlapRight = platform.bounds.right - playerBounds.left;
-                const overlapTop = playerBounds.top - platform.bounds.bottom;
-                const overlapBottom = platform.bounds.top - playerBounds.bottom;
-
-                // Find smallest overlap to determine collision direction
-                const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-
-                // Resolve based on smallest overlap AND velocity direction (prevents edge glitching)
-                if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
-                    // Player landed on top of platform (coming from above)
+                if (!oneWayCrossing && playerBounds.bottom < platform.bounds.top - 0.08) {
+                    continue;
+                }
+                if (oneWayCrossing) {
                     const impactSpeed = Math.abs(playerVelocity.y);
                     resolveCollisionY(player.position, platform.bounds, playerVelocity);
                     player.velocity.y = 0;
@@ -581,17 +600,9 @@ export class Level {
                     player.mesh.position.y = player.position.y;
                     triggerLandingSound(impactSpeed);
                     applyFallDamage(impactSpeed, platform);
-                    if (platform.breakable && platform.breakState === 'idle') {
-                        platform.breakState = 'shaking';
-                        platform.breakTimer = platform.breakDelay;
-                        platform.shakeTime = 0;
-                    }
-                    if (platform.type === 'launcher') {
-                        onLauncher = platform;
-                    }
                     if (platform.type === 'moving') {
-                        const prevX = platform.prevX ?? platform.mesh.position.x;
-                        const prevY = platform.prevY ?? platform.mesh.position.y;
+                        const prevX = platform.prevX != null ? platform.prevX : platform.mesh.position.x;
+                        const prevY = platform.prevY != null ? platform.prevY : platform.mesh.position.y;
                         const deltaX = platform.mesh.position.x - prevX;
                         const deltaY = platform.mesh.position.y - prevY;
                         player.position.x += deltaX;
@@ -599,33 +610,70 @@ export class Level {
                         player.mesh.position.x = player.position.x;
                         player.mesh.position.y = player.position.y;
                     }
-                } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
-                    // Player hit bottom of platform (jumping into it)
-                    resolveCollisionY(player.position, platform.bounds, playerVelocity);
-                    player.velocity.y = 0;
-                    player.mesh.position.y = player.position.y;
-                } else if ((minOverlap === overlapLeft && playerVelocity.x > 0) ||
-                           (minOverlap === overlapRight && playerVelocity.x < 0)) {
-                    // Only resolve horizontal collision if moving TOWARD the wall
-                    // This prevents edge-glitching when walking off platforms
-                    if (platform.type === 'cloud' || platform.isCloudPlatform) {
-                        continue;
-                    }
-                    resolveCollisionX(player.position, platform.bounds, playerVelocity);
-                    player.velocity.x = 0;
-                    player.mesh.position.x = player.position.x;
+                    continue;
                 }
+            }
+
+            // Normal platform collision
+            // Determine collision direction based on velocity and overlap
+            const overlapLeft = playerBounds.right - platform.bounds.left;
+            const overlapRight = platform.bounds.right - playerBounds.left;
+            const overlapTop = playerBounds.top - platform.bounds.bottom;
+            const overlapBottom = platform.bounds.top - playerBounds.bottom;
+
+            // Find smallest overlap to determine collision direction
+            const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+            // Resolve based on smallest overlap AND velocity direction (prevents edge glitching)
+            if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
+                // Player landed on top of platform (coming from above)
+                const impactSpeed = Math.abs(playerVelocity.y);
+                resolveCollisionY(player.position, platform.bounds, playerVelocity);
+                player.velocity.y = 0;
+                player.isGrounded = true;
+                player.mesh.position.y = player.position.y;
+                triggerLandingSound(impactSpeed);
+                applyFallDamage(impactSpeed, platform);
+                if (platform.breakable && platform.breakState === 'idle') {
+                    platform.breakState = 'shaking';
+                    platform.breakTimer = platform.breakDelay;
+                    platform.shakeTime = 0;
+                }
+                if (platform.type === 'launcher') {
+                    onLauncher = platform;
+                }
+                if (platform.type === 'moving') {
+                    const prevX = platform.prevX != null ? platform.prevX : platform.mesh.position.x;
+                    const prevY = platform.prevY != null ? platform.prevY : platform.mesh.position.y;
+                    const deltaX = platform.mesh.position.x - prevX;
+                    const deltaY = platform.mesh.position.y - prevY;
+                    player.position.x += deltaX;
+                    player.position.y += deltaY;
+                    player.mesh.position.x = player.position.x;
+                    player.mesh.position.y = player.position.y;
+                }
+            } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
+                // Player hit bottom of platform (jumping into it)
+                resolveCollisionY(player.position, platform.bounds, playerVelocity);
+                player.velocity.y = 0;
+                player.mesh.position.y = player.position.y;
+            } else if ((minOverlap === overlapLeft && playerVelocity.x > 0) ||
+                       (minOverlap === overlapRight && playerVelocity.x < 0)) {
+                // Only resolve horizontal collision if moving TOWARD the wall
+                // This prevents edge-glitching when walking off platforms
+                if (platform.type === 'cloud' || platform.isCloudPlatform || platform.isOneWay) {
+                    continue;
+                }
+                resolveCollisionX(player.position, platform.bounds, playerVelocity);
+                player.velocity.x = 0;
+                player.mesh.position.x = player.position.x;
             }
         }
 
         // Reset ladder flag if not on ladder
-        if (!onLadder) {
-            player.onLadder = false;
-        }
+        player.onLadder = Boolean(onLadder);
 
-        if (!onLauncher) {
-            player.launcherChargeStart = null;
-        } else {
+        if (onLauncher) {
             const now = performance.now();
             if (!player.launcherCooldownUntil || now >= player.launcherCooldownUntil) {
                 const launch = onLauncher.launchVelocity || { x: 0, y: 16 };
@@ -639,6 +687,8 @@ export class Level {
                 player.launcherChargeStart = null;
                 player.launcherCooldownUntil = now + 600;
             }
+        } else {
+            player.launcherChargeStart = null;
         }
 
         if (player.isGrounded) {
@@ -785,11 +835,11 @@ export class Level {
      */
     addWallWithLadder(x, baseY, wallHeight, options = {}) {
         const wallGroup = new THREE.Group();
-        const wallWidth = options.wallWidth ?? 1.5;
-        const visualOffset = options.visualOffset ?? 0;
-        const visualHeightOffset = options.visualHeightOffset ?? 0;
-        const ladderSide = options.ladderSide ?? 'right';
-        const addDoor = options.addDoor ?? false;
+        const wallWidth = options.wallWidth != null ? options.wallWidth : 1.5;
+        const visualOffset = options.visualOffset != null ? options.visualOffset : 0;
+        const visualHeightOffset = options.visualHeightOffset != null ? options.visualHeightOffset : 0;
+        const ladderSide = options.ladderSide != null ? options.ladderSide : 'right';
+        const addDoor = options.addDoor !== undefined ? options.addDoor : false;
 
         // Main wall body (stone blocks)
         const numBlocks = Math.floor(wallHeight / 0.8);
@@ -1127,7 +1177,7 @@ export class Level {
      * Create a test level with floating platforms
      */
     createTestLevel(options = {}) {
-        this.mapKey = options.mapKey ?? null;
+        this.mapKey = options.mapKey !== undefined ? options.mapKey : null;
         const includeInteractiveFlags = options.includeInteractiveFlags !== false;
         // Main ground platform (ground type with grass)
         const groundSurfaceY = -2.5;
@@ -1162,7 +1212,8 @@ export class Level {
             visualHeightOffset: 0.25
         });
         if (includeInteractiveFlags) {
-            this.addInteractiveFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0, 'blue', leftWallPlatform?.bounds?.top);
+            const leftWallTop = leftWallPlatform && leftWallPlatform.bounds ? leftWallPlatform.bounds.top : undefined;
+            this.addInteractiveFlag(leftCastleX, groundSurfaceY, wallHeight, 0x2f6cb0, 'blue', leftWallTop);
         }
 
         // Right castle
@@ -1175,11 +1226,12 @@ export class Level {
             visualHeightOffset: 0.25
         });
         if (includeInteractiveFlags) {
-            this.addInteractiveFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f, 'red', rightWallPlatform?.bounds?.top);
+            const rightWallTop = rightWallPlatform && rightWallPlatform.bounds ? rightWallPlatform.bounds.top : undefined;
+            this.addInteractiveFlag(rightCastleX, groundSurfaceY, wallHeight, 0xcc2f2f, 'red', rightWallTop);
         }
 
-        const leftWallTop = leftWallPlatform?.bounds?.top ?? (groundSurfaceY + wallHeight);
-        const rightWallTop = rightWallPlatform?.bounds?.top ?? (groundSurfaceY + wallHeight);
+        const leftWallTop = leftWallPlatform && leftWallPlatform.bounds ? leftWallPlatform.bounds.top : (groundSurfaceY + wallHeight);
+        const rightWallTop = rightWallPlatform && rightWallPlatform.bounds ? rightWallPlatform.bounds.top : (groundSurfaceY + wallHeight);
         this.flagSpawns = {
             blue: { x: leftCastleX, y: leftWallTop + 0.05 },
             red: { x: rightCastleX, y: rightWallTop + 0.05 }
@@ -1360,11 +1412,11 @@ export class Level {
     }
 
     createArenaLevel(options = {}) {
-        this.createTestLevel({ ...options, mapKey: options.mapKey ?? 'arena' });
+        this.createTestLevel({ ...options, mapKey: options.mapKey !== undefined ? options.mapKey : 'arena' });
     }
 
     createKothLevel(options = {}) {
-        this.createTestLevel({ ...options, mapKey: options.mapKey ?? 'koth' });
+        this.createTestLevel({ ...options, mapKey: options.mapKey !== undefined ? options.mapKey : 'koth' });
     }
 
     addWindZone(bounds, force) {

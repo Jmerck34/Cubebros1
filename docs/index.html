@@ -584,6 +584,11 @@
         }
 
         .menu-focus {
+            outline: none;
+            box-shadow: none;
+        }
+
+        body.controller-indicators-active .menu-focus {
             outline: 3px solid #ffd966;
             box-shadow: 0 0 18px rgba(255, 217, 102, 0.7);
         }
@@ -687,6 +692,11 @@
         }
 
         .player-count-button.menu-focus {
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: none;
+        }
+
+        body.controller-indicators-active .player-count-button.menu-focus {
             border-color: #ffd966;
             box-shadow: 0 0 12px rgba(255, 217, 102, 0.7);
         }
@@ -1525,6 +1535,6 @@
         </div>
     </div>
 
-    <script type="module" src="main_hero_select.js"></script>
+    <script type="module" src="main_hero_select.js?v=20260109"></script>
 </body>
 </html>
