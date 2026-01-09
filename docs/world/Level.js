@@ -756,9 +756,14 @@ export class Level {
      */
     updateMovingPlatforms(deltaTime) {
         for (const moving of this.movingPlatforms) {
+            const hasHorizontal = Math.abs(moving.rangeX) > 0.001;
+            const hasVertical = Math.abs(moving.rangeY) > 0.001;
+            const isVerticalOnly = hasVertical && !hasHorizontal;
+            const speedScale = isVerticalOnly ? 0.8 : 1;
             moving.time += deltaTime;
-            const offsetX = Math.sin(moving.time * moving.speed + moving.phase) * moving.rangeX;
-            const offsetY = Math.sin(moving.time * moving.speed + moving.phase) * moving.rangeY;
+            const time = moving.time * moving.speed * speedScale + moving.phase;
+            const offsetX = Math.sin(time) * moving.rangeX;
+            const offsetY = Math.sin(time) * moving.rangeY;
 
             const nextX = moving.baseX + offsetX;
             const nextY = moving.baseY + offsetY;
