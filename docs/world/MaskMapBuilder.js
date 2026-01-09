@@ -1,9 +1,14 @@
 const COLOR_MAP = {
-    solid: '#00FF01',
+    solidBody: '#00FF01',
+    solidPlatform: '#99FF00',
     oneWay: '#FFEF00',
+    movingOneWay: '#F8A900',
     ladder: '#CC00FF',
     travel: '#FF0008',
-    reference: '#0005FF',
+    killFloor: '#FF8B00',
+    reference: '#FF00EA',
+    spawnBlue: '#8E00FF',
+    spawnRed: '#FF006C',
     ignore: '#000000'
 };
 
@@ -111,6 +116,8 @@ export class MaskMapBuilder {
         const visited = new Array(width * height).fill(false);
         const regions = [];
         const references = [];
+        const spawnRegions = { blue: [], red: [] };
+        const killFloors = [];
 
         for (let y = 0; y < height; y += 1) {
             for (let x = 0; x < width; x += 1) {
@@ -131,6 +138,12 @@ export class MaskMapBuilder {
                 const region = floodFill({ data, width, height, startX: x, startY: y, matchKey: key, visited });
                 if (type === 'reference') {
                     references.push(region);
+                } else if (type === 'spawnBlue') {
+                    spawnRegions.blue.push(region);
+                } else if (type === 'spawnRed') {
+                    spawnRegions.red.push(region);
+                } else if (type === 'killFloor') {
+                    killFloors.push(region);
                 } else {
                     regions.push({ type, region });
                 }
@@ -157,6 +170,7 @@ export class MaskMapBuilder {
             key: config.key,
             platforms: [],
             oneWayPlatforms: [],
+            movingOneWayPlatforms: [],
             ladders: [],
             travellers: [],
             playerSpawns: config.playerSpawns || null,
@@ -168,10 +182,32 @@ export class MaskMapBuilder {
 
         regions.forEach(({ type, region }) => {
             const bounds = boundsFromPixels(region, { originX, originY, pixelsPerUnit });
-            if (type === 'solid') {
-                mapData.platforms.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, type: config.solidType || 'stone' });
+            if (type === 'solidBody') {
+                mapData.platforms.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    type: config.solidBodyType || config.solidType || 'stone'
+                });
+            } else if (type === 'solidPlatform') {
+                mapData.platforms.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    type: config.solidPlatformType || config.solidType || 'grass'
+                });
             } else if (type === 'oneWay') {
                 mapData.oneWayPlatforms.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, type: config.oneWayType || 'grass' });
+            } else if (type === 'movingOneWay') {
+                mapData.movingOneWayPlatforms.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    type: config.movingOneWayType || config.oneWayType || 'grass'
+                });
             } else if (type === 'ladder') {
                 mapData.ladders.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height });
             } else if (type === 'travel') {
@@ -259,8 +295,8 @@ export class MaskMapBuilder {
                 const right = Math.max(...allBounds.map((b) => b.right));
                 const top = Math.max(...allBounds.map((b) => b.top));
                 const bottom = Math.min(...allBounds.map((b) => b.bottom));
-                const paddingX = config.boundsPadding?.x ?? 2;
-                const paddingY = config.boundsPadding?.y ?? 2;
+                const paddingX = config.boundsPadding && Number.isFinite(config.boundsPadding.x) ? config.boundsPadding.x : 2;
+                const paddingY = config.boundsPadding && Number.isFinite(config.boundsPadding.y) ? config.boundsPadding.y : 2;
                 const cameraHasBounds = Boolean(config.camera && Object.prototype.hasOwnProperty.call(config.camera, 'bounds'));
                 if (!cameraHasBounds) {
                     if (!mapData.camera) {
@@ -273,9 +309,44 @@ export class MaskMapBuilder {
                         top: top + paddingY
                     };
                 }
-                const killPadding = config.killFloorPadding ?? 4;
-                mapData.deathY = bottom - killPadding;
+                if (!Number.isFinite(mapData.deathY)) {
+                    const killPadding = Number.isFinite(config.killFloorPadding) ? config.killFloorPadding : 4;
+                    mapData.deathY = bottom - killPadding;
+                }
             }
+        }
+
+        if (!mapData.playerSpawns) {
+            const pickLargest = (items) => {
+                if (!items.length) return null;
+                return items.reduce((best, current) => {
+                    const area = (current.maxX - current.minX + 1) * (current.maxY - current.minY + 1);
+                    if (!best) return { region: current, area };
+                    return area > best.area ? { region: current, area } : best;
+                }, null);
+            };
+            const blue = pickLargest(spawnRegions.blue);
+            const red = pickLargest(spawnRegions.red);
+            if (blue || red) {
+                mapData.playerSpawns = {};
+                if (blue && blue.region) {
+                    const bounds = boundsFromPixels(blue.region, { originX, originY, pixelsPerUnit });
+                    mapData.playerSpawns.blue = { x: bounds.x, y: bounds.y };
+                }
+                if (red && red.region) {
+                    const bounds = boundsFromPixels(red.region, { originX, originY, pixelsPerUnit });
+                    mapData.playerSpawns.red = { x: bounds.x, y: bounds.y };
+                }
+            }
+        }
+
+        if (killFloors.length) {
+            const floorYs = killFloors.map((region) => {
+                const bounds = boundsFromPixels(region, { originX, originY, pixelsPerUnit });
+                return bounds.y;
+            });
+            const lowest = Math.min(...floorYs);
+            mapData.deathY = lowest;
         }
 
         return mapData;

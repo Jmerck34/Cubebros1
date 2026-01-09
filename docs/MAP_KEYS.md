@@ -36,3 +36,18 @@ Fields:
 
 Set in `threejs-platformer/docs/world/Level.js` via `createTestLevel(...)`,
 `createArenaLevel(...)`, `createKothLevel(...)`, and `createGameTestLevel()`.
+
+# Hilltower Mask Colors
+
+Color codes used by the Hilltower PNG mask:
+
+- `#00FF01` Solid Body (structures)
+- `#99FF00` Solid Platform
+- `#FFEF00` One Way Platform
+- `#F8A900` Moving One Way Platform (moves along Traveller)
+- `#CC00FF` Ladder
+- `#FF0008` Traveller path
+- `#FF8B00` Kill floor line
+- `#FF00EA` Player size reference
+- `#8E00FF` Blue team spawn
+- `#FF006C` Red team spawn
