@@ -36,10 +36,10 @@ export class InputManager {
             right: ['Axis0+', 'DPadRight'],
             jump: ['Button0'],
             down: ['Axis1+', 'DPadDown'],
-            ability1: ['Button2'],
-            ability2: ['Button1'],
-            ability3: ['Button3'],
-            ultimate: ['Button5', 'Button7'],
+            ability1: ['Button7'],
+            ability2: ['Button6'],
+            ability3: ['Button5'],
+            ultimate: ['Button4'],
             flagDrop: ['DPadDown']
         };
         this.gamepadBindings = {};
@@ -356,14 +356,14 @@ export class InputManager {
     }
 
     /**
-     * Get left stick axes for aim input.
+     * Get right stick axes for aim input.
      * @returns {{x:number,y:number}|null}
      */
     getAimStick() {
         const pad = this.gamepad;
         if (!pad || !pad.connected || !pad.axes) return null;
-        const axisX = pad.axes[0] || 0;
-        const axisY = pad.axes[1] || 0;
+        const axisX = pad.axes[2] || 0;
+        const axisY = pad.axes[3] || 0;
         const magnitude = Math.hypot(axisX, axisY);
         if (magnitude < this.gamepadDeadzone) return null;
         return { x: axisX, y: axisY };

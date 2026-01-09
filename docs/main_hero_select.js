@@ -927,7 +927,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
         console.log('Move: Arrow Keys/A/D | Jump: W/Space (double jump!)');
         console.log('Abilities: Q/Left Click = A1 | Right Click = A2 | E = A3 | R = Ultimate');
     }
-    console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
+    console.log('Gamepad: Left Stick/D-Pad move | Right Stick = Aim | A = Jump | RT = A1 | LT = A2 | RB = A3 | LB = Ultimate');
 }
 
 function getTeamSpawn(levelInstance, team) {

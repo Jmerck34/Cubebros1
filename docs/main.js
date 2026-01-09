@@ -148,5 +148,5 @@ gameLoop.start();
 console.log('⚔️ WARRIOR HERO READY! ⚔️');
 console.log('Move: Arrow Keys/A/D | Jump: Space (double jump!)');
 console.log('Abilities: Left Click/Q = Sword Slash | W = Shield Bash | E = Dash | R = Whirlwind Ultimate');
-console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
+        console.log('Gamepad: Left Stick/D-Pad move | Right Stick = Aim | A = Jump | RT = A1 | LT = A2 | RB = A3 | LB = Ultimate');
 console.log('Kill enemies to charge ultimate!');

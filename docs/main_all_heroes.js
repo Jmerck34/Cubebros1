@@ -193,7 +193,7 @@ gameLoop.start();
 
 console.log('🎮 HERO SELECTION READY! 🎮');
 console.log('Move: Arrow Keys/A/D | Jump: Space (double jump!)');
-console.log('Gamepad: Left Stick/D-Pad move | A = Jump | X/B/Y = Abilities | RB/RT = Ultimate');
+console.log('Gamepad: Left Stick/D-Pad move | Right Stick = Aim | A = Jump | RT = A1 | LT = A2 | RB = A3 | LB = Ultimate');
 console.log('');
 console.log('📋 HERO ABILITIES:');
 console.log('');

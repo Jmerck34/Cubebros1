@@ -578,10 +578,15 @@ export class Level {
                 if (dropThroughActive) {
                     continue;
                 }
-                if (allowDrop && player.input && player.input.isDownPressed && player.input.isDownPressed() && player.isGrounded) {
-                    player.dropThroughUntil = now + dropWindow;
-                    player.isGrounded = false;
-                    continue;
+                if (allowDrop && player.input && player.input.isDownPressed && player.input.isDownPressed()) {
+                    const nearTop = Math.abs(playerBounds.bottom - platform.bounds.top) < 0.12;
+                    if (player.isGrounded || (nearTop && playerVelocity.y <= 0)) {
+                        player.dropThroughUntil = now + dropWindow;
+                        player.isGrounded = false;
+                        player.position.y -= 0.06;
+                        player.mesh.position.y = player.position.y;
+                        continue;
+                    }
                 }
                 if (!solidFromAbove || playerVelocity.y > 0) {
                     continue;
