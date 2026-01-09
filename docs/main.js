@@ -43,7 +43,7 @@ const input = new InputManager();
 
 // Create level with platforms
 const level = new Level(scene);
-level.createTestLevel(); // Adds ground + floating platforms
+level.createTestLevel({ mapKey: 'playtest' }); // Adds ground + floating platforms
 
 // Add enemies to level
 const goomba1 = new Goomba(scene, 8, 0);

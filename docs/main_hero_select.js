@@ -24,6 +24,7 @@ import { updateDamageNumbers, clearDamageNumbers } from './utils/damageNumbers.j
 import { CaptureTheFlagMode } from './gameModes/CaptureTheFlagMode.js';
 import { ArenaMode } from './gameModes/ArenaMode.js';
 import { KingOfTheHillMode } from './gameModes/KingOfTheHillMode.js';
+import { GameTestMode } from './gameModes/GameTestMode.js';
 
 // Game state
 let gameStarted = false;
@@ -489,42 +490,54 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
     input2 = inputs[1] || null;
 
     // Create environment (background, clouds, particles)
-    environment = new Environment(scene);
-    environment.createBackground();
+    if (selectedGameMode === 'game-test') {
+        scene.background = null;
+        environment = null;
+    } else {
+        scene.background = new THREE.Color(0x5c94fc);
+        environment = new Environment(scene);
+        environment.createBackground();
+    }
 
     // Create level with platforms
     level = new Level(scene);
-    if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
-        level.createKothLevel({ includeInteractiveFlags: false });
+    if (selectedGameMode === 'game-test' && typeof level.createGameTestLevel === 'function') {
+        level.createGameTestLevel();
+    } else if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
+        level.createKothLevel({ includeInteractiveFlags: false, mapKey: 'koth' });
     } else if (selectedGameMode === 'arena' && typeof level.createArenaLevel === 'function') {
-        level.createArenaLevel({ includeInteractiveFlags: false });
+        level.createArenaLevel({ includeInteractiveFlags: false, mapKey: 'arena' });
     } else {
-        level.createTestLevel({ includeInteractiveFlags: false });
+        level.createTestLevel({ includeInteractiveFlags: false, mapKey: selectedGameMode || 'playtest' });
     }
     healthPotions = createHealthPotions(level);
 
     // Setup parallax manager (foreground/midground/background)
     parallaxManager = new ParallaxManager(camera);
-    environment.getParallaxLayers().forEach(layer => parallaxManager.addLayer(layer));
+    if (environment) {
+        environment.getParallaxLayers().forEach(layer => parallaxManager.addLayer(layer));
+    }
     parallaxManager.addLayer({ root: level.group, speedMultiplier: 1 });
 
-    // Add enemies to level (positioned to avoid platforms)
-    const goomba1 = new Goomba(scene, 8, 0);    // Right side near grass platform
-    level.addEnemy(goomba1);
+    if (selectedGameMode !== 'game-test') {
+        // Add enemies to level (positioned to avoid platforms)
+        const goomba1 = new Goomba(scene, 8, 0);    // Right side near grass platform
+        level.addEnemy(goomba1);
 
-    const goomba2 = new Goomba(scene, -7, 0);   // Left side, clear area
-    level.addEnemy(goomba2);
+        const goomba2 = new Goomba(scene, -7, 0);   // Left side, clear area
+        level.addEnemy(goomba2);
 
-    const goomba3 = new Goomba(scene, 12, 3);   // On floating platform
-    level.addEnemy(goomba3);
+        const goomba3 = new Goomba(scene, 12, 3);   // On floating platform
+        level.addEnemy(goomba3);
 
-    // REMOVED: goomba4 was at -12 (conflicts with wall with ladder)
+        // REMOVED: goomba4 was at -12 (conflicts with wall with ladder)
 
-    const goomba5 = new Goomba(scene, -17, 3);  // Far left on grass platform
-    level.addEnemy(goomba5);
+        const goomba5 = new Goomba(scene, -17, 3);  // Far left on grass platform
+        level.addEnemy(goomba5);
 
-    const goomba6 = new Goomba(scene, 18, 0);   // Far right ground
-    level.addEnemy(goomba6);
+        const goomba6 = new Goomba(scene, 18, 0);   // Far right ground
+        level.addEnemy(goomba6);
+    }
 
     const resolvedHeroes = [];
     for (let i = 0; i < localPlayerCount; i += 1) {
@@ -634,6 +647,12 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
         }
     });
 
+    if (selectedGameMode === 'game-test' && typeof debugMenu.spawnTrainingDummy === 'function') {
+        debugMenu.spawnTrainingDummy();
+    } else if (debugMenu && typeof debugMenu.removeTrainingDummy === 'function') {
+        debugMenu.removeTrainingDummy();
+    }
+
     if (gameMode) {
         gameMode.destroy();
     }
@@ -641,6 +660,14 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
         gameMode = new CaptureTheFlagMode({
             scene,
             level,
+            onScoreboardVisible: setScoreboardVisible,
+            onScoreChange: (scores) => {
+                teamScores = { ...scores };
+                updateScoreboard(teamScores);
+            }
+        });
+    } else if (selectedGameMode === 'game-test') {
+        gameMode = new GameTestMode({
             onScoreboardVisible: setScoreboardVisible,
             onScoreChange: (scores) => {
                 teamScores = { ...scores };
@@ -780,7 +807,9 @@ function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
             updateLadderHint(players);
 
             // Update environment animations
-            environment.update(deltaTime);
+            if (environment) {
+                environment.update(deltaTime);
+            }
         },
         () => {
             const size = renderer.getSize(new THREE.Vector2());
@@ -2158,7 +2187,8 @@ window.addEventListener('load', () => {
     const modeCtfButton = document.getElementById('mode-ctf');
     const modeArenaButton = document.getElementById('mode-arena');
     const modeKothButton = document.getElementById('mode-koth');
-    modeButtons = [modeCtfButton, modeArenaButton, modeKothButton].filter(Boolean);
+    const modeTestButton = document.getElementById('mode-test');
+    modeButtons = [modeCtfButton, modeArenaButton, modeKothButton, modeTestButton].filter(Boolean);
     if (modeCtfButton) {
         modeCtfButton.addEventListener('click', () => selectGameMode('ctf'));
     }
@@ -2167,6 +2197,9 @@ window.addEventListener('load', () => {
     }
     if (modeKothButton) {
         modeKothButton.addEventListener('click', () => selectGameMode('koth'));
+    }
+    if (modeTestButton) {
+        modeTestButton.addEventListener('click', () => selectGameMode('game-test'));
     }
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');

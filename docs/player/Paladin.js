@@ -28,23 +28,26 @@ export class Paladin extends Hero {
      */
     createEquipment(scene) {
         this.maceGroup = new THREE.Group();
-        const handleGeometry = new THREE.BoxGeometry(0.12, 0.7, 0.08);
+        const handleHeight = 0.7;
+        const handleGeometry = new THREE.BoxGeometry(0.12, handleHeight, 0.08);
         const handleMaterial = new THREE.MeshBasicMaterial({ color: 0x6b4a2b });
         const handle = new THREE.Mesh(handleGeometry, handleMaterial);
-        handle.position.set(0, -0.1, 0);
+        const handleCenterY = -0.1;
+        handle.position.set(0, handleCenterY, 0);
         this.maceGroup.add(handle);
+        this.maceHandle = handle;
 
-        const headGeometry = new THREE.BoxGeometry(0.38, 0.38, 0.2);
+        const headHeight = 0.38;
+        const headGeometry = new THREE.BoxGeometry(0.38, headHeight, 0.2);
         const headMaterial = new THREE.MeshBasicMaterial({ color: 0xbfc7cf });
+        this.maceHeadGeometry = headGeometry;
+        this.maceHeadMaterial = headMaterial;
         const head = new THREE.Mesh(headGeometry, headMaterial);
-        head.position.set(0, 0.35, 0);
+        const handleTop = handleCenterY + handleHeight / 2;
+        this.maceHandleTipLocal = new THREE.Vector3(0, handleTop, 0);
+        head.position.set(0, handleTop + headHeight / 2 - 0.02, 0);
         this.maceGroup.add(head);
-
-        const capGeometry = new THREE.BoxGeometry(0.18, 0.12, 0.12);
-        const capMaterial = new THREE.MeshBasicMaterial({ color: 0x8a959f });
-        const cap = new THREE.Mesh(capGeometry, capMaterial);
-        cap.position.set(0, 0.55, 0);
-        this.maceGroup.add(cap);
+        this.maceHead = head;
 
         this.maceGroup.position.set(0.55, -0.1, 0.1);
         this.maceGroup.rotation.z = -0.85;
@@ -75,6 +78,15 @@ export class Paladin extends Hero {
         this.shieldBase = { x: -0.62, y: 0.02, z: 0.1, rotZ: 0 };
     }
 
+    getMaceHandleTipWorld() {
+        if (!this.maceGroup || !this.maceHandleTipLocal) {
+            return { x: this.position.x, y: this.position.y };
+        }
+        const tip = this.maceHandleTipLocal.clone();
+        this.maceGroup.localToWorld(tip);
+        return { x: tip.x, y: tip.y };
+    }
+
     /**
      * Initialize Paladin abilities
      */
@@ -93,7 +105,7 @@ export class Paladin extends Hero {
             return true;
         };
 
-        const chainMace = new Ability('Chain Mace', 1.5, false, 2);
+        const chainMace = new Ability('Chain Mace', 4, false, 2);
         chainMace.use = (hero) => {
             if (!Ability.prototype.use.call(chainMace, hero)) return false;
             hero.chainMaceAttack();
@@ -280,22 +292,50 @@ export class Paladin extends Hero {
         const maxRange = 10.8;
         const level = this.level || { platforms: [] };
 
-        const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.25, 12, 12),
-            new THREE.MeshBasicMaterial({ color: 0xb8c0c8 })
-        );
-        let headX = this.position.x + direction.x * 0.6;
-        let headY = this.position.y + direction.y * 0.2;
+        const headGeometry = this.maceHeadGeometry || new THREE.BoxGeometry(0.38, 0.38, 0.2);
+        const headMaterial = this.maceHeadMaterial || new THREE.MeshBasicMaterial({ color: 0xb8c0c8 });
+        const head = this.maceHead || new THREE.Mesh(headGeometry, headMaterial);
+        if (head.userData?.chainMaceInUse) {
+            return;
+        }
+        const originalParent = head.parent;
+        const originalLocalPos = head.position.clone();
+        const originalLocalQuat = head.quaternion.clone();
+        const originalLocalScale = head.scale.clone();
+        head.userData.chainMaceInUse = true;
+
+        if (originalParent) {
+            const worldPos = new THREE.Vector3();
+            const worldQuat = new THREE.Quaternion();
+            const worldScale = new THREE.Vector3();
+            head.getWorldPosition(worldPos);
+            head.getWorldQuaternion(worldQuat);
+            head.getWorldScale(worldScale);
+            originalParent.remove(head);
+            this.mesh.parent.add(head);
+            head.position.copy(worldPos);
+            head.quaternion.copy(worldQuat);
+            head.scale.copy(worldScale);
+        } else if (!head.parent) {
+            this.mesh.parent.add(head);
+        }
+        const handleTip = this.getMaceHandleTipWorld();
+        let headX = handleTip.x + direction.x * 0.35;
+        let headY = handleTip.y + direction.y * 0.2;
         head.position.set(headX, headY, 0.25);
         this.mesh.parent.add(head);
 
-        const chainGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(this.position.x, this.position.y, 0.15),
-            new THREE.Vector3(headX, headY, 0.15)
-        ]);
-        const chainMaterial = new THREE.LineBasicMaterial({ color: 0x9aa4ad });
-        const chain = new THREE.Line(chainGeometry, chainMaterial);
-        this.mesh.parent.add(chain);
+        const chainGroup = new THREE.Group();
+        const chainLinks = [];
+        const chainLinkCount = 5;
+        const chainScale = 0.35;
+        for (let i = 0; i < chainLinkCount; i++) {
+            const link = new THREE.Mesh(headGeometry, headMaterial);
+            link.scale.set(chainScale, chainScale, chainScale);
+            chainGroup.add(link);
+            chainLinks.push(link);
+        }
+        this.mesh.parent.add(chainGroup);
 
         const startX = headX;
         const startY = headY;
@@ -306,8 +346,9 @@ export class Paladin extends Hero {
         const interval = setInterval(() => {
             let moveDir = direction;
             if (returning) {
-                returnTarget.x = this.position.x;
-                returnTarget.y = this.position.y;
+                const tipPos = this.getMaceHandleTipWorld();
+                returnTarget.x = tipPos.x;
+                returnTarget.y = tipPos.y;
                 const toTargetX = returnTarget.x - headX;
                 const toTargetY = returnTarget.y - headY;
                 const dist = Math.hypot(toTargetX, toTargetY) || 0.0001;
@@ -317,10 +358,17 @@ export class Paladin extends Hero {
             headX += moveDir.x * speed * 0.016;
             headY += moveDir.y * speed * 0.016;
             head.position.set(headX, headY, 0.25);
-            chain.geometry.setFromPoints([
-                new THREE.Vector3(this.position.x, this.position.y, 0.15),
-                new THREE.Vector3(headX, headY, 0.15)
-            ]);
+            const tipPos = this.getMaceHandleTipWorld();
+            const startX = tipPos.x;
+            const startY = tipPos.y;
+            chainLinks.forEach((link, index) => {
+                const t = (index + 1) / (chainLinks.length + 1);
+                link.position.set(
+                    startX + (headX - startX) * t,
+                    startY + (headY - startY) * t,
+                    0.15
+                );
+            });
 
             if (this.isPositionBlockedByProtectionDome({ x: headX, y: headY })) {
                 resolved = true;
@@ -383,7 +431,14 @@ export class Paladin extends Hero {
             if (resolved) {
                 clearInterval(interval);
                 if (head.parent) this.mesh.parent.remove(head);
-                if (chain.parent) this.mesh.parent.remove(chain);
+                if (chainGroup.parent) this.mesh.parent.remove(chainGroup);
+                if (originalParent) {
+                    originalParent.add(head);
+                    head.position.copy(originalLocalPos);
+                    head.quaternion.copy(originalLocalQuat);
+                    head.scale.copy(originalLocalScale);
+                }
+                head.userData.chainMaceInUse = false;
             }
         }, 16);
     }

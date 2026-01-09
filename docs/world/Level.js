@@ -1,5 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { checkAABBCollision, resolveCollisionY, resolveCollisionX } from '../utils/collision.js';
+import { SolidBody } from './SolidBody.js';
+import { SolidPlatform } from './SolidPlatform.js';
+import { Ladder } from './Ladder.js';
 
 const FOREGROUND_PALETTE = {
     groundBody: 0x8f563b,
@@ -52,6 +55,8 @@ export class Level {
         this.flags = [];
         this.windZones = [];
         this.windStreaks = [];
+        this.bodies = [];
+        this.mapKey = null;
     }
 
     /**
@@ -252,6 +257,11 @@ export class Level {
             springDuration: type === 'launcher' ? 0.45 : 0.25
         };
 
+        platform.body = new SolidPlatform({
+            bounds: platform.bounds,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(platform.body);
         this.platforms.push(platform);
         return platform;
     }
@@ -270,6 +280,9 @@ export class Level {
         platform.type = 'moving';
         platform.baseType = type;
         platform.isCloudPlatform = type === 'cloud';
+        if (platform.body) {
+            platform.body.setMovable(true);
+        }
 
         this.movingPlatforms.push({
             platform,
@@ -871,6 +884,12 @@ export class Level {
             type: 'wall'
         };
 
+        platform.body = new SolidBody({
+            collisionShape: { type: 'aabb', bounds: platform.bounds },
+            movable: false,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(platform.body);
         this.platforms.push(platform);
 
         // Add ladder collision zone (allows climbing) - stops 0.5 units below wall top
@@ -886,6 +905,11 @@ export class Level {
             isLadder: true // Special flag for climbing
         };
 
+        ladderPlatform.body = new Ladder({
+            bounds: ladderPlatform.bounds,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(ladderPlatform.body);
         this.platforms.push(ladderPlatform);
         return platform;
     }
@@ -1028,6 +1052,7 @@ export class Level {
      * Create a test level with floating platforms
      */
     createTestLevel(options = {}) {
+        this.mapKey = options.mapKey ?? null;
         const includeInteractiveFlags = options.includeInteractiveFlags !== false;
         // Main ground platform (ground type with grass)
         const groundSurfaceY = -2.5;
@@ -1106,6 +1131,13 @@ export class Level {
             type: 'wall'
         });
 
+        this.platforms[this.platforms.length - 1].body = new SolidBody({
+            collisionShape: { type: 'aabb', bounds: this.platforms[this.platforms.length - 1].bounds },
+            movable: false,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(this.platforms[this.platforms.length - 1].body);
+
         this.platforms.push({
             mesh: null,
             bounds: {
@@ -1116,6 +1148,13 @@ export class Level {
             },
             type: 'wall'
         });
+
+        this.platforms[this.platforms.length - 1].body = new SolidBody({
+            collisionShape: { type: 'aabb', bounds: this.platforms[this.platforms.length - 1].bounds },
+            movable: false,
+            mapKey: this.mapKey
+        });
+        this.bodies.push(this.platforms[this.platforms.length - 1].body);
 
         // Moving platforms over the longer outer gaps
         const movingGapY = 1.4;
@@ -1233,12 +1272,38 @@ export class Level {
         );
     }
 
+    createGameTestLevel() {
+        this.mapKey = 'game-test';
+        const groundSurfaceY = -2.5;
+        const groundBottomY = -7.5;
+        const groundHeight = groundSurfaceY - groundBottomY;
+        const groundCenterY = groundSurfaceY - groundHeight / 2;
+        const groundWidth = 40;
+
+        this.addPlatform(0, groundCenterY, groundWidth, groundHeight, 'ground');
+
+        const floatingY = 1.0;
+        const floatingWidth = 6;
+        const floatingHeight = 0.6;
+        const spacing = 8;
+
+        this.addPlatform(-spacing, floatingY, floatingWidth, floatingHeight, 'stone');
+        this.addPlatform(0, floatingY, floatingWidth, floatingHeight, 'stone');
+        this.addPlatform(spacing, floatingY, floatingWidth, floatingHeight, 'stone');
+
+        this.playerSpawns = {
+            blue: { x: -6, y: groundSurfaceY + 0.5 },
+            red: { x: 6, y: groundSurfaceY + 0.5 }
+        };
+        this.flagSpawns = { ...this.playerSpawns };
+    }
+
     createArenaLevel(options = {}) {
-        this.createTestLevel(options);
+        this.createTestLevel({ ...options, mapKey: options.mapKey ?? 'arena' });
     }
 
     createKothLevel(options = {}) {
-        this.createTestLevel(options);
+        this.createTestLevel({ ...options, mapKey: options.mapKey ?? 'koth' });
     }
 
     addWindZone(bounds, force) {

@@ -704,22 +704,11 @@ export class DebugMenu {
         dummy.velocity.y = 0;
         dummy.maxHealth = Math.max(dummy.maxHealth || 100, 200);
         dummy.currentHealth = dummy.maxHealth;
+        dummy.respawnDelay = 1.5;
+        dummy.respawnTimer = 0;
         if (dummy.healthBar && typeof dummy.healthBar.setHealth === 'function') {
             dummy.healthBar.setHealth(dummy.currentHealth);
         }
-
-        const originalDie = dummy.die ? dummy.die.bind(dummy) : null;
-        dummy.die = () => {
-            if (originalDie) {
-                originalDie();
-            }
-            dummy.currentHealth = dummy.maxHealth;
-            dummy.isAlive = true;
-            dummy.respawnTimer = 0;
-            if (dummy.healthBar && typeof dummy.healthBar.setHealth === 'function') {
-                dummy.healthBar.setHealth(dummy.currentHealth);
-            }
-        };
 
         dummy.enemies = this.player.enemies || [];
 
@@ -766,11 +755,23 @@ export class DebugMenu {
         if (this.trainingDummyTicker) {
             clearInterval(this.trainingDummyTicker);
         }
+        let lastTick = performance.now();
         this.trainingDummyTicker = setInterval(() => {
+            const now = performance.now();
+            const deltaTime = Math.max(0, (now - lastTick) / 1000);
+            lastTick = now;
             if (!this.trainingDummy) {
                 clearInterval(this.trainingDummyTicker);
                 this.trainingDummyTicker = null;
                 return;
+            }
+            if (!this.trainingDummy.isAlive) {
+                this.trainingDummy.respawnTimer = Math.max(0, this.trainingDummy.respawnTimer - deltaTime);
+                if (this.trainingDummy.respawnTimer === 0) {
+                    this.trainingDummy.respawn();
+                } else if (typeof this.trainingDummy.updateRespawnIndicator === 'function') {
+                    this.trainingDummy.updateRespawnIndicator();
+                }
             }
             this.trainingDummy.syncMeshPosition();
             if (this.trainingDummy.healthBar) {

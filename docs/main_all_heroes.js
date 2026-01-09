@@ -54,7 +54,7 @@ environment.createBackground();
 
 // Create level with platforms
 const level = new Level(scene);
-level.createTestLevel(); // Adds ground + floating platforms
+level.createTestLevel({ mapKey: 'playtest' }); // Adds ground + floating platforms
 
 // Setup parallax manager (foreground/midground/background)
 const parallaxManager = new ParallaxManager(camera);
