@@ -130,7 +130,9 @@ export class MapBuilder {
         if (movingPlatforms.length) {
             movingPlatforms.forEach((platformDef) => {
                 if (!platformDef) return;
-                const platform = level.addPlatform(platformDef.x, platformDef.y, platformDef.width, platformDef.height, platformDef.type || 'grass');
+                const platform = typeof level.addOneWayPlatform === 'function'
+                    ? level.addOneWayPlatform(platformDef.x, platformDef.y, platformDef.width, platformDef.height, platformDef.type || 'grass')
+                    : level.addPlatform(platformDef.x, platformDef.y, platformDef.width, platformDef.height, platformDef.type || 'grass');
                 const traveller = consumeNearestTraveller({ x: platformDef.x, y: platformDef.y }, availableTravellers);
                 if (!traveller) {
                     return;
