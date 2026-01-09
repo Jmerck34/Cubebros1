@@ -67,12 +67,14 @@ export class MapBuilder {
             return picked || null;
         };
 
-        const registerMovingPlatform = (platform, traveller, speed) => {
-            if (!platform || !traveller || !traveller.start || !traveller.end) return;
-            const baseX = (traveller.start.x + traveller.end.x) / 2;
-            const baseY = (traveller.start.y + traveller.end.y) / 2;
-            const rangeX = (traveller.end.x - traveller.start.x) / 2;
-            const rangeY = (traveller.end.y - traveller.start.y) / 2;
+        const registerMovingPlatform = (platform, rangeX, rangeY, speed) => {
+            if (!platform) return;
+            const baseX = Number.isFinite(platform.bounds && platform.bounds.centerX)
+                ? platform.bounds.centerX
+                : platform.mesh.position.x;
+            const baseY = Number.isFinite(platform.bounds && platform.bounds.centerY)
+                ? platform.bounds.centerY
+                : platform.mesh.position.y;
             const phase = 0;
             if (platform.body && typeof platform.body.setMovable === 'function') {
                 platform.body.setMovable(true);
@@ -80,15 +82,6 @@ export class MapBuilder {
             const originalType = platform.type;
             platform.type = 'moving';
             platform.baseType = platform.baseType || originalType;
-            if (platform.mesh && platform.bounds) {
-                const width = platform.bounds.right - platform.bounds.left;
-                const height = platform.bounds.top - platform.bounds.bottom;
-                platform.mesh.position.set(baseX, baseY, 0);
-                platform.bounds.left = baseX - width / 2;
-                platform.bounds.right = baseX + width / 2;
-                platform.bounds.top = baseY + height / 2;
-                platform.bounds.bottom = baseY - height / 2;
-            }
             level.movingPlatforms.push({
                 platform,
                 baseX,
@@ -102,38 +95,22 @@ export class MapBuilder {
         };
 
         const availableTravellers = travellers.slice();
-        const movingOneWayPlatforms = mapData.movingOneWayPlatforms || [];
-        if (movingOneWayPlatforms.length) {
-            movingOneWayPlatforms.forEach((platformDef) => {
-                if (!platformDef || typeof level.addOneWayPlatform !== 'function') return;
-                const platform = level.addOneWayPlatform(platformDef.x, platformDef.y, platformDef.width, platformDef.height, platformDef.type || 'grass');
+        const movingPlatforms = mapData.movingPlatforms || [];
+        if (movingPlatforms.length) {
+            movingPlatforms.forEach((platformDef) => {
+                if (!platformDef) return;
+                const platform = level.addPlatform(platformDef.x, platformDef.y, platformDef.width, platformDef.height, platformDef.type || 'grass');
                 const traveller = consumeNearestTraveller({ x: platformDef.x, y: platformDef.y }, availableTravellers);
-                if (traveller) {
-                    registerMovingPlatform(platform, traveller, travelSpeed);
+                if (!traveller) {
+                    return;
                 }
+                const rangeX = (traveller.end.x - traveller.start.x) / 2;
+                const rangeY = (traveller.end.y - traveller.start.y) / 2;
+                registerMovingPlatform(platform, rangeX, rangeY, travelSpeed);
             });
         }
 
-        if (availableTravellers.length) {
-            const platformConfig = mapData.travelPlatform || { width: 3, height: 0.6, type: 'stone' };
-            availableTravellers.forEach((traveller) => {
-                if (!traveller || !traveller.start || !traveller.end) return;
-                if (typeof level.addMovingPlatform === 'function') {
-                    level.addMovingPlatform(
-                        (traveller.start.x + traveller.end.x) / 2,
-                        (traveller.start.y + traveller.end.y) / 2,
-                        platformConfig.width,
-                        platformConfig.height,
-                        platformConfig.type || 'stone',
-                        {
-                            rangeX: (traveller.end.x - traveller.start.x) / 2,
-                            rangeY: (traveller.end.y - traveller.start.y) / 2,
-                            speed: travelSpeed
-                        }
-                    );
-                }
-            });
-        }
+        // Travellers only define motion for explicit moving platforms.
 
         if (mapData.playerSpawns) {
             level.playerSpawns = { ...mapData.playerSpawns };

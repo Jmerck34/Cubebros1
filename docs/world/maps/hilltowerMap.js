@@ -1,19 +1,18 @@
 export const hilltowerMaskConfig = {
     key: 'hilltower',
-    url: './assets/maps/hilltower-map.png',
+    url: './assets/maps/hilltower-map.png?v=20260109',
     solidBodyType: 'stone',
     solidPlatformType: 'grass',
     oneWayType: 'grass',
-    movingOneWayType: 'grass',
+    movingPlatformType: 'grass',
+    movingPlatformStatic: false,
+    disableMovingPlatforms: false,
+    disableTravellers: false,
     autoBounds: true,
     boundsPadding: { x: 2, y: 2 },
     killFloorPadding: 6,
-    travelPlatform: {
-        width: 2.8,
-        height: 0.6,
-        type: 'stone'
-    },
-    travelSpeed: 1.0,
+    travelPlatform: null,
+    travelSpeed: null,
     mergeSolids: {
         gap: 0.6,
         heightTolerance: 0.2

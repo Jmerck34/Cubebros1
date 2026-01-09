@@ -2,7 +2,7 @@ const COLOR_MAP = {
     solidBody: '#00FF01',
     solidPlatform: '#99FF00',
     oneWay: '#FFEF00',
-    movingOneWay: '#F8A900',
+    movingPlatform: '#F8A900',
     ladder: '#CC00FF',
     travel: '#FF0008',
     killFloor: '#FF8B00',
@@ -170,7 +170,7 @@ export class MaskMapBuilder {
             key: config.key,
             platforms: [],
             oneWayPlatforms: [],
-            movingOneWayPlatforms: [],
+            movingPlatforms: [],
             ladders: [],
             travellers: [],
             playerSpawns: config.playerSpawns || null,
@@ -200,17 +200,33 @@ export class MaskMapBuilder {
                 });
             } else if (type === 'oneWay') {
                 mapData.oneWayPlatforms.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, type: config.oneWayType || 'grass' });
-            } else if (type === 'movingOneWay') {
-                mapData.movingOneWayPlatforms.push({
+            } else if (type === 'movingPlatform') {
+                if (config.movingPlatformStatic) {
+                    mapData.platforms.push({
+                        x: bounds.x,
+                        y: bounds.y,
+                        width: bounds.width,
+                        height: bounds.height,
+                        type: config.movingPlatformType || config.solidPlatformType || config.solidType || 'grass'
+                    });
+                    return;
+                }
+                if (config.disableMovingPlatforms) {
+                    return;
+                }
+                mapData.movingPlatforms.push({
                     x: bounds.x,
                     y: bounds.y,
                     width: bounds.width,
                     height: bounds.height,
-                    type: config.movingOneWayType || config.oneWayType || 'grass'
+                    type: config.movingPlatformType || config.solidPlatformType || config.solidType || 'grass'
                 });
             } else if (type === 'ladder') {
                 mapData.ladders.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height });
             } else if (type === 'travel') {
+                if (config.disableTravellers) {
+                    return;
+                }
                 const horizontal = bounds.width >= bounds.height;
                 const start = horizontal
                     ? { x: bounds.left, y: bounds.y }
@@ -266,6 +282,14 @@ export class MaskMapBuilder {
         if (config.autoBounds) {
             const allBounds = [];
             mapData.platforms.forEach((platform) => {
+                allBounds.push({
+                    left: platform.x - platform.width / 2,
+                    right: platform.x + platform.width / 2,
+                    top: platform.y + platform.height / 2,
+                    bottom: platform.y - platform.height / 2
+                });
+            });
+            mapData.movingPlatforms.forEach((platform) => {
                 allBounds.push({
                     left: platform.x - platform.width / 2,
                     right: platform.x + platform.width / 2,

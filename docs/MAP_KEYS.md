@@ -44,7 +44,7 @@ Color codes used by the Hilltower PNG mask:
 - `#00FF01` Solid Body (structures)
 - `#99FF00` Solid Platform
 - `#FFEF00` One Way Platform
-- `#F8A900` Moving One Way Platform (moves along Traveller)
+- `#F8A900` Moving Platform (solid, moves along Traveller)
 - `#CC00FF` Ladder
 - `#FF0008` Traveller path
 - `#FF8B00` Kill floor line
