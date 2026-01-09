@@ -67,21 +67,52 @@ export class MapBuilder {
             return picked || null;
         };
 
-        const registerMovingPlatform = (platform, rangeX, rangeY, speed) => {
-            if (!platform) return;
-            const baseX = Number.isFinite(platform.bounds && platform.bounds.centerX)
+        const registerMovingPlatform = (platform, traveller, speed) => {
+            if (!platform || !traveller || !traveller.start || !traveller.end) return;
+            const originX = Number.isFinite(platform.bounds && platform.bounds.centerX)
                 ? platform.bounds.centerX
                 : platform.mesh.position.x;
-            const baseY = Number.isFinite(platform.bounds && platform.bounds.centerY)
+            const originY = Number.isFinite(platform.bounds && platform.bounds.centerY)
                 ? platform.bounds.centerY
                 : platform.mesh.position.y;
-            const phase = 0;
+            const startX = traveller.start.x;
+            const startY = traveller.start.y;
+            const endX = traveller.end.x;
+            const endY = traveller.end.y;
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const moveHorizontal = Math.abs(dx) >= Math.abs(dy);
+            const minX = Math.min(startX, endX);
+            const maxX = Math.max(startX, endX);
+            const minY = Math.min(startY, endY);
+            const maxY = Math.max(startY, endY);
+            const baseX = moveHorizontal ? (minX + maxX) / 2 : originX;
+            const baseY = moveHorizontal ? originY : (minY + maxY) / 2;
+            let rangeX = moveHorizontal ? (maxX - minX) / 2 : 0;
+            let rangeY = moveHorizontal ? 0 : (maxY - minY) / 2;
             if (platform.body && typeof platform.body.setMovable === 'function') {
                 platform.body.setMovable(true);
             }
             const originalType = platform.type;
             platform.type = 'moving';
             platform.baseType = platform.baseType || originalType;
+            if (platform.bounds) {
+                const halfW = (platform.bounds.right - platform.bounds.left) / 2;
+                const halfH = (platform.bounds.top - platform.bounds.bottom) / 2;
+                if (moveHorizontal) {
+                    rangeX = Math.max(0, rangeX - halfW);
+                } else {
+                    rangeY = Math.max(0, rangeY - halfH);
+                }
+            }
+            let phase = 0;
+            if (moveHorizontal && rangeX > 0) {
+                const offsetX = Math.max(-rangeX, Math.min(rangeX, originX - baseX));
+                phase = Math.asin(offsetX / rangeX);
+            } else if (!moveHorizontal && rangeY > 0) {
+                const offsetY = Math.max(-rangeY, Math.min(rangeY, originY - baseY));
+                phase = Math.asin(offsetY / rangeY);
+            }
             level.movingPlatforms.push({
                 platform,
                 baseX,
@@ -104,9 +135,7 @@ export class MapBuilder {
                 if (!traveller) {
                     return;
                 }
-                const rangeX = (traveller.end.x - traveller.start.x) / 2;
-                const rangeY = (traveller.end.y - traveller.start.y) / 2;
-                registerMovingPlatform(platform, rangeX, rangeY, travelSpeed);
+                registerMovingPlatform(platform, traveller, travelSpeed);
             });
         }
 
