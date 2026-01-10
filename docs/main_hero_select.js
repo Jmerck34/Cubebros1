@@ -16,6 +16,7 @@ import { Level } from './world/Level.js?v=20260109';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
 import { CameraFollow } from './camera/CameraFollow.js';
+import { FreeCameraController } from './camera/FreeCameraController.js';
 import { checkAABBCollision } from './utils/collision.js';
 import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
@@ -27,6 +28,7 @@ import { ArenaMode } from './gameModes/ArenaMode.js';
 import { KingOfTheHillMode } from './gameModes/KingOfTheHillMode.js';
 import { GameTestMode } from './gameModes/GameTestMode.js';
 import { hilltowerMaskConfig } from './world/maps/hilltowerMap.js';
+import { bowlMaskConfig } from './world/maps/bowlMap.js';
 
 // Game state
 let gameStarted = false;
@@ -40,6 +42,7 @@ let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
 let gameMode = null;
 let playerStateOverlay = null;
+let freeCameraControllers = [];
 let selectedGameMode = null;
 let modeMenu = null;
 let modeButtons = [];
@@ -566,6 +569,8 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     if (selectedGameMode === 'game-test') {
         if (selectedTestMapKey === 'hilltower' && typeof level.createGameTestMaskLevel === 'function') {
             await level.createGameTestMaskLevel(hilltowerMaskConfig);
+        } else if (selectedTestMapKey === 'bowl' && typeof level.createGameTestMaskLevel === 'function') {
+            await level.createGameTestMaskLevel(bowlMaskConfig);
         } else if (typeof level.createGameTestLevel === 'function') {
             level.createGameTestLevel();
         }
@@ -660,10 +665,12 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     // Setup camera follow
     cameras = [];
     cameraFollows = [];
+    freeCameraControllers = [];
     cameras[0] = camera;
     cameraFollow = new CameraFollow(camera, player);
     applyMapCameraConfig(camera, cameraFollow, level.cameraConfig);
     cameraFollows[0] = cameraFollow;
+    freeCameraControllers[0] = new FreeCameraController(camera);
 
     for (let i = 1; i < localPlayerCount; i += 1) {
         const cam = new THREE.OrthographicCamera(-VIEW_SIZE, VIEW_SIZE, VIEW_SIZE, -VIEW_SIZE, 0.1, 1000);
@@ -673,6 +680,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
         const follow = new CameraFollow(cam, players[i]);
         applyMapCameraConfig(cam, follow, level.cameraConfig);
         cameraFollows[i] = follow;
+        freeCameraControllers[i] = new FreeCameraController(cam);
     }
     camera2 = cameras[1] || null;
     cameraFollow2 = cameraFollows[1] || null;
@@ -855,11 +863,26 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                 }
             }
 
-            cameraFollows.forEach((follow) => {
-                if (follow) {
-                    follow.update();
-                }
-            });
+            const freeCamEnabled = debugMenu && debugMenu.isFreeCameraEnabled && debugMenu.isFreeCameraEnabled();
+            if (freeCamEnabled) {
+                freeCameraControllers.forEach((controller) => {
+                    if (controller) {
+                        controller.setEnabled(true);
+                        controller.update(deltaTime);
+                    }
+                });
+            } else {
+                freeCameraControllers.forEach((controller) => {
+                    if (controller) {
+                        controller.setEnabled(false);
+                    }
+                });
+                cameraFollows.forEach((follow) => {
+                    if (follow) {
+                        follow.update();
+                    }
+                });
+            }
 
             parallaxManager.update();
             uiManagers.forEach((manager) => {
@@ -2394,12 +2417,16 @@ window.addEventListener('load', () => {
     testMapMenu = document.getElementById('test-map-menu');
     const map3pButton = document.getElementById('map-3p');
     const mapHilltowerButton = document.getElementById('map-hilltower');
-    testMapButtons = [map3pButton, mapHilltowerButton].filter(Boolean);
+    const mapBowlButton = document.getElementById('map-bowl');
+    testMapButtons = [map3pButton, mapHilltowerButton, mapBowlButton].filter(Boolean);
     if (map3pButton) {
         map3pButton.addEventListener('click', () => selectTestMap('3p'));
     }
     if (mapHilltowerButton) {
         mapHilltowerButton.addEventListener('click', () => selectTestMap('hilltower'));
+    }
+    if (mapBowlButton) {
+        mapBowlButton.addEventListener('click', () => selectTestMap('bowl'));
     }
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');

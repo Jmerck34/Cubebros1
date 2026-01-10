@@ -10,6 +10,7 @@ export class DebugMenu {
         this.isOpen = false;
         this.trainingDummy = null;
         this.trainingDummyTicker = null;
+        this.freeCameraEnabled = false;
 
         // Global physics multipliers (persist across hero switches)
         this.globalPhysics = {
@@ -216,6 +217,12 @@ export class DebugMenu {
             this.globalPhysics.jumpForceMultiplier = value;
             console.log(`[Debug] Jump Force multiplier: ${this.globalPhysics.jumpForceMultiplier.toFixed(2)}x`);
         }, 'x');
+
+        // Camera Section
+        this.addSection('🎥 Camera');
+        this.addToggle('Free Camera', this.freeCameraEnabled, (checked) => {
+            this.freeCameraEnabled = checked;
+        });
 
         // Hitbox Section
         this.addSection('📦 Hitboxes');
@@ -647,6 +654,10 @@ export class DebugMenu {
      */
     isDebugMenuOpen() {
         return this.isOpen;
+    }
+
+    isFreeCameraEnabled() {
+        return this.freeCameraEnabled;
     }
 
     /**

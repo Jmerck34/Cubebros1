@@ -9,6 +9,7 @@ objects per map later.
 - `koth`: King of the Hill mode (uses the test layout today).
 - `game-test`: Minimal playtest map (medium ground + 3 floating platforms).
 - `hilltower`: Game Test mask map built from the Hilltower PNG.
+- `bowl`: Game Test mask map built from the Bowl PNG.
 
 # Map Camera Config
 

@@ -9,6 +9,8 @@ const COLOR_MAP = {
     reference: '#FF00EA',
     spawnBlue: '#8E00FF',
     spawnRed: '#FF006C',
+    spawnNeutral: '#FFFFFF',
+    bounce: '#00FFCB',
     ignore: '#000000'
 };
 
@@ -116,7 +118,7 @@ export class MaskMapBuilder {
         const visited = new Array(width * height).fill(false);
         const regions = [];
         const references = [];
-        const spawnRegions = { blue: [], red: [] };
+        const spawnRegions = { blue: [], red: [], neutral: [] };
         const killFloors = [];
 
         for (let y = 0; y < height; y += 1) {
@@ -142,6 +144,12 @@ export class MaskMapBuilder {
                     spawnRegions.blue.push(region);
                 } else if (type === 'spawnRed') {
                     spawnRegions.red.push(region);
+                } else if (type === 'spawnNeutral') {
+                    if (config.disableNeutralSpawns) {
+                        visited[idx] = true;
+                        continue;
+                    }
+                    spawnRegions.neutral.push(region);
                 } else if (type === 'killFloor') {
                     killFloors.push(region);
                 } else {
@@ -220,6 +228,17 @@ export class MaskMapBuilder {
                     width: bounds.width,
                     height: bounds.height,
                     type: config.movingPlatformType || config.solidPlatformType || config.solidType || 'grass'
+                });
+            } else if (type === 'bounce') {
+                if (config.disableBounce) {
+                    return;
+                }
+                mapData.platforms.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    type: config.bounceType || 'launcher'
                 });
             } else if (type === 'ladder') {
                 mapData.ladders.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height });
@@ -351,8 +370,13 @@ export class MaskMapBuilder {
             };
             const blue = pickLargest(spawnRegions.blue);
             const red = pickLargest(spawnRegions.red);
-            if (blue || red) {
+            const neutral = config.disableNeutralSpawns ? null : pickLargest(spawnRegions.neutral);
+            if (blue || red || neutral) {
                 mapData.playerSpawns = {};
+                if (neutral && neutral.region) {
+                    const bounds = boundsFromPixels(neutral.region, { originX, originY, pixelsPerUnit });
+                    mapData.playerSpawns.neutral = { x: bounds.x, y: bounds.y };
+                }
                 if (blue && blue.region) {
                     const bounds = boundsFromPixels(blue.region, { originX, originY, pixelsPerUnit });
                     mapData.playerSpawns.blue = { x: bounds.x, y: bounds.y };
@@ -360,6 +384,14 @@ export class MaskMapBuilder {
                 if (red && red.region) {
                     const bounds = boundsFromPixels(red.region, { originX, originY, pixelsPerUnit });
                     mapData.playerSpawns.red = { x: bounds.x, y: bounds.y };
+                }
+                if (neutral && neutral.region) {
+                    if (!mapData.playerSpawns.blue) {
+                        mapData.playerSpawns.blue = { ...mapData.playerSpawns.neutral };
+                    }
+                    if (!mapData.playerSpawns.red) {
+                        mapData.playerSpawns.red = { ...mapData.playerSpawns.neutral };
+                    }
                 }
             }
         }
