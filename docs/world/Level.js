@@ -421,7 +421,7 @@ export class Level {
         let onLauncher = null;
         let onWall = false;
         let onOneWayPlatform = false;
-        const oneWayDropHoldMs = 250;
+        const oneWayDropHoldMs = 60;
         const updateFallTracking = () => {
             if (!Number.isFinite(player.fallPeakY)) {
                 player.fallPeakY = player.position.y;
@@ -602,6 +602,7 @@ export class Level {
                 const eligibleStanding = overlaps
                     && playerVelocity.y <= 0
                     && playerBounds.bottom >= platform.bounds.top - 0.2;
+                const cameFromAbove = prevBottom >= platform.bounds.top - 0.25;
                 if (eligibleStanding) {
                     onOneWayPlatform = true;
                     if (!Number.isFinite(player.oneWayGroundedAt) || player.oneWayGroundedAt <= 0) {
@@ -611,6 +612,21 @@ export class Level {
                 const downHeld = player.input
                     && player.input.isDownPressed
                     && player.input.isDownPressed();
+                if (downHeld && !player._oneWayDebugLastLog) {
+                    player._oneWayDebugLastLog = 0;
+                }
+                if (downHeld && now - player._oneWayDebugLastLog > 500) {
+                    console.log('[one-way drop]', {
+                        allowDrop,
+                        eligibleStanding,
+                        grounded: player.isGrounded,
+                        onOneWayPlatform,
+                        dropThroughActive,
+                        bottom: playerBounds.bottom,
+                        top: platform.bounds.top
+                    });
+                    player._oneWayDebugLastLog = now;
+                }
                 if (onOneWayPlatform) {
                     if (downHeld) {
                         if (!Number.isFinite(player.oneWayDropHoldStart) || player.oneWayDropHoldStart <= 0) {
@@ -620,8 +636,8 @@ export class Level {
                         player.oneWayDropHoldStart = 0;
                     }
                 }
-                const groundedOnOneWay = player.isGrounded && eligibleStanding;
-                const holdReady = groundedOnOneWay
+                const standingOnOneWay = eligibleStanding && cameFromAbove;
+                const holdReady = standingOnOneWay
                     && Number.isFinite(player.oneWayDropHoldStart)
                     && now - player.oneWayDropHoldStart >= oneWayDropHoldMs;
                 if (allowDrop && downHeld && holdReady) {
