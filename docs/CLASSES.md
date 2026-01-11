@@ -28,6 +28,7 @@ Brief descriptions of every exported class in `threejs-platformer/docs`.
 - `PauseMenu` - In-game pause and settings menu.
 - `DebugMenu` - Dev menu for tuning and toggles.
 - `PlayerStateOverlay` - F1 debug HUD showing player state.
+- `Graphic2D` - Base class for 2D visual elements or textures.
 
 ## Camera
 - `CameraFollow` - Follows target(s) with smoothing and bounds.
@@ -44,6 +45,8 @@ Brief descriptions of every exported class in `threejs-platformer/docs`.
 - `SolidBody` - Immovable solid body.
 - `SolidPlatform` - Solid platform body.
 - `OneWayPlatform` - One-way platform body.
+- `DamageBody` - Body that applies damage on contact.
+- `BounceBody` - Body that bounces players upward.
 - `Ladder` - Climbable volume.
 - `Traveller` - Line-based mover path.
 - `MapBuilder` - Builds a `Level` from map data objects.

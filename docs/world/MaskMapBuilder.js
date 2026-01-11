@@ -98,6 +98,66 @@ function boundsFromPixels({ minX, maxX, minY, maxY }, { originX, originY, pixels
     };
 }
 
+function pixelMatches(data, width, height, x, y, matchKey) {
+    if (x < 0 || y < 0 || x >= width || y >= height) {
+        return false;
+    }
+    const index = (y * width + x) * 4;
+    const a = data[index + 3];
+    if (a === 0) return false;
+    return colorKey(data[index], data[index + 1], data[index + 2]) === matchKey;
+}
+
+function extractPixelRuns(region, matchKey, { data, width, height }) {
+    const runs = [];
+    const active = new Map();
+    for (let y = region.minY; y <= region.maxY; y += 1) {
+        const rowRuns = [];
+        let runStart = null;
+        for (let x = region.minX; x <= region.maxX; x += 1) {
+            const matches = pixelMatches(data, width, height, x, y, matchKey);
+            if (matches && runStart === null) {
+                runStart = x;
+            } else if (!matches && runStart !== null) {
+                rowRuns.push({ startX: runStart, endX: x - 1, y });
+                runStart = null;
+            }
+        }
+        if (runStart !== null) {
+            rowRuns.push({ startX: runStart, endX: region.maxX, y });
+        }
+
+        const nextActive = new Map();
+        for (const run of rowRuns) {
+            const key = `${run.startX},${run.endX}`;
+            const prev = active.get(key);
+            if (prev && prev.maxY === run.y - 1) {
+                prev.maxY = run.y;
+                nextActive.set(key, prev);
+            } else {
+                const merged = {
+                    minX: run.startX,
+                    maxX: run.endX,
+                    minY: run.y,
+                    maxY: run.y
+                };
+                nextActive.set(key, merged);
+            }
+        }
+
+        active.forEach((value, key) => {
+            if (!nextActive.has(key)) {
+                runs.push(value);
+            }
+        });
+        active.clear();
+        nextActive.forEach((value, key) => active.set(key, value));
+    }
+
+    active.forEach((value) => runs.push(value));
+    return runs;
+}
+
 export class MaskMapBuilder {
     static async build(config) {
         if (!config || !config.url) return null;
@@ -153,7 +213,7 @@ export class MaskMapBuilder {
                 } else if (type === 'killFloor') {
                     killFloors.push(region);
                 } else {
-                    regions.push({ type, region });
+                    regions.push({ type, region, matchKey: key });
                 }
             }
         }
@@ -188,16 +248,31 @@ export class MaskMapBuilder {
             travelSpeed: config.travelSpeed || null
         };
 
-        regions.forEach(({ type, region }) => {
+        regions.forEach(({ type, region, matchKey }) => {
             const bounds = boundsFromPixels(region, { originX, originY, pixelsPerUnit });
             if (type === 'solidBody') {
-                mapData.platforms.push({
-                    x: bounds.x,
-                    y: bounds.y,
-                    width: bounds.width,
-                    height: bounds.height,
-                    type: config.solidBodyType || config.solidType || 'stone'
-                });
+                if (config.solidBodyShape === 'pixelRuns') {
+                    const runs = extractPixelRuns(region, matchKey, { data, width, height });
+                    runs.forEach((run) => {
+                        const runBounds = boundsFromPixels(run, { originX, originY, pixelsPerUnit });
+                        mapData.platforms.push({
+                            x: runBounds.x,
+                            y: runBounds.y,
+                            width: runBounds.width,
+                            height: runBounds.height,
+                            type: config.solidBodyType || config.solidType || 'stone',
+                            noMerge: true
+                        });
+                    });
+                } else {
+                    mapData.platforms.push({
+                        x: bounds.x,
+                        y: bounds.y,
+                        width: bounds.width,
+                        height: bounds.height,
+                        type: config.solidBodyType || config.solidType || 'stone'
+                    });
+                }
             } else if (type === 'solidPlatform') {
                 mapData.platforms.push({
                     x: bounds.x,
@@ -263,12 +338,17 @@ export class MaskMapBuilder {
             const byRow = [...mapData.platforms].sort((a, b) => (a.y - b.y) || (a.x - b.x));
             const merged = [];
             for (const platform of byRow) {
+                if (platform.noMerge) {
+                    merged.push({ ...platform });
+                    continue;
+                }
                 const left = platform.x - platform.width / 2;
                 const right = platform.x + platform.width / 2;
                 const top = platform.y + platform.height / 2;
                 const bottom = platform.y - platform.height / 2;
                 let didMerge = false;
                 for (const target of merged) {
+                    if (target.noMerge) continue;
                     if (target.type !== platform.type) continue;
                     const tLeft = target.x - target.width / 2;
                     const tRight = target.x + target.width / 2;

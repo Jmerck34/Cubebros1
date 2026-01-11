@@ -1,3 +1,5 @@
+import { normalizeVisibilityLayer } from '../utils/visibility.js';
+
 /**
  * Body - Base class for map objects with collision and movement metadata.
  */
@@ -7,11 +9,13 @@ export class Body {
      * @param {Object|null} options.collisionShape - Collision shape ({ type: 'aabb', bounds }).
      * @param {boolean} options.movable - Whether the body can move.
      * @param {string|null} options.mapKey - Optional map identifier.
+     * @param {number} options.visibilityLayer - Visibility layer (-5 to 5).
      */
-    constructor({ collisionShape = null, movable = false, mapKey = null } = {}) {
+    constructor({ collisionShape = null, movable = false, mapKey = null, visibilityLayer = 0 } = {}) {
         this.collisionShape = collisionShape;
         this.movable = movable;
         this.mapKey = mapKey;
+        this.visibilityLayer = normalizeVisibilityLayer(visibilityLayer);
     }
 
     setCollisionShape(collisionShape) {
@@ -24,5 +28,13 @@ export class Body {
 
     setMapKey(mapKey) {
         this.mapKey = mapKey || null;
+    }
+
+    setVisibilityLayer(visibilityLayer) {
+        this.visibilityLayer = normalizeVisibilityLayer(visibilityLayer, this.visibilityLayer);
+    }
+
+    getVisibilityLayer() {
+        return this.visibilityLayer;
     }
 }

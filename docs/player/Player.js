@@ -4,6 +4,7 @@ import { applyGravity, handleJump } from './playerPhysics.js';
 import { checkAABBCollision } from '../utils/collision.js';
 import { HealthBar } from '../ui/HealthBar.js';
 import { spawnDamageNumber } from '../utils/damageNumbers.js';
+import { normalizeVisibilityLayer, visibilityLayerToZ, VISIBILITY_LAYERS } from '../utils/visibility.js';
 
 function createTextSprite(text, options = {}) {
     const canvas = document.createElement('canvas');
@@ -105,6 +106,9 @@ export class Player {
         this.position = { x: startX, y: startY, z: 0 };
         this.velocity = { x: 0, y: 0 };
         this.spawnPoint = { x: startX, y: startY };
+        this.visibilityLayer = normalizeVisibilityLayer(VISIBILITY_LAYERS.default);
+        this.visibilityBaseZ = this.position.z;
+        this.setVisibilityLayer(this.visibilityLayer);
 
         // State
         this.isGrounded = false;
@@ -985,6 +989,11 @@ export class Player {
         this.mesh.scale.y = this.visualScaleY;
         this.mesh.scale.z = this.visualScaleZ;
         this.mesh.rotation.z = this.visualTiltZ;
+    }
+
+    setVisibilityLayer(visibilityLayer) {
+        this.visibilityLayer = normalizeVisibilityLayer(visibilityLayer, this.visibilityLayer);
+        this.position.z = visibilityLayerToZ(this.visibilityLayer, this.visibilityBaseZ);
     }
 
     /**

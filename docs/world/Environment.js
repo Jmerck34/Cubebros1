@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import { applyVisibilityLayer, VISIBILITY_LAYERS } from '../utils/visibility.js';
 
 /**
  * Environment - Creates immersive background and atmosphere
@@ -12,6 +13,7 @@ export class Environment {
         this.particles = [];
         this.backgroundYOffset = 2;
         this.parallaxLayers = [];
+        this.visibilityLayer = VISIBILITY_LAYERS.background;
     }
 
     /**
@@ -108,6 +110,9 @@ export class Environment {
      * @param {Object} config
      */
     registerParallaxLayer(config) {
+        if (config && config.root) {
+            applyVisibilityLayer(config.root, this.visibilityLayer, { applyZ: false });
+        }
         this.parallaxLayers.push(config);
     }
 

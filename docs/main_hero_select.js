@@ -579,7 +579,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     } else if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
         level.createKothLevel({ includeInteractiveFlags: false, mapKey: 'koth' });
     } else if (selectedGameMode === 'arena' && typeof level.createArenaLevel === 'function') {
-        level.createArenaLevel({ includeInteractiveFlags: false, mapKey: 'arena' });
+        await level.createArenaLevel({ includeInteractiveFlags: false, mapKey: 'arena' });
     } else {
         level.createTestLevel({ includeInteractiveFlags: false, mapKey: selectedGameMode || 'playtest' });
     }

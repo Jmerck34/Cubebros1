@@ -8,6 +8,8 @@ import { MapBuilder } from './MapBuilder.js';
 import { MaskMapBuilder } from './MaskMapBuilder.js';
 import { gameTestMap } from './maps/gameTestMap.js';
 import { hilltowerMaskConfig } from './maps/hilltowerMap.js';
+import { arenaMaskConfig } from './maps/arenaMap.js';
+import { applyVisibilityLayer, normalizeVisibilityLayer, VISIBILITY_LAYERS } from '../utils/visibility.js';
 
 const FOREGROUND_PALETTE = {
     groundBody: 0x8f563b,
@@ -65,6 +67,7 @@ export class Level {
         this.mapKey = null;
         this.cameraConfig = null;
         this.deathY = null;
+        this.defaultVisibilityLayer = VISIBILITY_LAYERS.foreground;
     }
 
     /**
@@ -76,8 +79,11 @@ export class Level {
      * @param {string} type - Platform type ('ground', 'grass', 'stone')
      * @returns {Object} Platform object
      */
-    addPlatform(x, y, width, height, type = 'grass') {
+    addPlatform(x, y, width, height, type = 'grass', options = {}) {
         const platformGroup = new THREE.Group();
+        const visibilityLayer = normalizeVisibilityLayer(
+            options.visibilityLayer != null ? options.visibilityLayer : this.defaultVisibilityLayer
+        );
 
         // Main platform body
         const bodyGeometry = new THREE.BoxGeometry(width, height, 0.8);
@@ -248,6 +254,7 @@ export class Level {
         }
 
         platformGroup.position.set(x, y, 0);
+        applyVisibilityLayer(platformGroup, visibilityLayer);
         this.group.add(platformGroup);
 
         const platform = {
@@ -262,20 +269,22 @@ export class Level {
             baseY: y,
             baseScale: { x: 1, y: 1, z: 1 },
             springTimer: 0,
-            springDuration: type === 'launcher' ? 0.45 : 0.25
+            springDuration: type === 'launcher' ? 0.45 : 0.25,
+            visibilityLayer
         };
 
         platform.body = new SolidPlatform({
             bounds: platform.bounds,
             mapKey: this.mapKey
         });
+        platform.body.setVisibilityLayer(visibilityLayer);
         this.bodies.push(platform.body);
         this.platforms.push(platform);
         return platform;
     }
 
-    addOneWayPlatform(x, y, width, height, type = 'grass') {
-        const platform = this.addPlatform(x, y, width, height, type);
+    addOneWayPlatform(x, y, width, height, type = 'grass', options = {}) {
+        const platform = this.addPlatform(x, y, width, height, type, options);
         if (platform.body) {
             this.bodies = this.bodies.filter((body) => body !== platform.body);
         }
@@ -283,13 +292,17 @@ export class Level {
             bounds: platform.bounds,
             mapKey: this.mapKey
         });
+        platform.body.setVisibilityLayer(platform.visibilityLayer);
         this.bodies.push(platform.body);
         platform.isOneWay = true;
         return platform;
     }
 
-    addLadderZone(x, y, width, height) {
+    addLadderZone(x, y, width, height, options = {}) {
         const ladderGroup = new THREE.Group();
+        const visibilityLayer = normalizeVisibilityLayer(
+            options.visibilityLayer != null ? options.visibilityLayer : this.defaultVisibilityLayer
+        );
         const railGeometry = new THREE.BoxGeometry(0.08, height, 0.12);
         const railMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ladderRail });
         const leftRail = new THREE.Mesh(railGeometry, railMaterial);
@@ -310,6 +323,7 @@ export class Level {
         }
 
         ladderGroup.position.set(x, y, 0);
+        applyVisibilityLayer(ladderGroup, visibilityLayer);
         this.group.add(ladderGroup);
 
         const ladderPlatform = {
@@ -321,6 +335,7 @@ export class Level {
                 bottom: y - height / 2
             },
             type: 'ladder',
+            visibilityLayer,
             isLadder: true
         };
 
@@ -328,6 +343,7 @@ export class Level {
             bounds: ladderPlatform.bounds,
             mapKey: this.mapKey
         });
+        ladderPlatform.body.setVisibilityLayer(visibilityLayer);
         this.bodies.push(ladderPlatform.body);
         this.platforms.push(ladderPlatform);
         return ladderPlatform;
@@ -695,6 +711,11 @@ export class Level {
 
         // Reset ladder flag if not on ladder
         player.onLadder = Boolean(onLadder);
+        if (player.onLadder) {
+            const maxJumps = Number.isFinite(player.maxJumps) ? player.maxJumps : 2;
+            player.jumpsRemaining = maxJumps;
+            player.jumpKeyWasPressed = false;
+        }
         player.onOneWay = Boolean(onOneWayPlatform);
         if (!onOneWayPlatform) {
             player.oneWayGroundedAt = 0;
@@ -872,6 +893,9 @@ export class Level {
         const visualHeightOffset = options.visualHeightOffset != null ? options.visualHeightOffset : 0;
         const ladderSide = options.ladderSide != null ? options.ladderSide : 'right';
         const addDoor = options.addDoor !== undefined ? options.addDoor : false;
+        const visibilityLayer = normalizeVisibilityLayer(
+            options.visibilityLayer != null ? options.visibilityLayer : this.defaultVisibilityLayer
+        );
 
         // Main wall body (stone blocks)
         const numBlocks = Math.floor(wallHeight / 0.8);
@@ -1023,6 +1047,7 @@ export class Level {
 
         // Position the entire wall - blocks are built from 0 upward, so position at baseY
         wallGroup.position.set(x, baseY + visualOffset, 0);
+        applyVisibilityLayer(wallGroup, visibilityLayer);
         this.group.add(wallGroup);
 
         // Calculate actual visual top based on blocks (each 0.8 high, positioned at center)
@@ -1038,7 +1063,8 @@ export class Level {
                 top: actualVisualTop + surfaceEpsilon, // Slight lift to avoid overlap
                 bottom: baseY
             },
-            type: 'wall'
+            type: 'wall',
+            visibilityLayer
         };
 
         platform.body = new SolidBody({
@@ -1046,6 +1072,7 @@ export class Level {
             movable: false,
             mapKey: this.mapKey
         });
+        platform.body.setVisibilityLayer(visibilityLayer);
         this.bodies.push(platform.body);
         this.platforms.push(platform);
 
@@ -1059,6 +1086,7 @@ export class Level {
                 bottom: baseY
             },
             type: 'ladder',
+            visibilityLayer,
             isLadder: true // Special flag for climbing
         };
 
@@ -1066,6 +1094,7 @@ export class Level {
             bounds: ladderPlatform.bounds,
             mapKey: this.mapKey
         });
+        ladderPlatform.body.setVisibilityLayer(visibilityLayer);
         this.bodies.push(ladderPlatform.body);
         this.platforms.push(ladderPlatform);
         return platform;
@@ -1443,8 +1472,8 @@ export class Level {
         MapBuilder.build(this, mapData);
     }
 
-    createArenaLevel(options = {}) {
-        this.createTestLevel({ ...options, mapKey: options.mapKey !== undefined ? options.mapKey : 'arena' });
+    async createArenaLevel(options = {}) {
+        await this.createGameTestMaskLevel(arenaMaskConfig);
     }
 
     createKothLevel(options = {}) {

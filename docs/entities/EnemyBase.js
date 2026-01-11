@@ -2,6 +2,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { GRAVITY } from '../core/constants.js';
 import { EnemyHealthBar } from '../ui/EnemyHealthBar.js';
 import { spawnDamageNumber } from '../utils/damageNumbers.js';
+import { normalizeVisibilityLayer, visibilityLayerToZ, VISIBILITY_LAYERS } from '../utils/visibility.js';
 
 /**
  * Enemy Base Class - Foundation for all enemies
@@ -22,6 +23,9 @@ export class EnemyBase {
         this.position = { x, y, z: 0 };
         this.velocity = { x: 0, y: 0 };
         this.direction = -1; // -1 = left, 1 = right
+        this.visibilityLayer = normalizeVisibilityLayer(VISIBILITY_LAYERS.default);
+        this.visibilityBaseZ = this.position.z;
+        this.setVisibilityLayer(this.visibilityLayer);
 
         // Enemy properties
         this.speed = 2;
@@ -155,6 +159,11 @@ export class EnemyBase {
         if (this.debugHitboxVisible) {
             this.updateDebugHitbox();
         }
+    }
+
+    setVisibilityLayer(visibilityLayer) {
+        this.visibilityLayer = normalizeVisibilityLayer(visibilityLayer, this.visibilityLayer);
+        this.position.z = visibilityLayerToZ(this.visibilityLayer, this.visibilityBaseZ);
     }
 
     /**
