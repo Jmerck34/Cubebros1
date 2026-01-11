@@ -22,6 +22,7 @@ import { Goomba } from './entities/Goomba.js';
 import { PauseMenu } from './ui/PauseMenu.js';
 import { DebugMenu } from './ui/DebugMenu.js';
 import { PlayerStateOverlay } from './ui/PlayerStateOverlay.js';
+import { MiniMap } from './ui/MiniMap.js';
 import { updateDamageNumbers, clearDamageNumbers } from './utils/damageNumbers.js';
 import { CaptureTheFlagMode } from './gameModes/CaptureTheFlagMode.js';
 import { ArenaMode } from './gameModes/ArenaMode.js';
@@ -39,6 +40,7 @@ let inputs = [];
 let uiManagers = [];
 let cameras = [];
 let cameraFollows = [];
+let miniMaps = [];
 let teamScoreboard, scoreBlueEl, scoreRedEl;
 let teamScores = { blue: 0, red: 0 };
 let gameMode = null;
@@ -223,6 +225,7 @@ function initScene() {
     window.addEventListener('resize', () => {
         renderer.setSize(window.innerWidth, window.innerHeight);
         updateAllCameraFrustums(window.innerWidth, window.innerHeight);
+        updateMiniMapLayout();
     });
 }
 
@@ -497,6 +500,95 @@ function getLevelBoundsForEnvironment(levelInstance) {
         bottom: Math.min(...boundsList.map((b) => b.bottom)),
         top: Math.max(...boundsList.map((b) => b.top))
     };
+}
+
+function destroyMiniMaps() {
+    if (!miniMaps.length) return;
+    miniMaps.forEach((miniMap) => {
+        if (miniMap && typeof miniMap.destroy === 'function') {
+            miniMap.destroy();
+        }
+    });
+    miniMaps = [];
+}
+
+function updateMiniMapLayout() {
+    if (!miniMaps.length || !renderer) return;
+    const size = renderer.getSize(new THREE.Vector2());
+    miniMaps.forEach((miniMap, index) => {
+        const viewport = getViewportForIndex(index, localPlayerCount, size.x, size.y);
+        miniMap.setViewport(viewport, size.y);
+    });
+}
+
+function getMiniMapFlags() {
+    const flags = [];
+    if (gameMode && gameMode.state && gameMode.state.flags) {
+        Object.values(gameMode.state.flags).forEach((flag) => {
+            const pos = flag && flag.mesh && flag.mesh.position ? flag.mesh.position : flag && flag.base;
+            if (!pos) return;
+            flags.push({
+                x: pos.x,
+                y: pos.y,
+                team: flag.team || 'neutral'
+            });
+        });
+        return flags;
+    }
+    if (level && Array.isArray(level.flags)) {
+        level.flags.forEach((flag) => {
+            if (!flag || !flag.mesh) return;
+            flags.push({
+                x: flag.mesh.position.x,
+                y: flag.mesh.position.y,
+                team: flag.team || 'neutral'
+            });
+        });
+    }
+    return flags;
+}
+
+function getMiniMapObjectives() {
+    const objectives = [];
+    if (gameMode && gameMode.zoneBounds) {
+        const team = gameMode.controllingTeam || gameMode.controlTeam || 'neutral';
+        const color = team === 'blue' ? 'rgba(47,108,176,0.8)' : team === 'red' ? 'rgba(204,47,47,0.8)' : 'rgba(200,200,200,0.7)';
+        objectives.push({
+            bounds: gameMode.zoneBounds,
+            color
+        });
+    }
+    return objectives;
+}
+
+function createMiniMaps() {
+    destroyMiniMaps();
+    if (!players.length) return;
+    const bounds = getLevelBoundsForEnvironment(level);
+    miniMaps = players.map((activePlayer, index) => {
+        const miniMap = new MiniMap({ playerIndex: index });
+        miniMap.setBounds(bounds);
+        miniMap.buildBase(level);
+        if (debugMenu && typeof debugMenu.isMiniMapVisible === 'function') {
+            miniMap.setVisible(debugMenu.isMiniMapVisible());
+        }
+        return miniMap;
+    });
+    updateMiniMapLayout();
+}
+
+function updateMiniMaps() {
+    if (!miniMaps.length) return;
+    const flags = getMiniMapFlags();
+    const objectives = getMiniMapObjectives();
+    miniMaps.forEach((miniMap, index) => {
+        miniMap.update({
+            players,
+            flags,
+            objectives,
+            focusPlayer: players[index] || null
+        });
+    });
 }
 
 function isFullscreenActive() {
@@ -835,6 +927,13 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     // Create debug menu (or update player if it exists)
     if (!debugMenu) {
         debugMenu = new DebugMenu(player);
+        debugMenu.setMiniMapVisibilityHandler((visible) => {
+            miniMaps.forEach((miniMap) => {
+                if (miniMap && typeof miniMap.setVisible === 'function') {
+                    miniMap.setVisible(visible);
+                }
+            });
+        });
     } else {
         debugMenu.setPlayer(player);
     }
@@ -899,6 +998,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     }
     gameMode.init();
     setKothMeterVisible(selectedGameMode === 'koth');
+    createMiniMaps();
 
     // Game Loop
     gameLoop = new GameLoop(
@@ -1026,6 +1126,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
             if (playerStateOverlay) {
                 playerStateOverlay.update();
             }
+            updateMiniMaps();
 
             // Update environment animations
             if (environment) {
@@ -1349,6 +1450,7 @@ function resetGame() {
         gameMode.destroy();
         gameMode = null;
     }
+    destroyMiniMaps();
     setKothMeterVisible(false);
     clearDamageNumbers();
     removeHealthPotions();

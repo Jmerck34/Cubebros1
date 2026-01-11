@@ -88,12 +88,25 @@ export class Level {
             options.visibilityLayer != null ? options.visibilityLayer : this.defaultVisibilityLayer
         );
         const collisionShape = options.collisionShape || null;
+        const skyCloudThreshold = Number.isFinite(options.skyCloudThreshold) ? options.skyCloudThreshold : 10;
+        const cloudStyleDisabledMaps = new Set(['arena', 'hilltower', 'bowl']);
+        const mapDisablesClouds = cloudStyleDisabledMaps.has(this.mapKey);
+        const allowSkyClouds = options.skyCloudStyle !== false && !mapDisablesClouds;
+        const renderType = (() => {
+            if (options.visualType) return options.visualType;
+            if (!allowSkyClouds) return type;
+            const eligibleTypes = new Set(['ground', 'grass', 'stone']);
+            if (eligibleTypes.has(type) && y >= skyCloudThreshold) {
+                return 'cloud';
+            }
+            return type;
+        })();
 
         // Main platform body
         const bodyGeometry = new THREE.BoxGeometry(width, height, 0.8);
         let bodyColor, topColor, sideColor;
 
-        switch(type) {
+        switch(renderType) {
             case 'ground':
                 bodyColor = FOREGROUND_PALETTE.groundBody;
                 topColor = FOREGROUND_PALETTE.groundTop;
@@ -144,7 +157,7 @@ export class Level {
         side.position.y = -height * 0.4;
         platformGroup.add(side);
 
-        if (type === 'cloud') {
+        if (renderType === 'cloud') {
             const puffCount = Math.max(4, Math.round(width / 2.2));
             const puffRadius = Math.max(0.25, height * 0.55);
             const puffGeometry = new THREE.CircleGeometry(puffRadius, 10);
@@ -178,7 +191,7 @@ export class Level {
             platformGroup.add(rightPuff);
         }
 
-        if (type === 'rope') {
+        if (renderType === 'rope') {
             const plankMaterial = new THREE.MeshBasicMaterial({ color: FOREGROUND_PALETTE.ropePlank });
             const plankCount = Math.max(4, Math.round(width / 1.6));
             const plankSpacing = width / (plankCount + 1);
@@ -203,7 +216,7 @@ export class Level {
         }
 
         // Add detail patterns for grass platforms
-        if (type === 'grass' || type === 'ground') {
+        if (renderType === 'grass' || renderType === 'ground') {
             // Add grass tufts on top
             const numTufts = Math.floor(width * 2);
             for (let i = 0; i < numTufts; i++) {
@@ -242,7 +255,7 @@ export class Level {
         }
 
         // Add texture detail lines for stone platforms
-        if (type === 'stone') {
+        if (renderType === 'stone') {
             const numLines = Math.floor(width);
             for (let i = 0; i < numLines; i++) {
             const lineGeometry = new THREE.BoxGeometry(width * 0.9, 0.03, 0.82);

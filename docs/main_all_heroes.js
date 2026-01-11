@@ -19,6 +19,7 @@ import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
 import { updateDamageNumbers } from './utils/damageNumbers.js';
 import { PlayerStateOverlay } from './ui/PlayerStateOverlay.js';
+import { MiniMap } from './ui/MiniMap.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -88,6 +89,11 @@ const getLevelBoundsForEnvironment = (levelInstance) => {
 };
 
 environment.createBackground(getLevelBoundsForEnvironment(level));
+
+const miniMap = new MiniMap({ playerIndex: 0 });
+miniMap.setBounds(getLevelBoundsForEnvironment(level));
+miniMap.buildBase(level);
+miniMap.setViewport({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }, window.innerHeight);
 
 // Setup parallax manager (foreground/midground/background)
 const parallaxManager = new ParallaxManager(camera);
@@ -170,6 +176,7 @@ window.addEventListener('resize', () => {
     camera.right = viewSize * aspect;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    miniMap.setViewport({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }, window.innerHeight);
 });
 
 // Game Loop
@@ -213,6 +220,7 @@ const gameLoop = new GameLoop(
 
         updateDamageNumbers(deltaTime);
         playerStateOverlay.update();
+        miniMap.update({ players: [player], focusPlayer: player });
 
         // Update environment animations
         environment.update(deltaTime);

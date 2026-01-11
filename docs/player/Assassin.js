@@ -251,24 +251,7 @@ export class Assassin extends Hero {
                 this.healthBar.setOpacity(0.05);
             }
 
-            // Update shadow line position to follow player
-            if (this.shadowLine) {
-                // Find current ground level beneath the player
-                let groundLevel = -3;
-                if (this.level && this.level.platforms) {
-                    for (const platform of this.level.platforms) {
-                        if (this.position.x >= platform.bounds.left &&
-                            this.position.x <= platform.bounds.right &&
-                            platform.bounds.top <= this.position.y &&
-                            platform.bounds.top > groundLevel) {
-                            groundLevel = platform.bounds.top;
-                        }
-                    }
-                }
-
-                this.shadowLine.position.x = this.position.x;
-                this.shadowLine.position.y = groundLevel + 0.025;
-            }
+            // Shadow line removed (no ground stripe during shadow walk).
         }
     }
 
@@ -520,10 +503,34 @@ export class Assassin extends Hero {
             let starY = startY;
             star.position.set(starX, starY, 0.3);
             this.mesh.parent.add(star);
+            let origin = { x: starX, y: starY };
+            const velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+            const projectile = {
+                type: 'throwing-star',
+                mesh: star,
+                owner: this,
+                velocity,
+                lastDeflectTime: 0,
+                deflect: (newOwner) => {
+                    const now = performance.now();
+                    if (now - projectile.lastDeflectTime < 200) {
+                        return;
+                    }
+                    projectile.lastDeflectTime = now;
+                    projectile.owner = newOwner;
+                    projectile.velocity.x *= -1;
+                    projectile.velocity.y *= -1;
+                    origin = { x: starX, y: starY };
+                }
+            };
+            Hero.addProjectile(projectile);
+            const cleanupProjectile = () => {
+                Hero.removeProjectile(projectile);
+            };
 
             const starInterval = setInterval(() => {
-                starX += Math.cos(angle) * speed * 0.016;
-                starY += Math.sin(angle) * speed * 0.016;
+                starX += velocity.x * 0.016;
+                starY += velocity.y * 0.016;
                 star.position.set(starX, starY, 0.3);
                 star.rotation.z += 0.3;
 
@@ -534,8 +541,11 @@ export class Assassin extends Hero {
                     bottom: starY - 0.45
                 };
 
-                if (this.isPositionBlockedByProtectionDome({ x: starX, y: starY })) {
+                const owner = projectile.owner || this;
+                if (owner && typeof owner.isPositionBlockedByProtectionDome === 'function' &&
+                    owner.isPositionBlockedByProtectionDome({ x: starX, y: starY })) {
                     clearInterval(starInterval);
+                    cleanupProjectile();
                     this.mesh.parent.remove(star);
                     return;
                 }
@@ -550,9 +560,10 @@ export class Assassin extends Hero {
                     }
                 }
 
-                const traveled = Math.hypot(starX - startX, starY - startY);
+                const traveled = Math.hypot(starX - origin.x, starY - origin.y);
                 if (hitPlatform || traveled > maxRange) {
                     clearInterval(starInterval);
+                    cleanupProjectile();
                     this.mesh.parent.remove(star);
                     if (hitPlatform) {
                         this.playPoisonImpactSound();
@@ -560,7 +571,7 @@ export class Assassin extends Hero {
                     return;
                 }
 
-                for (const target of this.getDamageTargets()) {
+                for (const target of owner && typeof owner.getDamageTargets === 'function' ? owner.getDamageTargets() : []) {
                     if (!target.isAlive) continue;
                     const targetBounds = target.getBounds();
                     if (!checkAABBCollision(bounds, targetBounds)) continue;
@@ -568,15 +579,16 @@ export class Assassin extends Hero {
                     const adjustedDamage = this.abilities.w && typeof this.abilities.w.getAdjustedDamage === 'function'
                         ? this.abilities.w.getAdjustedDamage(baseDamage)
                         : baseDamage;
-                    target.takeDamage(Math.max(1, Math.round(adjustedDamage)));
-                    if (target.type !== 'player') {
-                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    target.takeDamage(Math.max(1, Math.round(adjustedDamage)), owner);
+                    if (target.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                        owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                     }
                     if (typeof target.setSlowed === 'function') {
                         target.setSlowed(slowDuration, slowMultiplier);
                     }
                     this.playPoisonImpactSound();
                     clearInterval(starInterval);
+                    cleanupProjectile();
                     this.mesh.parent.remove(star);
                     break;
                 }
@@ -692,16 +704,7 @@ export class Assassin extends Hero {
             }
         }
 
-        // Create thin black line shadow on the ground
-        const shadowGeometry = new THREE.PlaneGeometry(1, 0.05); // 1 unit wide, 0.05 units tall (couple pixels)
-        const shadowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.7
-        });
-        this.shadowLine = new THREE.Mesh(shadowGeometry, shadowMaterial);
-        this.shadowLine.position.set(this.position.x, groundLevel + 0.025, 0.1);
-        this.mesh.parent.add(this.shadowLine);
+        // Shadow line removed (no ground stripe during shadow walk).
     }
 
     /**

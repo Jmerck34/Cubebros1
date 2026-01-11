@@ -7,6 +7,22 @@ import { JUMP_VELOCITY } from '../core/constants.js';
  * @class Hero
  */
 export class Hero extends Player {
+    static getProjectiles() {
+        return Array.from(Hero.projectiles || []);
+    }
+
+    static addProjectile(projectile) {
+        if (!Hero.projectiles) {
+            Hero.projectiles = new Set();
+        }
+        Hero.projectiles.add(projectile);
+    }
+
+    static removeProjectile(projectile) {
+        if (!Hero.projectiles) return;
+        Hero.projectiles.delete(projectile);
+    }
+
     constructor(scene, startX = 0, startY = 0) {
         super(scene, startX, startY);
 
@@ -152,24 +168,24 @@ export class Hero extends Player {
                 const targetMaxHealth = Number.isFinite(enemy.maxHealth) ? enemy.maxHealth : 100;
                 const damagePerHit = Math.max(1, Math.round(targetMaxHealth * 0.1));
                 const damage = Math.max(1, Math.round(adjustedDamage * damagePerHit));
-                enemy.takeDamage(damage);
+                enemy.takeDamage(damage, this);
                 return;
             }
         }
 
         if (ability && typeof ability.damageEnemy === 'function') {
-            ability.damageEnemy(enemy, baseHits);
+            ability.damageEnemy(enemy, baseHits, this);
             return;
         }
 
         // Fallback: no ability reference, use base hit count
         const hits = Math.max(1, Math.round(baseHits));
         if (isPlayerTarget) {
-            enemy.takeDamage(hits);
+            enemy.takeDamage(hits, this);
             return;
         }
         for (let i = 0; i < hits; i++) {
-            enemy.takeDamage();
+            enemy.takeDamage(1, this);
         }
     }
 

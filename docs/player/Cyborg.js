@@ -371,14 +371,38 @@ export class Cyborg extends Hero {
         // Fire direction based on aim
         const speed = 12;
         const fireballPos = { x: fireballGroup.position.x, y: fireballGroup.position.y };
+        let origin = { x: fireballPos.x, y: fireballPos.y };
+        const velocity = { x: direction.x * speed, y: direction.y * speed };
+        const projectile = {
+            type: 'fireball',
+            mesh: fireballGroup,
+            owner: this,
+            velocity,
+            lastDeflectTime: 0,
+            deflect: (newOwner) => {
+                const now = performance.now();
+                if (now - projectile.lastDeflectTime < 200) {
+                    return;
+                }
+                projectile.lastDeflectTime = now;
+                projectile.owner = newOwner;
+                projectile.velocity.x *= -1;
+                projectile.velocity.y *= -1;
+                origin = { x: fireballPos.x, y: fireballPos.y };
+            }
+        };
+        Hero.addProjectile(projectile);
+        const cleanupProjectile = () => {
+            Hero.removeProjectile(projectile);
+        };
         let rotationAngle = 0;
         const level = this.level || { platforms: [] };
         const maxDistance = 12;
 
         // Animate fireball
         const fireballInterval = setInterval(() => {
-            fireballPos.x += direction.x * speed * 0.016;
-            fireballPos.y += direction.y * speed * 0.016;
+            fireballPos.x += velocity.x * 0.016;
+            fireballPos.y += velocity.y * 0.016;
             fireballGroup.position.set(fireballPos.x, fireballPos.y, 0.2);
 
             // Spin the fire missile
@@ -441,18 +465,24 @@ export class Cyborg extends Hero {
             };
 
             let hit = false;
-            if (this.isPositionBlockedByProtectionDome(fireballGroup.position)) {
+            const owner = projectile.owner || this;
+            if (owner && typeof owner.isPositionBlockedByProtectionDome === 'function' &&
+                owner.isPositionBlockedByProtectionDome(fireballGroup.position)) {
                 hit = true;
             }
             if (!hit) {
-                for (const enemy of this.getDamageTargets()) {
+                for (const enemy of owner && typeof owner.getDamageTargets === 'function' ? owner.getDamageTargets() : []) {
                     if (!enemy.isAlive) continue;
 
                     const enemyBounds = enemy.getBounds();
                     if (checkAABBCollision(fireballBounds, enemyBounds)) {
-                        this.applyAbilityDamage(this.abilities.q, enemy, 2);
-                        if (enemy.type !== 'player') {
-                            this.addUltimateCharge(this.ultimateChargePerKill);
+                        if (typeof owner.applyAbilityDamage === 'function') {
+                            owner.applyAbilityDamage(this.abilities.q, enemy, 2);
+                        } else if (typeof enemy.takeDamage === 'function') {
+                            enemy.takeDamage(2, owner);
+                        }
+                        if (enemy.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                            owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                         }
                         console.log('ðŸ”¥ Fireball hit!');
                         hit = true;
@@ -471,10 +501,11 @@ export class Cyborg extends Hero {
                 }
             }
 
-            const traveled = Math.hypot(fireballPos.x - this.position.x, fireballPos.y - this.position.y);
+            const traveled = Math.hypot(fireballPos.x - origin.x, fireballPos.y - origin.y);
             // Remove if hit or out of range
             if (hit || traveled > maxDistance) {
                 clearInterval(fireballInterval);
+                cleanupProjectile();
                 this.mesh.parent.remove(fireballGroup);
 
                 // Clean up any remaining trail particles
@@ -912,9 +943,9 @@ export class Cyborg extends Hero {
         const perpendicular = { x: -direction.y, y: direction.x };
         const angle = Math.atan2(direction.y, direction.x);
         const damage = 60;
-        const beamLength = 80;
+        const beamLength = 20;
         const beamSpeed = 22;
-        const maxTravel = 80;
+        const maxTravel = 20;
 
         // Create beam group with multiple layers
         const beamGroup = new THREE.Group();
@@ -1051,7 +1082,7 @@ export class Cyborg extends Hero {
                     const adjustedDamage = this.abilities.r && typeof this.abilities.r.getAdjustedDamage === 'function'
                         ? this.abilities.r.getAdjustedDamage(damage)
                         : damage;
-                    enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)));
+                    enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)), this);
                     hitEnemies.add(enemy);
                     if (enemy.type !== 'player') {
                         this.addUltimateCharge(this.ultimateChargePerKill);

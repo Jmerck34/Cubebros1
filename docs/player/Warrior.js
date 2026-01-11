@@ -26,6 +26,9 @@ export class Warrior extends Hero {
         this.facingDirection = 1;
         this.dashResetCount = 0;
         this.shieldBashInvuln = 0;
+        this.deflectTimer = 0;
+        this.deflectDuration = 0.6;
+        this.deflectRadius = 2.4;
         this.isSpinningUltimate = false;
         this.swordComboStep = 0;
         this.swordComboTimers = [];
@@ -179,11 +182,11 @@ export class Warrior extends Hero {
             return true;
         };
 
-        // W - Shield Bash (medium cooldown)
-        const shieldBash = new Ability('Shield Bash', 4);
-        shieldBash.use = (hero) => {
-            if (!Ability.prototype.use.call(shieldBash, hero)) return false;
-            hero.shieldBashAttack();
+        // W - Deflect (reflect incoming projectiles)
+        const deflect = new Ability('Deflect', 4);
+        deflect.use = (hero) => {
+            if (!Ability.prototype.use.call(deflect, hero)) return false;
+            hero.activateDeflect();
             return true;
         };
 
@@ -210,7 +213,7 @@ export class Warrior extends Hero {
             return true;
         };
 
-        this.setAbilities(swordSlash, shieldBash, dash, whirlwind);
+        this.setAbilities(swordSlash, deflect, dash, whirlwind);
     }
 
     initSwordSwingAudio() {
@@ -314,6 +317,9 @@ export class Warrior extends Hero {
             clearTimeout(this.swordComboResetTimer);
         }
 
+        const nextStep = (this.swordComboStep % 3) + 1;
+        this.swordComboStep = nextStep;
+
         const aimDir = this.getQuantizedAimDirection();
         const dirX = aimDir.x;
         const dirY = aimDir.y;
@@ -321,7 +327,7 @@ export class Warrior extends Hero {
             this.setFacingDirection(dirX >= 0 ? 1 : -1);
         }
         const aimAngle = aimDir.angle;
-        const arcSpan = Math.PI * 0.8;
+        const arcSpan = nextStep === 1 ? Math.PI * 0.8 : nextStep === 2 ? Math.PI * 1.05 : Math.PI * 1.25;
         const swingStart = aimAngle - arcSpan * 0.5;
         const swingEnd = aimAngle + arcSpan * 0.5;
         if (dirY > 0.25) {
@@ -333,8 +339,16 @@ export class Warrior extends Hero {
         const slashTimer = setTimeout(() => {
             this.sword.rotation.z = swingEnd;
             this.playSwordSwingSound();
-            this.createSlashTrail(swingStart, swingEnd, { x: dirX, y: dirY }, 0xbfe3ff);
-            this.applySlashDamage({ x: dirX, y: dirY });
+            const tint = nextStep === 3 ? 0xffd6a6 : nextStep === 2 ? 0xaad7ff : 0xbfe3ff;
+            this.createSlashTrail(swingStart, swingEnd, { x: dirX, y: dirY }, tint);
+            this.applySlashDamage({ x: dirX, y: dirY }, nextStep);
+            if (nextStep === 3) {
+                this.swordFinisherSpinElapsed = this.swordFinisherSpinDuration;
+                if (this.abilities && this.abilities.q) {
+                    this.abilities.q.currentCooldown = 2;
+                    this.abilities.q.isReady = false;
+                }
+            }
         }, 140);
         const resetRotTimer = setTimeout(() => {
             this.sword.rotation.z = originalRot;
@@ -342,6 +356,11 @@ export class Warrior extends Hero {
             this.sword.position.y = this.swordBase.y;
         }, 360);
         this.swordComboTimers.push(slashTimer, resetRotTimer);
+
+        const resetDelay = nextStep === 3 ? this.swordComboResetAfterFinisherMs : this.swordComboWindowMs;
+        this.swordComboResetTimer = setTimeout(() => {
+            this.swordComboStep = 0;
+        }, resetDelay);
     }
 
     /**
@@ -402,7 +421,7 @@ export class Warrior extends Hero {
         }, 30); // Reduced from 40ms for faster animation
     }
 
-    applySlashDamage(direction) {
+    applySlashDamage(direction, comboStep = 1) {
         const dirX = direction.x;
         const dirY = direction.y;
         const reach = 1.9;
@@ -416,7 +435,8 @@ export class Warrior extends Hero {
             top: centerY + halfH,
             bottom: centerY - halfH
         };
-        this.damageEnemiesInArea(slashBounds, this.abilities.q, 1);
+        const hits = comboStep === 3 ? 2 : 1;
+        this.damageEnemiesInArea(slashBounds, this.abilities.q, hits);
     }
 
     getQuantizedAimDirection() {
@@ -482,6 +502,44 @@ export class Warrior extends Hero {
             this.animateShieldTo(originalX, originalY, originalRot, 1, 140);
             this.animateSwordTo(swordOriginalX, swordOriginalY, swordOriginalRot, 1, 140);
         }, 350);
+    }
+
+    /**
+     * Deflect projectiles - W Ability
+     */
+    activateDeflect() {
+        this.deflectTimer = this.deflectDuration;
+        this.setEffectColor(0xe6f2ff);
+        this.playShieldBashSound();
+
+        const originalX = this.shieldBase.x;
+        const originalY = this.shieldBase.y;
+        const originalRot = this.shieldBase.rotZ;
+        this.animateShieldTo(-0.8, 0.05, 0.25, 1.05, 90);
+
+        setTimeout(() => {
+            this.animateShieldTo(originalX, originalY, originalRot, 1, 120);
+        }, Math.max(120, this.deflectDuration * 1000));
+    }
+
+    deflectProjectiles() {
+        const projectiles = Hero.getProjectiles();
+        if (!projectiles.length) return;
+        for (const projectile of projectiles) {
+            if (!projectile || !projectile.mesh || typeof projectile.deflect !== 'function') {
+                continue;
+            }
+            const owner = projectile.owner;
+            if (owner && owner.team && this.team && owner.team === this.team) {
+                continue;
+            }
+            const dx = projectile.mesh.position.x - this.position.x;
+            const dy = projectile.mesh.position.y - this.position.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist <= this.deflectRadius) {
+                projectile.deflect(this);
+            }
+        }
     }
 
     /**
@@ -784,6 +842,13 @@ export class Warrior extends Hero {
             this.shieldBashInvuln -= deltaTime;
             this.setEffectColor(0xffe066);
             if (this.shieldBashInvuln <= 0) {
+                this.setEffectColor(this.baseColor);
+            }
+        }
+        if (this.deflectTimer > 0) {
+            this.deflectTimer = Math.max(0, this.deflectTimer - deltaTime);
+            this.deflectProjectiles();
+            if (this.deflectTimer === 0) {
                 this.setEffectColor(this.baseColor);
             }
         }

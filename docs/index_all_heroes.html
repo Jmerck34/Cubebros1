@@ -120,6 +120,27 @@
             pointer-events: none;
         }
 
+        .mini-map {
+            position: fixed;
+            width: 150px;
+            height: 150px;
+            padding: 0;
+            box-sizing: border-box;
+            overflow: hidden;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(10, 12, 16, 0.55);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+            z-index: 120;
+        }
+
+        .mini-map canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
         .ability-slot.flag-blocked {
             border-color: rgba(255, 80, 80, 0.8);
             box-shadow: 0 0 10px rgba(255, 80, 80, 0.7);

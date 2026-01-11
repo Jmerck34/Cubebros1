@@ -266,15 +266,44 @@ export class Archer extends Hero {
 
         const damageHits = 1 + Math.round(chargeRatio * 2);
 
-        let velocityY = useAim ? direction.y * speed : 3.5 + chargeRatio * 2.2;
+        const velocity = {
+            x: direction.x * speed,
+            y: useAim ? direction.y * speed : 3.5 + chargeRatio * 2.2
+        };
         const gravity = -14;
-        const velocityX = direction.x * speed;
+        let projectileOwner = this;
+        let allowTeleport = teleportOnHit;
+        let allowPiercing = piercing;
+        const projectile = {
+            type: 'arrow',
+            mesh: arrowGroup,
+            owner: projectileOwner,
+            velocity,
+            lastDeflectTime: 0,
+            deflect: (newOwner) => {
+                const now = performance.now();
+                if (now - projectile.lastDeflectTime < 200) {
+                    return;
+                }
+                projectile.lastDeflectTime = now;
+                projectile.owner = newOwner;
+                projectile.velocity.x *= -1;
+                projectile.velocity.y *= -1;
+                allowTeleport = false;
+                allowPiercing = false;
+            }
+        };
+        Hero.addProjectile(projectile);
+
+        const cleanupProjectile = () => {
+            Hero.removeProjectile(projectile);
+        };
 
         const arrowInterval = setInterval(() => {
-            arrowGroup.position.x += velocityX * 0.016;
-            velocityY += gravity * 0.016;
-            arrowGroup.position.y += velocityY * 0.016;
-            const targetRotation = Math.atan2(velocityY, velocityX);
+            arrowGroup.position.x += velocity.x * 0.016;
+            velocity.y += gravity * 0.016;
+            arrowGroup.position.y += velocity.y * 0.016;
+            const targetRotation = Math.atan2(velocity.y, velocity.x);
             arrowGroup.rotation.z = targetRotation;
 
             const arrowBounds = {
@@ -284,29 +313,37 @@ export class Archer extends Hero {
                 bottom: arrowGroup.position.y - 0.08
             };
 
-            if (this.isPositionBlockedByProtectionDome(arrowGroup.position)) {
+            const owner = projectile.owner || projectileOwner;
+            if (owner && typeof owner.isPositionBlockedByProtectionDome === 'function' &&
+                owner.isPositionBlockedByProtectionDome(arrowGroup.position)) {
                 clearInterval(arrowInterval);
+                cleanupProjectile();
                 this.mesh.parent.remove(arrowGroup);
                 return;
             }
 
-            for (const enemy of this.getDamageTargets()) {
+            for (const enemy of owner && typeof owner.getDamageTargets === 'function' ? owner.getDamageTargets() : []) {
                 if (!enemy.isAlive) continue;
                 if (hitEnemies.has(enemy)) continue;
 
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(arrowBounds, enemyBounds)) {
-                    this.applyAbilityDamage(ability, enemy, damageHits);
-                    if (enemy.type !== 'player') {
-                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    if (typeof owner.applyAbilityDamage === 'function') {
+                        owner.applyAbilityDamage(ability, enemy, damageHits);
+                    } else if (typeof enemy.takeDamage === 'function') {
+                        enemy.takeDamage(damageHits, owner);
+                    }
+                    if (enemy.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                        owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                     }
                     hitEnemies.add(enemy);
 
-                    if (!piercing) {
-                        if (teleportOnHit) {
-                            this.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
+                    if (!allowPiercing) {
+                        if (allowTeleport && typeof owner.teleportToArrow === 'function') {
+                            owner.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
                         }
                         clearInterval(arrowInterval);
+                        cleanupProjectile();
                         this.mesh.parent.remove(arrowGroup);
                         return;
                     }
@@ -325,15 +362,16 @@ export class Archer extends Hero {
             }
 
             if (hitPlatform) {
-                if (teleportOnHit) {
-                    this.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
+                if (allowTeleport && typeof owner.teleportToArrow === 'function') {
+                    owner.teleportToArrow(arrowGroup.position.x, arrowGroup.position.y);
                 }
                 clearInterval(arrowInterval);
+                cleanupProjectile();
                 if (hitPlatform) {
                     // Stick arrow briefly into platform
                     const stickTime = 600;
                     const stuck = arrowGroup;
-                    stuck.rotation.z = Math.atan2(velocityY, velocityX);
+                    stuck.rotation.z = Math.atan2(velocity.y, velocity.x);
                     setTimeout(() => {
                         if (stuck.parent) {
                             stuck.parent.remove(stuck);

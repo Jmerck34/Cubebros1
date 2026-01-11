@@ -12,6 +12,7 @@ import { Warrior } from './player/Warrior.js';
 import { Level } from './world/Level.js?v=20260109';
 import { CameraFollow } from './camera/CameraFollow.js';
 import { Goomba } from './entities/Goomba.js';
+import { MiniMap } from './ui/MiniMap.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -45,6 +46,42 @@ const input = new InputManager();
 // Create level with platforms
 const level = new Level(scene);
 level.createTestLevel({ mapKey: 'playtest' }); // Adds ground + floating platforms
+
+const getLevelBoundsForMiniMap = (levelInstance) => {
+    if (!levelInstance) return null;
+    const cameraBounds = levelInstance.cameraConfig && levelInstance.cameraConfig.bounds;
+    if (cameraBounds && Number.isFinite(cameraBounds.left) && Number.isFinite(cameraBounds.right)) {
+        return cameraBounds;
+    }
+    const boundsList = [];
+    if (Array.isArray(levelInstance.platforms)) {
+        levelInstance.platforms.forEach((platform) => {
+            if (platform && platform.bounds) {
+                boundsList.push(platform.bounds);
+            }
+        });
+    }
+    if (Array.isArray(levelInstance.movingPlatforms)) {
+        levelInstance.movingPlatforms.forEach((entry) => {
+            const platform = entry && entry.platform;
+            if (platform && platform.bounds) {
+                boundsList.push(platform.bounds);
+            }
+        });
+    }
+    if (!boundsList.length) return null;
+    return {
+        left: Math.min(...boundsList.map((b) => b.left)),
+        right: Math.max(...boundsList.map((b) => b.right)),
+        bottom: Math.min(...boundsList.map((b) => b.bottom)),
+        top: Math.max(...boundsList.map((b) => b.top))
+    };
+};
+
+const miniMap = new MiniMap({ playerIndex: 0 });
+miniMap.setBounds(getLevelBoundsForMiniMap(level));
+miniMap.buildBase(level);
+miniMap.setViewport({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }, window.innerHeight);
 
 // Add enemies to level
 const goomba1 = new Goomba(scene, 8, 0);
@@ -98,6 +135,7 @@ window.addEventListener('resize', () => {
     camera.right = viewSize * aspect;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    miniMap.setViewport({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }, window.innerHeight);
 });
 
 // Game Loop
@@ -138,6 +176,7 @@ const gameLoop = new GameLoop(
 
         updateDamageNumbers(deltaTime);
         playerStateOverlay.update();
+        miniMap.update({ players: [player], focusPlayer: player });
     },
     // Render callback
     () => {

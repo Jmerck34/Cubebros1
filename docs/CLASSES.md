@@ -28,6 +28,8 @@ Brief descriptions of every exported class in `threejs-platformer/docs`.
 - `PauseMenu` - In-game pause and settings menu.
 - `DebugMenu` - Dev menu for tuning and toggles.
 - `PlayerStateOverlay` - F1 debug HUD showing player state.
+- `MiniMap` - Per-player minimap overlay for players, flags, and objectives.
+- `MiniMapMarker` - Small marker definition for minimap icons.
 - `Graphic2D` - Base class for 2D visual elements or textures.
 
 ## Camera

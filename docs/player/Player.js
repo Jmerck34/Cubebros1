@@ -122,6 +122,8 @@ export class Player {
         this.flagCarryBlocksAbility3 = false;
         this.flagDropWasPressed = false;
         this.lastDeathWasPit = false;
+        this.lastDamageSource = null;
+        this.lastDamageTime = null;
 
         // Status effects (for hero-vs-hero interactions)
         this.frozenTimer = 0;
@@ -1067,7 +1069,7 @@ export class Player {
      * Take damage
      * @param {number} amount - Amount of damage to take
      */
-    takeDamage(amount) {
+    takeDamage(amount, source = null) {
         if (!this.isAlive) {
             return;
         }
@@ -1075,6 +1077,11 @@ export class Player {
         const damage = Number.isFinite(amount) ? amount : 1;
         if (damage <= 0) {
             return;
+        }
+
+        if (source && source !== this) {
+            this.lastDamageSource = source;
+            this.lastDamageTime = performance.now();
         }
 
         spawnDamageNumber(this.scene, this.position, damage, {
@@ -1238,6 +1245,8 @@ export class Player {
         this.fallPeakY = this.position.y;
         this.fallDistance = 0;
         this.lastDeathWasPit = false;
+        this.lastDamageSource = null;
+        this.lastDamageTime = null;
         this.visualBob = 0;
         this.visualScaleY = 1;
         this.visualScaleZ = 1;

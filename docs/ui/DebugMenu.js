@@ -11,6 +11,8 @@ export class DebugMenu {
         this.trainingDummy = null;
         this.trainingDummyTicker = null;
         this.freeCameraEnabled = false;
+        this.miniMapVisible = true;
+        this.miniMapVisibilityHandler = null;
 
         // Global physics multipliers (persist across hero switches)
         this.globalPhysics = {
@@ -222,6 +224,13 @@ export class DebugMenu {
         this.addSection('🎥 Camera');
         this.addToggle('Free Camera', this.freeCameraEnabled, (checked) => {
             this.freeCameraEnabled = checked;
+        });
+
+        // UI Section
+        this.addSection('🧭 UI');
+        this.addToggle('Show Mini Map', this.miniMapVisible, (checked) => {
+            this.miniMapVisible = checked;
+            this.notifyMiniMapVisibility();
         });
 
         // Hitbox Section
@@ -660,6 +669,10 @@ export class DebugMenu {
         return this.freeCameraEnabled;
     }
 
+    isMiniMapVisible() {
+        return this.miniMapVisible;
+    }
+
     /**
      * Check if game should be paused (same as isOpen for debug menu)
      */
@@ -674,6 +687,19 @@ export class DebugMenu {
         return this.globalPhysics;
     }
 
+    setMiniMapVisibilityHandler(handler, initialVisible = null) {
+        if (typeof initialVisible === 'boolean') {
+            this.miniMapVisible = initialVisible;
+        }
+        this.miniMapVisibilityHandler = handler;
+        this.notifyMiniMapVisibility();
+    }
+
+    notifyMiniMapVisibility() {
+        if (typeof this.miniMapVisibilityHandler === 'function') {
+            this.miniMapVisibilityHandler(this.miniMapVisible);
+        }
+    }
 
     /**
      * Update player reference (when switching heroes)

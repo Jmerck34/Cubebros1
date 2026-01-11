@@ -82,12 +82,12 @@ export class Ability {
      * @param {Enemy} enemy - The enemy to damage
      * @param {number} baseDamageHits - Number of base damage hits (default 1)
      */
-    damageEnemy(enemy, baseDamageHits = 1) {
+    damageEnemy(enemy, baseDamageHits = 1, source = null) {
         const adjustedDamage = this.getAdjustedDamage(baseDamageHits);
         const hits = Math.max(1, Math.round(adjustedDamage));
 
         for (let i = 0; i < hits; i++) {
-            enemy.takeDamage();
+            enemy.takeDamage(1, source);
         }
     }
 }

@@ -169,7 +169,7 @@ export class Paladin extends Hero {
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(this.abilities.q, enemy, 2);
                 if (typeof enemy.takeDamage === 'function') {
-                    enemy.takeDamage(10);
+                    enemy.takeDamage(10, this);
                 }
                 if (enemy.type !== 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
@@ -387,7 +387,7 @@ export class Paladin extends Hero {
                     if (checkAABBCollision(bounds, enemy.getBounds())) {
                         this.applyAbilityDamage(this.abilities.e, enemy, 2);
                         if (typeof enemy.takeDamage === 'function') {
-                            enemy.takeDamage(5);
+                            enemy.takeDamage(5, this);
                         }
                         if (enemy.type !== 'player') {
                             this.addUltimateCharge(this.ultimateChargePerKill);
