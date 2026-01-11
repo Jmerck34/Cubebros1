@@ -2,6 +2,10 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { checkAABBCollision } from '../utils/collision.js';
 import { DEATH_Y } from '../core/constants.js';
 
+const FLAG_DROP_Y_OFFSET = 0.6;
+const FLAG_GROUND_SNAP_MAX = 2.0;
+const FLAG_LEDGE_SNAP_MAX = 6.0;
+
 export class CaptureTheFlagMode {
     constructor({ scene, level, onScoreboardVisible, onScoreChange } = {}) {
         this.scene = scene;
@@ -107,12 +111,16 @@ export class CaptureTheFlagMode {
 
                 const landingPos = this.getFlagLandingPosition({ x: flag.lob.x, y: flag.lob.y }, flag.lob.vy);
                 if (landingPos) {
-                    this.dropFlagAt(flag, landingPos);
+                    this.dropFlagAt(flag, landingPos, { snapToGround: false, allowLedgeSnap: false });
                     return;
                 }
 
                 if (flag.lob.y < DEATH_Y) {
-                    this.dropFlagAt(flag, { x: flag.lob.x, y: flag.lob.y });
+                    this.dropFlagAt(flag, { x: flag.lob.x, y: flag.lob.y }, {
+                        snapToGround: true,
+                        allowLedgeSnap: true,
+                        forceSnap: true
+                    });
                     return;
                 }
             } else if (flag.dropped) {
@@ -346,7 +354,7 @@ export class CaptureTheFlagMode {
         flag.lastCarrierPosition = { x: flag.base.x, y: flag.base.y };
     }
 
-    getNearestLedgePosition(position) {
+    getNearestLedgePosition(position, { maxDistance = FLAG_LEDGE_SNAP_MAX } = {}) {
         if (!this.level || !this.level.platforms || !this.level.platforms.length || !position) {
             return position;
         }
@@ -367,11 +375,14 @@ export class CaptureTheFlagMode {
             const clampedX = Math.min(bounds.right - inset, Math.max(bounds.left + inset, position.x));
             const candidate = {
                 x: clampedX,
-                y: bounds.top + 0.6
+                y: bounds.top + FLAG_DROP_Y_OFFSET
             };
             const dx = candidate.x - position.x;
             const dy = candidate.y - position.y;
             const dist = dx * dx + dy * dy;
+            if (Number.isFinite(maxDistance) && dist > maxDistance * maxDistance) {
+                return;
+            }
             if (dist < bestDistance) {
                 bestDistance = dist;
                 best = candidate;
@@ -414,7 +425,7 @@ export class CaptureTheFlagMode {
         const innerEdgeX = isLeftCastle ? bounds.right - inset : bounds.left + inset;
         return {
             x: innerEdgeX,
-            y: bounds.top + 0.6
+            y: bounds.top + FLAG_DROP_Y_OFFSET
         };
     }
 
@@ -428,12 +439,13 @@ export class CaptureTheFlagMode {
         return isLeftCastle ? position.x < bounds.left : position.x > bounds.right;
     }
 
-    getGroundDropPosition(position) {
+    getGroundDropPosition(position, { maxDrop = FLAG_GROUND_SNAP_MAX } = {}) {
         if (!this.level || !this.level.platforms || !this.level.platforms.length || !position) {
             return null;
         }
 
         const threshold = position.y + 0.5;
+        const minTop = Number.isFinite(maxDrop) ? position.y - maxDrop : -Infinity;
         let best = null;
         let bestTop = -Infinity;
 
@@ -443,6 +455,9 @@ export class CaptureTheFlagMode {
             }
             const bounds = platform.bounds;
             if (bounds.top > threshold) {
+                return;
+            }
+            if (bounds.top < minTop) {
                 return;
             }
             const width = bounds.right - bounds.left;
@@ -457,7 +472,7 @@ export class CaptureTheFlagMode {
                 bestTop = bounds.top;
                 best = {
                     x: position.x,
-                    y: bounds.top + 0.6
+                    y: bounds.top + FLAG_DROP_Y_OFFSET
                 };
             }
         });
@@ -505,14 +520,23 @@ export class CaptureTheFlagMode {
         const clampedX = Math.min(bounds.right - inset, Math.max(bounds.left + inset, position.x));
         return {
             x: clampedX,
-            y: bounds.top + 0.6
+            y: bounds.top + FLAG_DROP_Y_OFFSET
         };
     }
 
-    dropFlagAt(flag, dropPos) {
+    dropFlagAt(flag, dropPos, options = {}) {
         const resolvedPos = dropPos || flag.lastCarrierPosition || flag.base;
-        const groundedPos = this.getGroundDropPosition(resolvedPos);
-        const initialPos = groundedPos || this.getNearestLedgePosition(resolvedPos) || resolvedPos;
+        const hasDropPos = dropPos !== undefined && dropPos !== null;
+        const forceSnap = options.forceSnap === true;
+        const snapToGround = options.snapToGround !== false && (!hasDropPos || forceSnap);
+        const allowLedgeSnap = options.allowLedgeSnap !== false && (!hasDropPos || forceSnap);
+        const groundedPos = snapToGround
+            ? this.getGroundDropPosition(resolvedPos, { maxDrop: options.maxDrop ?? FLAG_GROUND_SNAP_MAX })
+            : null;
+        const ledgePos = allowLedgeSnap
+            ? this.getNearestLedgePosition(resolvedPos, { maxDistance: options.maxLedgeSnap ?? FLAG_LEDGE_SNAP_MAX })
+            : null;
+        const initialPos = groundedPos || ledgePos || resolvedPos;
         const finalPos = this.clampFlagOutsideCastle(flag, initialPos);
         flag.lob = null;
         this.clearFlagCarrier(flag, flag.carrier);

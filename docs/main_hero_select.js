@@ -464,6 +464,41 @@ function updateControllerIndicatorVisibility() {
     }
 }
 
+function getLevelBoundsForEnvironment(levelInstance) {
+    if (!levelInstance) {
+        return null;
+    }
+    const cameraBounds = levelInstance.cameraConfig && levelInstance.cameraConfig.bounds;
+    if (cameraBounds && Number.isFinite(cameraBounds.left) && Number.isFinite(cameraBounds.right)) {
+        return cameraBounds;
+    }
+    const boundsList = [];
+    if (Array.isArray(levelInstance.platforms)) {
+        levelInstance.platforms.forEach((platform) => {
+            if (platform && platform.bounds) {
+                boundsList.push(platform.bounds);
+            }
+        });
+    }
+    if (Array.isArray(levelInstance.movingPlatforms)) {
+        levelInstance.movingPlatforms.forEach((entry) => {
+            const platform = entry && entry.platform;
+            if (platform && platform.bounds) {
+                boundsList.push(platform.bounds);
+            }
+        });
+    }
+    if (!boundsList.length) {
+        return null;
+    }
+    return {
+        left: Math.min(...boundsList.map((b) => b.left)),
+        right: Math.max(...boundsList.map((b) => b.right)),
+        bottom: Math.min(...boundsList.map((b) => b.bottom)),
+        top: Math.max(...boundsList.map((b) => b.top))
+    };
+}
+
 function isFullscreenActive() {
     return Boolean(document.fullscreenElement);
 }
@@ -633,7 +668,6 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     } else {
         scene.background = new THREE.Color(0x5c94fc);
         environment = new Environment(scene);
-        environment.createBackground();
     }
 
     // Create level with platforms
@@ -670,6 +704,10 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
         });
     } else {
         level.createTestLevel({ includeInteractiveFlags: false, mapKey: selectedGameMode || 'playtest' });
+    }
+    if (environment) {
+        const envBounds = getLevelBoundsForEnvironment(level);
+        environment.createBackground(envBounds);
     }
     healthPotions = createHealthPotions(level);
 

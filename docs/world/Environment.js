@@ -14,18 +14,28 @@ export class Environment {
         this.backgroundYOffset = 2;
         this.parallaxLayers = [];
         this.visibilityLayer = VISIBILITY_LAYERS.background;
+        this.worldSpanX = 140;
+        this.worldSpanY = 60;
+        this.cloudWrapLimit = 70;
+        this.particleWrapLimit = 30;
     }
 
     /**
      * Create layered background with parallax
      */
-    createBackground() {
+    createBackground(bounds = null) {
+        this.setWorldBounds(bounds);
         this.parallaxLayers = [];
         this.clouds = [];
         this.particles = [];
         this.stars = [];
 
         // Tiled sky layers (slow parallax)
+        const spanX = this.worldSpanX || 140;
+        const spanY = this.worldSpanY || 60;
+        const skyWidth = Math.max(220, spanX * 1.6);
+        const skyHeight = Math.max(120, spanY * 1.4);
+        const skyTileCount = Math.max(3, Math.ceil((spanX * 2) / skyWidth));
         const skyLayers = [
             { color: 0x87d9f7, z: -55, opacity: 1, speedMultiplier: 0.12 },
             { color: 0x6bc3ea, z: -45, opacity: 0.9, speedMultiplier: 0.2 },
@@ -34,7 +44,7 @@ export class Environment {
         ];
 
         skyLayers.forEach(layer => {
-            const sky = this.createTiledPlaneLayer(layer.color, layer.z, layer.opacity, 220, 120, 3);
+            const sky = this.createTiledPlaneLayer(layer.color, layer.z, layer.opacity, skyWidth, skyHeight, skyTileCount);
             this.registerParallaxLayer({
                 root: sky.group,
                 speedMultiplier: layer.speedMultiplier,
@@ -46,7 +56,7 @@ export class Environment {
         // Atmospheric haze bands for depth
         const hazeGroup = new THREE.Group();
         this.scene.add(hazeGroup);
-        this.createHazeBands(hazeGroup);
+        this.createHazeBands(hazeGroup, spanX);
         this.registerParallaxLayer({ root: hazeGroup, speedMultiplier: 0.55 });
 
         // Sun and glow
@@ -62,7 +72,7 @@ export class Environment {
         this.registerParallaxLayer({ root: starGroup, speedMultiplier: 0.15 });
 
         // Mountains (layered depth)
-        this.createMountains();
+        this.createMountains(spanX, bounds);
 
         // Hills (stacked depth layers)
         const hillConfigs = [
@@ -84,18 +94,19 @@ export class Environment {
                 config.amplitude,
                 config.thickness,
                 config.opacity,
-                hillGroup
+                hillGroup,
+                spanX
             );
             this.registerParallaxLayer({ root: hillGroup, speedMultiplier: config.speedMultiplier });
         });
 
         // Clouds (multiple parallax layers)
-        this.createClouds();
+        this.createClouds(spanX, spanY);
 
         // Floating particles (near-mid depth)
         const particleGroup = new THREE.Group();
         this.scene.add(particleGroup);
-        this.createParticles(particleGroup);
+        this.createParticles(particleGroup, spanX, spanY);
         this.registerParallaxLayer({ root: particleGroup, speedMultiplier: 0.9 });
 
         // Stylized clown silhouette (background accent)
@@ -114,6 +125,47 @@ export class Environment {
             applyVisibilityLayer(config.root, this.visibilityLayer, { applyZ: false });
         }
         this.parallaxLayers.push(config);
+    }
+
+    setWorldBounds(bounds = null) {
+        if (!bounds || !Number.isFinite(bounds.left) || !Number.isFinite(bounds.right)) {
+            this.worldSpanX = 140;
+            this.worldSpanY = 60;
+            this.cloudWrapLimit = 70;
+            this.particleWrapLimit = 30;
+            return;
+        }
+        const spanX = Math.max(140, bounds.right - bounds.left);
+        const spanY = Math.max(60, bounds.top - bounds.bottom);
+        this.worldSpanX = spanX;
+        this.worldSpanY = spanY;
+        this.cloudWrapLimit = Math.max(70, spanX * 0.6);
+        this.particleWrapLimit = Math.max(30, spanX * 0.5);
+    }
+
+    createCaveBackdrop(spanX = this.worldSpanX || 140, bounds = null) {
+        if (!bounds || !Number.isFinite(bounds.bottom)) {
+            return;
+        }
+        const caveTop = -8 + this.backgroundYOffset;
+        const caveBottom = bounds.bottom;
+        const height = caveTop - caveBottom;
+        if (!Number.isFinite(height) || height <= 0) {
+            return;
+        }
+        const caveGroup = new THREE.Group();
+        const caveWidth = Math.max(220, spanX * 1.3);
+        const geometry = new THREE.PlaneGeometry(caveWidth, height);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x1f2a2f,
+            transparent: true,
+            opacity: 0.85
+        });
+        const cave = new THREE.Mesh(geometry, material);
+        cave.position.set(0, caveBottom + height / 2, -8);
+        caveGroup.add(cave);
+        this.scene.add(caveGroup);
+        this.registerParallaxLayer({ root: caveGroup, speedMultiplier: 0.95 });
     }
 
     /**
@@ -649,7 +701,13 @@ export class Environment {
     /**
      * Create mountain silhouettes
      */
-    createMountains() {
+    createMountains(spanX = this.worldSpanX || 140, bounds = null) {
+        const spanY = this.worldSpanY || 60;
+        const extraDepth = Math.max(6, spanY * 0.35);
+        const baseFloor = bounds && Number.isFinite(bounds.bottom)
+            ? bounds.bottom
+            : -10 + this.backgroundYOffset;
+        const floorY = baseFloor - extraDepth;
         const farGroup = new THREE.Group();
         this.scene.add(farGroup);
         this.createMountainLayer(
@@ -661,7 +719,8 @@ export class Environment {
             7,
             12,
             0.35,
-            30
+            spanX,
+            floorY
         );
         this.registerParallaxLayer({ root: farGroup, speedMultiplier: 0.35 });
 
@@ -676,7 +735,8 @@ export class Environment {
             9,
             16,
             0.55,
-            30
+            spanX,
+            floorY
         );
         this.registerParallaxLayer({ root: midGroup, speedMultiplier: 0.5 });
     }
@@ -684,13 +744,15 @@ export class Environment {
     /**
      * Create a mountain layer with shared palette
      */
-    createMountainLayer(targetGroup, color, z, baseY, count, heightMin, heightMax, opacity, spacing) {
+    createMountainLayer(targetGroup, color, z, baseY, count, heightMin, heightMax, opacity, spanX = this.worldSpanX || 140, floorYOverride = null) {
+        const halfSpan = Math.max(70, spanX * 0.6);
+        const spacing = (halfSpan * 2) / Math.max(1, count - 1);
         for (let i = 0; i < count; i++) {
             const points = [];
-            const baseX = -70 + i * spacing;
+            const baseX = -halfSpan + i * spacing;
             const height = heightMin + Math.random() * (heightMax - heightMin);
             const width = 16 + Math.random() * 8;
-            const floorY = baseY - 8;
+            const floorY = Number.isFinite(floorYOverride) ? floorYOverride : baseY - 8;
 
             points.push(new THREE.Vector2(baseX - width, floorY));
             points.push(new THREE.Vector2(baseX - width * 0.45, baseY + height * 0.55));
@@ -714,11 +776,12 @@ export class Environment {
     /**
      * Create rolling hills for depth layers
      */
-    createHills(color, z, baseY, amplitude, thickness, opacity, targetGroup = this.scene) {
+    createHills(color, z, baseY, amplitude, thickness, opacity, targetGroup = this.scene, spanX = this.worldSpanX || 140) {
         const points = [];
-        const startX = -70;
-        const endX = 70;
-        const segments = 18;
+        const halfSpan = Math.max(70, spanX * 0.6);
+        const startX = -halfSpan;
+        const endX = halfSpan;
+        const segments = Math.max(18, Math.round(spanX / 8));
         const step = (endX - startX) / segments;
 
         points.push(new THREE.Vector2(startX, baseY - thickness));
@@ -744,7 +807,7 @@ export class Environment {
     /**
      * Create soft haze bands to push distant layers back
      */
-    createHazeBands(targetGroup = this.scene) {
+    createHazeBands(targetGroup = this.scene, spanX = this.worldSpanX || 140) {
         const bands = [
             { color: 0xbfe8fb, y: -1 + this.backgroundYOffset, height: 16, z: -32, opacity: 0.12 },
             { color: 0xb1def4, y: -3 + this.backgroundYOffset, height: 14, z: -24, opacity: 0.14 },
@@ -752,7 +815,8 @@ export class Environment {
         ];
 
         bands.forEach(band => {
-            const hazeGeometry = new THREE.PlaneGeometry(200, band.height);
+            const hazeWidth = Math.max(200, spanX * 1.2);
+            const hazeGeometry = new THREE.PlaneGeometry(hazeWidth, band.height);
             const hazeMaterial = new THREE.MeshBasicMaterial({
                 color: band.color,
                 transparent: true,
@@ -767,7 +831,7 @@ export class Environment {
     /**
      * Create animated clouds
      */
-    createClouds() {
+    createClouds(spanX = this.worldSpanX || 140, spanY = this.worldSpanY || 60) {
         const layers = [
             {
                 count: 10,
@@ -840,6 +904,7 @@ export class Environment {
             this.scene.add(cloudGroup);
             this.registerParallaxLayer({ root: cloudGroup, speedMultiplier: layer.parallaxSpeed });
 
+            const halfSpan = Math.max(70, spanX * 0.6);
             for (let i = 0; i < layer.count; i++) {
                 const cloud = this.createCloud(
                     layer.baseColor,
@@ -850,12 +915,12 @@ export class Environment {
                 const scale = layer.scaleMin + Math.random() * (layer.scaleMax - layer.scaleMin);
                 cloud.scale.set(scale, scale, 1);
                 cloud.position.set(
-                    -50 + Math.random() * 100,
-                    layer.yMin + Math.random() * (layer.yMax - layer.yMin) + this.backgroundYOffset,
+                    -halfSpan + Math.random() * (halfSpan * 2),
+                    layer.yMin + Math.random() * (layer.yMax - layer.yMin) + this.backgroundYOffset + spanY * 0.15,
                     layer.zMin + Math.random() * (layer.zMax - layer.zMin)
                 );
                 cloud.userData.speed = layer.speedMin + Math.random() * (layer.speedMax - layer.speedMin);
-                cloud.userData.wrapLimit = 70;
+                cloud.userData.wrapLimit = this.cloudWrapLimit;
                 this.clouds.push(cloud);
                 cloudGroup.add(cloud);
             }
@@ -924,7 +989,9 @@ export class Environment {
     /**
      * Create floating particles (fireflies, dust, etc.)
      */
-    createParticles(targetGroup = this.scene) {
+    createParticles(targetGroup = this.scene, spanX = this.worldSpanX || 140, spanY = this.worldSpanY || 60) {
+        const halfSpan = Math.max(30, spanX * 0.5);
+        const ySpread = Math.max(20, spanY * 0.5);
         for (let i = 0; i < 30; i++) {
             const particleGeometry = new THREE.CircleGeometry(0.05, 8);
             const particleMaterial = new THREE.MeshBasicMaterial({
@@ -935,8 +1002,8 @@ export class Environment {
             const particle = new THREE.Mesh(particleGeometry, particleMaterial);
 
             particle.position.set(
-                -30 + Math.random() * 60,
-                -5 + Math.random() * 20 + this.backgroundYOffset,
+                -halfSpan + Math.random() * (halfSpan * 2),
+                -5 + Math.random() * ySpread + this.backgroundYOffset,
                 -10 + Math.random() * 5
             );
 
@@ -956,6 +1023,8 @@ export class Environment {
      * Create stars in background
      */
     createStars(targetGroup = this.scene) {
+        const halfSpan = Math.max(50, (this.worldSpanX || 140) * 0.6);
+        const ySpread = Math.max(30, (this.worldSpanY || 60) * 0.6);
         for (let i = 0; i < 50; i++) {
             const starGeometry = new THREE.CircleGeometry(0.08, 4);
             const starMaterial = new THREE.MeshBasicMaterial({
@@ -966,8 +1035,8 @@ export class Environment {
             const star = new THREE.Mesh(starGeometry, starMaterial);
 
             star.position.set(
-                -50 + Math.random() * 100,
-                -5 + Math.random() * 30 + this.backgroundYOffset,
+                -halfSpan + Math.random() * (halfSpan * 2),
+                -5 + Math.random() * ySpread + this.backgroundYOffset,
                 -48
             );
 
@@ -1052,8 +1121,9 @@ export class Environment {
             particle.position.y = particle.userData.initialY + Math.sin(particle.userData.time) * 0.5;
 
             // Wrap around
-            if (particle.position.x > 30) particle.position.x = -30;
-            if (particle.position.x < -30) particle.position.x = 30;
+            const wrapLimit = this.particleWrapLimit || 30;
+            if (particle.position.x > wrapLimit) particle.position.x = -wrapLimit;
+            if (particle.position.x < -wrapLimit) particle.position.x = wrapLimit;
 
             // Pulse opacity
             particle.material.opacity = 0.4 + Math.sin(particle.userData.time * 2) * 0.2;
