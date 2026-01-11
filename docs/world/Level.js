@@ -68,6 +68,8 @@ export class Level {
         this.cameraConfig = null;
         this.deathY = null;
         this.defaultVisibilityLayer = VISIBILITY_LAYERS.foreground;
+        this.verticalMovingSpeedScale = 0.7;
+        this.verticalMovingSpeedCap = 0.45;
     }
 
     /**
@@ -419,7 +421,7 @@ export class Level {
         let onLauncher = null;
         let onWall = false;
         let onOneWayPlatform = false;
-        const oneWayDropDelayMs = 500;
+        const oneWayDropHoldMs = 250;
         const updateFallTracking = () => {
             if (!Number.isFinite(player.fallPeakY)) {
                 player.fallPeakY = player.position.y;
@@ -599,23 +601,33 @@ export class Level {
                 const downTapped = Boolean(player.dropTapUntil && now <= player.dropTapUntil);
                 const eligibleStanding = overlaps
                     && playerVelocity.y <= 0
-                    && playerBounds.bottom >= platform.bounds.top - 0.12;
+                    && playerBounds.bottom >= platform.bounds.top - 0.2;
                 if (eligibleStanding) {
                     onOneWayPlatform = true;
                     if (!Number.isFinite(player.oneWayGroundedAt) || player.oneWayGroundedAt <= 0) {
                         player.oneWayGroundedAt = now;
                     }
                 }
-                const groundedOnOneWay = player.isGrounded && eligibleStanding;
-                const groundedDelayMet = groundedOnOneWay
-                    && Number.isFinite(player.oneWayGroundedAt)
-                    && now - player.oneWayGroundedAt >= oneWayDropDelayMs;
                 const downHeld = player.input
                     && player.input.isDownPressed
                     && player.input.isDownPressed();
-                if (allowDrop && downHeld && groundedDelayMet) {
+                if (onOneWayPlatform) {
+                    if (downHeld) {
+                        if (!Number.isFinite(player.oneWayDropHoldStart) || player.oneWayDropHoldStart <= 0) {
+                            player.oneWayDropHoldStart = now;
+                        }
+                    } else {
+                        player.oneWayDropHoldStart = 0;
+                    }
+                }
+                const groundedOnOneWay = player.isGrounded && eligibleStanding;
+                const holdReady = groundedOnOneWay
+                    && Number.isFinite(player.oneWayDropHoldStart)
+                    && now - player.oneWayDropHoldStart >= oneWayDropHoldMs;
+                if (allowDrop && downHeld && holdReady) {
                     player.dropThroughUntil = now + dropWindow;
                     player.oneWayGroundedAt = 0;
+                    player.oneWayDropHoldStart = 0;
                     player.isGrounded = false;
                     player.position.y -= 0.06;
                     player.mesh.position.y = player.position.y;
@@ -719,6 +731,7 @@ export class Level {
         player.onOneWay = Boolean(onOneWayPlatform);
         if (!onOneWayPlatform) {
             player.oneWayGroundedAt = 0;
+            player.oneWayDropHoldStart = 0;
         }
 
         if (onLauncher) {
@@ -780,9 +793,11 @@ export class Level {
             const hasHorizontal = Math.abs(moving.rangeX) > 0.001;
             const hasVertical = Math.abs(moving.rangeY) > 0.001;
             const isVerticalOnly = hasVertical && !hasHorizontal;
-            const speedScale = isVerticalOnly ? 0.8 : 1;
+            const speedScale = isVerticalOnly ? this.verticalMovingSpeedScale : 1;
+            const speedCap = isVerticalOnly ? this.verticalMovingSpeedCap : Infinity;
             moving.time += deltaTime;
-            const time = moving.time * moving.speed * speedScale + moving.phase;
+            const effectiveSpeed = Math.min(moving.speed * speedScale, speedCap);
+            const time = moving.time * effectiveSpeed + moving.phase;
             const offsetX = Math.sin(time) * moving.rangeX;
             const offsetY = Math.sin(time) * moving.rangeY;
 

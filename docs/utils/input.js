@@ -412,11 +412,17 @@ export class InputManager {
     getAimStick() {
         const pad = this.gamepad;
         if (!pad || !pad.connected || !pad.axes) return null;
-        const axisX = pad.axes[2] || 0;
-        const axisY = pad.axes[3] || 0;
-        const magnitude = Math.hypot(axisX, axisY);
-        if (magnitude < this.gamepadDeadzone) return null;
-        return { x: axisX, y: axisY };
+        const rightX = pad.axes[2] || 0;
+        const rightY = pad.axes[3] || 0;
+        const rightMagnitude = Math.hypot(rightX, rightY);
+        if (rightMagnitude >= this.gamepadDeadzone) {
+            return { x: rightX, y: rightY };
+        }
+        const leftX = pad.axes[0] || 0;
+        const leftY = pad.axes[1] || 0;
+        const leftMagnitude = Math.hypot(leftX, leftY);
+        if (leftMagnitude < this.gamepadDeadzone) return null;
+        return { x: leftX, y: leftY };
     }
 
     /**
