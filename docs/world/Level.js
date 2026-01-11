@@ -9,6 +9,7 @@ import { MaskMapBuilder } from './MaskMapBuilder.js';
 import { gameTestMap } from './maps/gameTestMap.js';
 import { hilltowerMaskConfig } from './maps/hilltowerMap.js';
 import { arenaMaskConfig } from './maps/arenaMap.js';
+import { ctfBtbMaskConfig } from './maps/ctfBtbMap.js';
 import { applyVisibilityLayer, normalizeVisibilityLayer, VISIBILITY_LAYERS } from '../utils/visibility.js';
 
 const FOREGROUND_PALETTE = {
@@ -1501,6 +1502,21 @@ export class Level {
         const mapData = await MaskMapBuilder.build(config);
         if (!mapData) return;
         MapBuilder.build(this, mapData);
+    }
+
+    async createCtfMaskLevel(config = ctfBtbMaskConfig) {
+        this.mapKey = config.key;
+        const mapData = await MaskMapBuilder.build(config);
+        if (!mapData) return;
+        MapBuilder.build(this, mapData);
+        if (config.flagSpawnsFromPlayerSpawns && this.playerSpawns && !this.flagSpawns) {
+            const { blue, red, neutral } = this.playerSpawns;
+            if (blue && red) {
+                this.flagSpawns = { blue: { ...blue }, red: { ...red } };
+            } else if (neutral) {
+                this.flagSpawns = { blue: { ...neutral }, red: { ...neutral } };
+            }
+        }
     }
 
     async createArenaLevel(options = {}) {

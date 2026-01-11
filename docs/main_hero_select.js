@@ -29,6 +29,7 @@ import { KingOfTheHillMode } from './gameModes/KingOfTheHillMode.js';
 import { GameTestMode } from './gameModes/GameTestMode.js';
 import { hilltowerMaskConfig } from './world/maps/hilltowerMap.js';
 import { bowlMaskConfig } from './world/maps/bowlMap.js';
+import { ctfBtbMaskConfig } from './world/maps/ctfBtbMap.js';
 
 // Game state
 let gameStarted = false;
@@ -55,6 +56,12 @@ let testMapFocusIndex = 0;
 let testMapSelectLocked = false;
 let testMapBackLocked = false;
 let selectedTestMapKey = '3p';
+let ctfMapMenu = null;
+let ctfMapButtons = [];
+let ctfMapFocusIndex = 0;
+let ctfMapSelectLocked = false;
+let ctfMapBackLocked = false;
+let selectedCtfMapKey = 'ogmap';
 const VIEW_SIZE = 10;
 let healthPotions = [];
 let menuRenderActive = false;
@@ -575,7 +582,11 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
             level.createGameTestLevel();
         }
     } else if (selectedGameMode === 'ctf') {
-        level.createTestLevel({ includeInteractiveFlags: false, mapKey: 'ogmap' });
+        if (selectedCtfMapKey === 'btb' && typeof level.createCtfMaskLevel === 'function') {
+            await level.createCtfMaskLevel(ctfBtbMaskConfig);
+        } else {
+            level.createTestLevel({ includeInteractiveFlags: false, mapKey: 'ogmap' });
+        }
     } else if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
         level.createKothLevel({ includeInteractiveFlags: false, mapKey: 'koth' });
     } else if (selectedGameMode === 'arena' && typeof level.createArenaLevel === 'function') {
@@ -1017,6 +1028,9 @@ function showModeMenu() {
     if (testMapMenu) {
         testMapMenu.style.display = 'none';
     }
+    if (ctfMapMenu) {
+        ctfMapMenu.style.display = 'none';
+    }
     if (heroMenu) {
         heroMenu.style.display = 'none';
     }
@@ -1057,6 +1071,9 @@ function showTestMapMenu() {
     if (testMapMenu) {
         testMapMenu.style.display = 'flex';
     }
+    if (ctfMapMenu) {
+        ctfMapMenu.style.display = 'none';
+    }
     if (heroMenu) {
         heroMenu.style.display = 'none';
     }
@@ -1078,6 +1095,60 @@ function hideTestMapMenu() {
         testMapMenu.style.display = 'none';
     }
     updateMenuSplitState();
+}
+
+function showCtfMapMenu() {
+    hideReadyMenu();
+    if (ctfMapMenu) {
+        ctfMapMenu.style.display = 'flex';
+    }
+    if (testMapMenu) {
+        testMapMenu.style.display = 'none';
+    }
+    if (heroMenu) {
+        heroMenu.style.display = 'none';
+    }
+    if (teamMenu) {
+        teamMenu.style.display = 'none';
+    }
+    if (selectedCtfMapKey && ctfMapButtons.length) {
+        const matchIndex = ctfMapButtons.findIndex((button) => button?.id === `ctf-map-${selectedCtfMapKey}`);
+        ctfMapFocusIndex = matchIndex >= 0 ? matchIndex : -1;
+    } else {
+        ctfMapFocusIndex = -1;
+    }
+    updateCtfMapMenuFocus();
+    updateMenuSplitState();
+}
+
+function hideCtfMapMenu() {
+    if (ctfMapMenu) {
+        ctfMapMenu.style.display = 'none';
+    }
+    updateMenuSplitState();
+}
+
+function updateCtfMapMenuFocus() {
+    if (!ctfMapButtons.length) return;
+    ctfMapButtons.forEach((button, index) => {
+        button.classList.toggle('menu-focus', index === ctfMapFocusIndex);
+    });
+}
+
+function moveCtfMapMenuFocus(delta) {
+    if (!ctfMapButtons.length) return;
+    if (ctfMapFocusIndex < 0) {
+        ctfMapFocusIndex = 0;
+    } else {
+        ctfMapFocusIndex = (ctfMapFocusIndex + delta + ctfMapButtons.length) % ctfMapButtons.length;
+    }
+    updateCtfMapMenuFocus();
+}
+
+function selectCtfMap(mapKey) {
+    selectedCtfMapKey = mapKey;
+    hideCtfMapMenu();
+    showTeamMenu();
 }
 
 function updateTestMapMenuFocus() {
@@ -1108,6 +1179,8 @@ function selectGameMode(modeKey) {
     hideModeMenu();
     if (modeKey === 'game-test') {
         showTestMapMenu();
+    } else if (modeKey === 'ctf') {
+        showCtfMapMenu();
     } else {
         showTeamMenu();
     }
@@ -1841,9 +1914,10 @@ function updateMenuSplitState() {
     const teamVisible = window.getComputedStyle(teamMenu).display !== 'none';
     const modeVisible = modeMenu ? window.getComputedStyle(modeMenu).display !== 'none' : false;
     const testMapVisible = testMapMenu ? window.getComputedStyle(testMapMenu).display !== 'none' : false;
+    const ctfMapVisible = ctfMapMenu ? window.getComputedStyle(ctfMapMenu).display !== 'none' : false;
     const shouldShow = localPlayerCount === 2 && !gameStarted && teamVisible;
     document.body.classList.toggle('menu-split-active', shouldShow);
-    if (!gameStarted && (heroVisible || teamVisible || modeVisible || testMapVisible)) {
+    if (!gameStarted && (heroVisible || teamVisible || modeVisible || testMapVisible || ctfMapVisible)) {
         document.body.classList.remove('split-screen-active', 'split-screen-quad');
     }
 }
@@ -2008,6 +2082,7 @@ function shouldReturnToPlayerCount() {
     if (readyMenuActive) return false;
     if (modeMenu && modeMenu.style.display === 'flex') return false;
     if (testMapMenu && testMapMenu.style.display === 'flex') return false;
+    if (ctfMapMenu && ctfMapMenu.style.display === 'flex') return false;
     if (teamMenu && teamMenu.style.display === 'flex') return false;
     const hasSelection = pendingHeroClasses.slice(0, localPlayerCount).some(Boolean);
     if (hasSelection) return false;
@@ -2296,6 +2371,51 @@ function pollTestMapMenuGamepad() {
     }
 }
 
+function pollCtfMapMenuGamepad() {
+    const pad = getAssignedPadForPlayer(1);
+    if (!pad) return;
+    const now = performance.now();
+    const axisX = pad.axes[0] || 0;
+    const axisY = pad.axes[1] || 0;
+
+    const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
+    const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
+    const left = (pad.buttons[14] && pad.buttons[14].pressed) || axisX < -MENU_AXIS_DEADZONE;
+    const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
+
+    if ((up || down || left || right) && now - menuLastNavTime > MENU_NAV_COOLDOWN_MS) {
+        const delta = (down || right) ? 1 : -1;
+        moveCtfMapMenuFocus(delta);
+        menuLastNavTime = now;
+    }
+
+    const selectPressed = pad.buttons[0] && pad.buttons[0].pressed;
+    if (selectPressed && !ctfMapSelectLocked) {
+        if (ctfMapFocusIndex < 0) {
+            ctfMapFocusIndex = 0;
+            updateCtfMapMenuFocus();
+            ctfMapSelectLocked = true;
+            return;
+        }
+        const selected = ctfMapButtons[ctfMapFocusIndex];
+        if (selected && typeof selected.click === 'function') {
+            selected.click();
+        }
+        ctfMapSelectLocked = true;
+    } else if (!selectPressed) {
+        ctfMapSelectLocked = false;
+    }
+
+    const backPressed = pad.buttons[1] && pad.buttons[1].pressed;
+    if (backPressed && !ctfMapBackLocked) {
+        hideCtfMapMenu();
+        showModeMenu();
+        ctfMapBackLocked = true;
+    } else if (!backPressed) {
+        ctfMapBackLocked = false;
+    }
+}
+
 function pollCoopTeamMenuGamepads() {
     for (let i = 0; i < localPlayerCount; i += 1) {
         const playerIndex = i + 1;
@@ -2315,6 +2435,10 @@ function pollMenuGamepad() {
     }
     if (testMapMenu && testMapMenu.style.display === 'flex') {
         pollTestMapMenuGamepad();
+        return;
+    }
+    if (ctfMapMenu && ctfMapMenu.style.display === 'flex') {
+        pollCtfMapMenuGamepad();
         return;
     }
     if (teamMenu && teamMenu.style.display === 'flex') {
@@ -2427,6 +2551,16 @@ window.addEventListener('load', () => {
     }
     if (mapBowlButton) {
         mapBowlButton.addEventListener('click', () => selectTestMap('bowl'));
+    }
+    ctfMapMenu = document.getElementById('ctf-map-menu');
+    const ctfMapOgButton = document.getElementById('ctf-map-og');
+    const ctfMapBtbButton = document.getElementById('ctf-map-btb');
+    ctfMapButtons = [ctfMapOgButton, ctfMapBtbButton].filter(Boolean);
+    if (ctfMapOgButton) {
+        ctfMapOgButton.addEventListener('click', () => selectCtfMap('ogmap'));
+    }
+    if (ctfMapBtbButton) {
+        ctfMapBtbButton.addEventListener('click', () => selectCtfMap('btb'));
     }
     p1GamepadSelect = document.getElementById('p1-gamepad-select');
     p2GamepadSelect = document.getElementById('p2-gamepad-select');

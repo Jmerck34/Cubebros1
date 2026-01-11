@@ -306,11 +306,6 @@ export class Warrior extends Hero {
         console.log('⚔️ SWORD SLASH COMBO!');
 
         const originalRot = -0.87; // ~50 degrees clockwise
-        const swings = [
-            { start: -0.6, end: -2.0, offsetY: 0.0, tint: 0xbfe3ff, damageHits: 1 },   // First swing
-            { start: -1.9, end: -0.1, offsetY: 0.15, tint: 0x99ccff, damageHits: 1 }, // Second swing
-            { start: 0.0, end: -Math.PI * 2, offsetY: -0.1, tint: 0xfff1c7, damageHits: 3 }  // Big finisher (360)
-        ];
 
         this.swordComboTimers.forEach((timer) => clearTimeout(timer));
         this.swordComboTimers = [];
@@ -319,70 +314,59 @@ export class Warrior extends Hero {
             clearTimeout(this.swordComboResetTimer);
         }
 
-        const swing = swings[this.swordComboStep];
-        const isFinisher = this.swordComboStep === swings.length - 1;
-        this.sword.rotation.z = swing.start;
+        const aimDir = this.getQuantizedAimDirection();
+        const dirX = aimDir.x;
+        const dirY = aimDir.y;
+        if (Math.abs(dirX) > 0.05) {
+            this.setFacingDirection(dirX >= 0 ? 1 : -1);
+        }
+        const aimAngle = aimDir.angle;
+        const arcSpan = Math.PI * 0.8;
+        const swingStart = aimAngle - arcSpan * 0.5;
+        const swingEnd = aimAngle + arcSpan * 0.5;
+        if (dirY > 0.25) {
+            this.sword.position.y = 0.5;
+        } else {
+            this.sword.position.y = this.swordBase.y;
+        }
+        this.sword.rotation.z = swingStart;
         const slashTimer = setTimeout(() => {
-            this.sword.rotation.z = swing.end;
+            this.sword.rotation.z = swingEnd;
             this.playSwordSwingSound();
-            this.createCrescentSlash(true, swing.start, swing.end, this.swordComboStep, swing.offsetY, swing.tint, swing.damageHits);
-            if (isFinisher) {
-                this.swordFinisherSpinElapsed = this.swordFinisherSpinDuration;
-            }
-            if (isFinisher && this.abilities && this.abilities.q) {
-                this.abilities.q.currentCooldown = 1;
-                this.abilities.q.isReady = false;
-            }
+            this.createSlashTrail(swingStart, swingEnd, { x: dirX, y: dirY }, 0xbfe3ff);
+            this.applySlashDamage({ x: dirX, y: dirY });
         }, 140);
         const resetRotTimer = setTimeout(() => {
             this.sword.rotation.z = originalRot;
+            this.sword.position.x = this.swordBase.x;
+            this.sword.position.y = this.swordBase.y;
         }, 360);
         this.swordComboTimers.push(slashTimer, resetRotTimer);
-
-        const wasFinisher = this.swordComboStep === swings.length - 1;
-        this.swordComboStep = (this.swordComboStep + 1) % swings.length;
-        const resetDelay = wasFinisher ? this.swordComboResetAfterFinisherMs : this.swordComboWindowMs;
-        this.swordComboResetTimer = setTimeout(() => {
-            this.swordComboStep = 0;
-        }, resetDelay);
     }
 
     /**
-     * Create crescent moon slash effect that traces the sword tip path
-     * @param {boolean} dealDamage - Whether this slash should damage enemies
+     * Create a clean slash trail for Q.
      */
-    createCrescentSlash(dealDamage = false, startAngleOverride = null, endAngleOverride = null, comboIndex = 0, offsetY = 0, tint = 0xbfe3ff, damageHits = 1) {
-        // Create crescent slash tracing the sword tip's arc
+    createSlashTrail(startAngle, endAngle, direction, tint = 0xbfe3ff) {
         const slashGroup = new THREE.Group();
 
-        // Sword tip is approximately 1.45 units from the warrior's center (0.85 blade + 0.6 from shoulder)
-        const swordLength = 1.45;
-        // The sword swings from about -0.87 radians (starting position) to -2.2 radians (end position)
-        // This is approximately a 76-degree arc
-        const startAngle = startAngleOverride !== null ? startAngleOverride : -0.87;
-        const endAngle = endAngleOverride !== null ? endAngleOverride : -2.2;
-        const isFullSpin = Math.abs(endAngle - startAngle) >= Math.PI * 1.9;
-        const segmentCount = isFullSpin ? 18 : 10;
+        const swordLength = 1.4;
+        const segmentCount = 8;
         const angleRange = endAngle - startAngle;
+        const baseX = direction.x * 0.2;
+        const baseY = direction.y * 0.1 - 0.05;
 
         for (let i = 0; i < segmentCount; i++) {
             const t = i / (segmentCount - 1);
             const angle = startAngle + angleRange * t;
+            const tipX = baseX + Math.cos(angle) * swordLength;
+            const tipY = baseY + Math.sin(angle) * swordLength;
 
-            // Calculate position of sword tip at this point in the arc
-            // Offset from warrior center (sword is positioned at 0.5, -0.2 from center)
-            const swordBaseX = 0.5;
-            const swordBaseY = -0.2;
-
-            const tipX = swordBaseX + Math.sin(-angle) * swordLength;
-            const tipY = swordBaseY + Math.cos(-angle) * swordLength;
-
-            const sizeScale = comboIndex === 2 ? 1.2 : comboIndex === 1 ? 0.9 : 1.0;
-            const segmentGeometry = new THREE.PlaneGeometry(0.35 * sizeScale, 0.22 * sizeScale);
+            const segmentGeometry = new THREE.PlaneGeometry(0.32, 0.14);
             const segmentMaterial = new THREE.MeshBasicMaterial({
                 color: tint,
                 transparent: true,
-                opacity: 0.6,
+                opacity: 0.55,
                 side: THREE.DoubleSide
             });
             const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
@@ -393,33 +377,10 @@ export class Warrior extends Hero {
             slashGroup.add(segment);
         }
 
-        // Position at player location and flip for facing direction
-        slashGroup.position.set(this.position.x, this.position.y + offsetY, 0.2);
-        slashGroup.scale.x = this.facingDirection;
+        slashGroup.position.set(this.position.x, this.position.y, 0.2);
 
         // Add to scene
         this.mesh.parent.add(slashGroup);
-
-        // Deal damage if specified
-        if (dealDamage) {
-            const rangeScale = comboIndex === 2 ? 1.6 : 1;
-            const heightScale = comboIndex === 2 ? 1.2 : 1;
-            const slashRange = 2.5 * rangeScale; // Increased from 1.5 to extend further beyond the sword
-            const slashHeight = 1.5 * heightScale; // Increased vertical range
-            const isRadialFinisher = comboIndex === 2 && isFullSpin;
-            if (isRadialFinisher) {
-                const finisherRadius = slashRange + 0.8;
-                this.miniWhirlwindHit(finisherRadius, this.abilities.q, damageHits);
-            } else {
-                const slashBounds = {
-                    left: this.position.x + (this.facingDirection > 0 ? -0.3 : -slashRange),
-                    right: this.position.x + (this.facingDirection > 0 ? slashRange : 0.3),
-                    top: this.position.y + slashHeight,
-                    bottom: this.position.y - slashHeight
-                };
-                this.damageEnemiesInArea(slashBounds, this.abilities.q, damageHits);
-            }
-        }
 
         // Animate - fade out and scale up (faster fade)
         let opacity = 0.5;
@@ -432,8 +393,7 @@ export class Warrior extends Hero {
             slashGroup.children.forEach(segment => {
                 segment.material.opacity = opacity;
             });
-            // Preserve the facing direction while scaling
-            slashGroup.scale.set(scale * this.facingDirection, scale, 1);
+            slashGroup.scale.set(scale, scale, 1);
 
             if (opacity <= 0) {
                 clearInterval(animInterval);
@@ -441,6 +401,35 @@ export class Warrior extends Hero {
             }
         }, 30); // Reduced from 40ms for faster animation
     }
+
+    applySlashDamage(direction) {
+        const dirX = direction.x;
+        const dirY = direction.y;
+        const reach = 1.9;
+        const centerX = this.position.x + dirX * reach;
+        const centerY = this.position.y + dirY * reach * 0.7;
+        const halfW = 1.1 + Math.abs(dirX) * 0.6;
+        const halfH = 0.9 + Math.abs(dirY) * 0.6;
+        const slashBounds = {
+            left: centerX - halfW,
+            right: centerX + halfW,
+            top: centerY + halfH,
+            bottom: centerY - halfH
+        };
+        this.damageEnemiesInArea(slashBounds, this.abilities.q, 1);
+    }
+
+    getQuantizedAimDirection() {
+        const aimDir = this.hasAimInput ? this.getAimDirection() : { x: this.facingDirection || 1, y: 0 };
+        const aimLength = Math.hypot(aimDir.x, aimDir.y) || 1;
+        const rawX = aimDir.x / aimLength;
+        const rawY = aimDir.y / aimLength;
+        const angle = Math.atan2(rawY, rawX);
+        const step = Math.PI / 4;
+        const snapped = Math.round(angle / step) * step;
+        return { x: Math.cos(snapped), y: Math.sin(snapped), angle: snapped };
+    }
+
 
     /**
      * Shield Bash Attack - W Ability
@@ -501,24 +490,43 @@ export class Warrior extends Hero {
     dashForward() {
         console.log('DASH!');
 
-        // Dash in the direction the warrior is facing
+        // Dash in aim direction when available, otherwise facing direction
         const dashDistance = 3.2;
         if (typeof this.setFallDamageGrace === 'function') {
             this.setFallDamageGrace(0.45);
         }
         const startX = this.position.x;
-        const endX = startX + this.facingDirection * dashDistance;
+        const startY = this.position.y;
+        const aim = this.hasAimInput ? this.getAimDirection() : { x: this.facingDirection || 1, y: 0 };
+        const aimLength = Math.hypot(aim.x, aim.y) || 1;
+        const dirX = aim.x / aimLength;
+        const dirY = aim.y / aimLength;
+        if (Math.abs(dirX) > 0.05) {
+            this.facingDirection = dirX >= 0 ? 1 : -1;
+        }
+        const endX = startX + dirX * dashDistance;
+        const endY = startY + dirY * dashDistance;
 
         // Apply dash movement
         this.position.x = endX;
+        this.position.y = endY;
 
         // Damage + stun enemies along dash path
         const dashBounds = {
             left: Math.min(startX, endX) - 0.6,
             right: Math.max(startX, endX) + 0.6,
-            top: this.position.y + 0.9,
-            bottom: this.position.y - 0.9
+            top: Math.max(startY, endY) + 0.9,
+            bottom: Math.min(startY, endY) - 0.9
         };
+        const frontCenterX = endX + dirX * 0.9;
+        const frontCenterY = endY + dirY * 0.9;
+        const frontBounds = {
+            left: frontCenterX - 0.7,
+            right: frontCenterX + 0.7,
+            top: frontCenterY + 0.7,
+            bottom: frontCenterY - 0.7
+        };
+        const hitTargets = new Set();
 
         for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
@@ -528,8 +536,22 @@ export class Warrior extends Hero {
                 if (typeof enemy.setStunned === 'function') {
                     enemy.setStunned(0.6);
                 }
+                hitTargets.add(enemy);
             }
         }
+        for (const enemy of this.getDamageTargets()) {
+            if (!enemy.isAlive || hitTargets.has(enemy)) continue;
+            const enemyBounds = enemy.getBounds();
+            if (checkAABBCollision(frontBounds, enemyBounds)) {
+                this.applyAbilityDamage(this.abilities.e, enemy, 1);
+                if (typeof enemy.setStunned === 'function') {
+                    enemy.setStunned(0.6);
+                }
+                hitTargets.add(enemy);
+            }
+        }
+
+        this.createDashWind({ x: dirX, y: dirY }, frontCenterX, frontCenterY);
 
         // Visual effect - scale horizontally (preserve facing direction)
         const currentFacing = this.facingDirection;
@@ -565,6 +587,65 @@ export class Warrior extends Hero {
             if (opacity <= 0) {
                 clearInterval(fadeInterval);
                 this.mesh.parent.remove(trail);
+            }
+        }, 30);
+    }
+
+    /**
+     * Wind effect to show dash hitbox in front.
+     * @param {{x:number,y:number}} direction
+     * @param {number} centerX
+     * @param {number} centerY
+     */
+    createDashWind(direction, centerX, centerY) {
+        if (!this.mesh || !this.mesh.parent) return;
+        const windGroup = new THREE.Group();
+        const angle = Math.atan2(direction.y, direction.x);
+        const arcCount = 10;
+        const radius = 0.7;
+
+        for (let i = 0; i < arcCount; i++) {
+            const t = i / (arcCount - 1);
+            const spread = -0.7 + t * 1.4;
+            const length = 0.35 + (1 - Math.abs(t - 0.5) * 1.6) * 0.25;
+            const thickness = 0.08 + (1 - Math.abs(t - 0.5) * 1.4) * 0.06;
+            const segmentGeometry = new THREE.PlaneGeometry(length, thickness);
+            const segmentMaterial = new THREE.MeshBasicMaterial({
+                color: 0xcfefff,
+                transparent: true,
+                opacity: 0.75,
+                side: THREE.DoubleSide
+            });
+            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+            const localAngle = angle + spread;
+            segment.position.set(
+                centerX + Math.cos(localAngle) * radius,
+                centerY + Math.sin(localAngle) * radius,
+                0.2
+            );
+            segment.rotation.z = localAngle - Math.PI / 2;
+            windGroup.add(segment);
+        }
+
+        this.mesh.parent.add(windGroup);
+
+        let opacity = 0.75;
+        let drift = 0;
+        const driftX = direction.x * 0.2;
+        const driftY = direction.y * 0.2;
+        const windInterval = setInterval(() => {
+            opacity -= 0.09;
+            drift += 0.12;
+            windGroup.children.forEach((seg, index) => {
+                seg.material.opacity = opacity;
+                seg.position.x += driftX + index * 0.005 * direction.x;
+                seg.position.y += driftY + index * 0.005 * direction.y;
+                seg.scale.x = 1 + drift * 0.04;
+            });
+
+            if (opacity <= 0) {
+                clearInterval(windInterval);
+                this.mesh.parent.remove(windGroup);
             }
         }, 30);
     }

@@ -247,7 +247,31 @@ export class InputManager {
      * @returns {boolean}
      */
     isDownPressed() {
-        return this.isActionPressed('down');
+        const codes = this.bindings.down || [];
+        for (const code of codes) {
+            if (!code.startsWith('Mouse') && this.isKeyDown(code)) {
+                return true;
+            }
+        }
+
+        if (!this.gamepad || !this.gamepad.connected) {
+            return false;
+        }
+
+        if (this.isGamepadPressed('DPadDown')) {
+            return true;
+        }
+
+        const axisX = this.gamepad.axes && this.gamepad.axes[0] ? this.gamepad.axes[0] : 0;
+        const axisY = this.gamepad.axes && this.gamepad.axes[1] ? this.gamepad.axes[1] : 0;
+        const magnitude = Math.hypot(axisX, axisY);
+        if (magnitude < this.gamepadDeadzone) {
+            return false;
+        }
+        if (axisY <= this.gamepadDeadzone) {
+            return false;
+        }
+        return Math.abs(axisX) <= axisY;
     }
 
     /**

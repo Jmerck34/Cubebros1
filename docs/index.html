@@ -236,7 +236,8 @@
         }
 
         #mode-menu,
-        #test-map-menu {
+        #test-map-menu,
+        #ctf-map-menu {
             position: fixed;
             top: 0;
             left: 0;
@@ -254,14 +255,16 @@
         }
 
         #mode-menu h2,
-        #test-map-menu h2 {
+        #test-map-menu h2,
+        #ctf-map-menu h2 {
             color: #ffffff;
             font-size: 36px;
             text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
         }
 
         #mode-menu p,
-        #test-map-menu p {
+        #test-map-menu p,
+        #ctf-map-menu p {
             color: #ccc;
             font-size: 16px;
         }
@@ -1344,6 +1347,16 @@
             <button id="map-3p" class="mode-button" type="button">3P</button>
             <button id="map-hilltower" class="mode-button" type="button">Hill Tower</button>
             <button id="map-bowl" class="mode-button" type="button">The Bowl</button>
+        </div>
+        <p class="team-controls">D-pad/Stick + A to select | B to go back</p>
+    </div>
+
+    <div id="ctf-map-menu">
+        <h2>SELECT CTF MAP</h2>
+        <p>Choose which capture-the-flag map to load.</p>
+        <div class="mode-buttons">
+            <button id="ctf-map-og" class="mode-button" type="button">OG</button>
+            <button id="ctf-map-btb" class="mode-button" type="button">BTB</button>
         </div>
         <p class="team-controls">D-pad/Stick + A to select | B to go back</p>
     </div>

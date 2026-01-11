@@ -248,10 +248,11 @@ export class MaskMapBuilder {
             travelSpeed: config.travelSpeed || null
         };
 
+        const solidBodyShape = config.solidBodyShape || 'pixelRuns';
         regions.forEach(({ type, region, matchKey }) => {
             const bounds = boundsFromPixels(region, { originX, originY, pixelsPerUnit });
             if (type === 'solidBody') {
-                if (config.solidBodyShape === 'pixelRuns') {
+                if (solidBodyShape === 'pixelRuns') {
                     const runs = extractPixelRuns(region, matchKey, { data, width, height });
                     runs.forEach((run) => {
                         const runBounds = boundsFromPixels(run, { originX, originY, pixelsPerUnit });
