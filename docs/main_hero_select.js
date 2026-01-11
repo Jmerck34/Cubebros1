@@ -72,6 +72,9 @@ let kothMeterLabelBlue = null;
 let kothMeterLabelRed = null;
 let kothMeterFillBlue = null;
 let kothMeterFillRed = null;
+let mapLoadingScreen = null;
+let mapLoadingTitle = null;
+let mapLoadingSubtitle = null;
 
 // Hero selection
 const MAX_PLAYERS = 4;
@@ -125,6 +128,8 @@ let teamSelectLocked = Array(MAX_PLAYERS).fill(false);
 const MENU_AXIS_DEADZONE = 0.5;
 const MENU_NAV_COOLDOWN_MS = 180;
 const GAMEPAD_REFRESH_INTERVAL_MS = 800;
+const MAP_LOADING_DEFAULT_TITLE = 'Loading map...';
+const MAP_LOADING_DEFAULT_SUBTITLE = 'Building the map from pixels.';
 
 let p1GamepadPreference = 'auto';
 let p2GamepadPreference = 'auto';
@@ -506,6 +511,32 @@ function resolveGamepadAssignments() {
     return assignments;
 }
 
+function setMapLoading(active, { title = MAP_LOADING_DEFAULT_TITLE, subtitle = MAP_LOADING_DEFAULT_SUBTITLE } = {}) {
+    if (!mapLoadingScreen) {
+        return;
+    }
+    mapLoadingScreen.classList.toggle('active', active);
+    mapLoadingScreen.setAttribute('aria-hidden', active ? 'false' : 'true');
+    if (active) {
+        if (mapLoadingTitle) {
+            mapLoadingTitle.textContent = title;
+        }
+        if (mapLoadingSubtitle) {
+            mapLoadingSubtitle.textContent = subtitle;
+        }
+    }
+}
+
+async function withMapLoading(task, options = {}) {
+    setMapLoading(true, options);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    try {
+        return await task();
+    } finally {
+        setMapLoading(false);
+    }
+}
+
 // Start game with selected hero
 async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red') {
 
@@ -575,22 +606,34 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     level = new Level(scene);
     if (selectedGameMode === 'game-test') {
         if (selectedTestMapKey === 'hilltower' && typeof level.createGameTestMaskLevel === 'function') {
-            await level.createGameTestMaskLevel(hilltowerMaskConfig);
+            await withMapLoading(() => level.createGameTestMaskLevel(hilltowerMaskConfig), {
+                title: 'Loading Hilltower...',
+                subtitle: MAP_LOADING_DEFAULT_SUBTITLE
+            });
         } else if (selectedTestMapKey === 'bowl' && typeof level.createGameTestMaskLevel === 'function') {
-            await level.createGameTestMaskLevel(bowlMaskConfig);
+            await withMapLoading(() => level.createGameTestMaskLevel(bowlMaskConfig), {
+                title: 'Loading The Bowl...',
+                subtitle: MAP_LOADING_DEFAULT_SUBTITLE
+            });
         } else if (typeof level.createGameTestLevel === 'function') {
             level.createGameTestLevel();
         }
     } else if (selectedGameMode === 'ctf') {
         if (selectedCtfMapKey === 'btb' && typeof level.createCtfMaskLevel === 'function') {
-            await level.createCtfMaskLevel(ctfBtbMaskConfig);
+            await withMapLoading(() => level.createCtfMaskLevel(ctfBtbMaskConfig), {
+                title: 'Loading BTB...',
+                subtitle: MAP_LOADING_DEFAULT_SUBTITLE
+            });
         } else {
             level.createTestLevel({ includeInteractiveFlags: false, mapKey: 'ogmap' });
         }
     } else if (selectedGameMode === 'koth' && typeof level.createKothLevel === 'function') {
         level.createKothLevel({ includeInteractiveFlags: false, mapKey: 'koth' });
     } else if (selectedGameMode === 'arena' && typeof level.createArenaLevel === 'function') {
-        await level.createArenaLevel({ includeInteractiveFlags: false, mapKey: 'arena' });
+        await withMapLoading(() => level.createArenaLevel({ includeInteractiveFlags: false, mapKey: 'arena' }), {
+            title: 'Loading Arena...',
+            subtitle: MAP_LOADING_DEFAULT_SUBTITLE
+        });
     } else {
         level.createTestLevel({ includeInteractiveFlags: false, mapKey: selectedGameMode || 'playtest' });
     }
@@ -2520,6 +2563,9 @@ window.addEventListener('load', () => {
     kothMeterLabelRed = document.getElementById('koth-meter-label-red');
     kothMeterFillBlue = document.getElementById('koth-meter-fill-blue');
     kothMeterFillRed = document.getElementById('koth-meter-fill-red');
+    mapLoadingScreen = document.getElementById('map-loading-screen');
+    mapLoadingTitle = document.getElementById('map-loading-title');
+    mapLoadingSubtitle = document.getElementById('map-loading-subtitle');
     modeMenu = document.getElementById('mode-menu');
     const modeCtfButton = document.getElementById('mode-ctf');
     const modeArenaButton = document.getElementById('mode-arena');

@@ -1,4 +1,5 @@
 import { normalizeVisibilityLayer } from '../utils/visibility.js';
+import { preparePolygonCollisionShape } from '../utils/collision.js';
 
 /**
  * Body - Base class for map objects with collision and movement metadata.
@@ -12,13 +13,18 @@ export class Body {
      * @param {number} options.visibilityLayer - Visibility layer (-5 to 5).
      */
     constructor({ collisionShape = null, movable = false, mapKey = null, visibilityLayer = 0 } = {}) {
-        this.collisionShape = collisionShape;
+        this.collisionShape = null;
+        this.setCollisionShape(collisionShape);
         this.movable = movable;
         this.mapKey = mapKey;
         this.visibilityLayer = normalizeVisibilityLayer(visibilityLayer);
     }
 
     setCollisionShape(collisionShape) {
+        if (collisionShape && collisionShape.type === 'polygon') {
+            this.collisionShape = preparePolygonCollisionShape(collisionShape);
+            return;
+        }
         this.collisionShape = collisionShape;
     }
 

@@ -2,6 +2,7 @@ export const hilltowerMaskConfig = {
     key: 'hilltower',
     url: './assets/maps/hilltower-map.png?v=20260111',
     solidBodyType: 'stone',
+    solidBodyShape: 'polygon',
     solidPlatformType: 'grass',
     oneWayType: 'grass',
     movingPlatformType: 'grass',

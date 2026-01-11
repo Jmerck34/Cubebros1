@@ -1,5 +1,5 @@
 import { EnemyBase } from './EnemyBase.js';
-import { checkAABBCollision } from '../utils/collision.js';
+import { checkAABBCollision, resolvePolygonCollision } from '../utils/collision.js';
 
 /**
  * Goomba - Walking enemy that turns at edges
@@ -71,6 +71,12 @@ export class Goomba extends EnemyBase {
         const goombaBounds = this.getBounds();
 
         for (const platform of level.platforms) {
+            if (platform.body && platform.body.collisionShape && platform.body.collisionShape.type === 'polygon') {
+                const result = resolvePolygonCollision(this, platform, this.velocity);
+                if (result && result.collided) {
+                    continue;
+                }
+            }
             if (checkAABBCollision(goombaBounds, platform.bounds)) {
                 // Simple ground collision
                 if (this.velocity.y < 0) { // Falling

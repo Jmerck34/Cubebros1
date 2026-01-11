@@ -2,6 +2,7 @@ export const bowlMaskConfig = {
     key: 'bowl',
     url: './assets/maps/bowl-map.png?v=20260112',
     solidBodyType: 'stone',
+    solidBodyShape: 'polygon',
     solidPlatformType: 'grass',
     oneWayType: 'grass',
     movingPlatformType: 'grass',

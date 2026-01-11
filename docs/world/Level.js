@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-import { checkAABBCollision, resolveCollisionY, resolveCollisionX } from '../utils/collision.js';
+import { checkAABBCollision, resolveCollisionY, resolveCollisionX, resolvePolygonCollision } from '../utils/collision.js';
 import { SolidBody } from './SolidBody.js';
 import { SolidPlatform } from './SolidPlatform.js';
 import { OneWayPlatform } from './OneWayPlatform.js';
@@ -87,6 +87,7 @@ export class Level {
         const visibilityLayer = normalizeVisibilityLayer(
             options.visibilityLayer != null ? options.visibilityLayer : this.defaultVisibilityLayer
         );
+        const collisionShape = options.collisionShape || null;
 
         // Main platform body
         const bodyGeometry = new THREE.BoxGeometry(width, height, 0.8);
@@ -275,11 +276,17 @@ export class Level {
             springDuration: type === 'launcher' ? 0.45 : 0.25,
             visibilityLayer
         };
+        if (collisionShape && collisionShape.bounds) {
+            platform.bounds = { ...collisionShape.bounds };
+        }
 
         platform.body = new SolidPlatform({
             bounds: platform.bounds,
             mapKey: this.mapKey
         });
+        if (collisionShape) {
+            platform.body.setCollisionShape(collisionShape);
+        }
         platform.body.setVisibilityLayer(visibilityLayer);
         this.bodies.push(platform.body);
         this.platforms.push(platform);
@@ -677,6 +684,17 @@ export class Level {
                         player.position.y += deltaY;
                         player.mesh.position.x = player.position.x;
                         player.mesh.position.y = player.position.y;
+                    }
+                    continue;
+                }
+            }
+
+            if (platform.body && platform.body.collisionShape && platform.body.collisionShape.type === 'polygon') {
+                const result = resolvePolygonCollision(player, platform, playerVelocity);
+                if (result && result.collided) {
+                    if (result.grounded) {
+                        triggerLandingSound(Math.abs(playerVelocity.y));
+                        applyFallDamage(Math.abs(playerVelocity.y), platform);
                     }
                     continue;
                 }

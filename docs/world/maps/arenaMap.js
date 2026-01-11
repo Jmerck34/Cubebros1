@@ -2,7 +2,7 @@ export const arenaMaskConfig = {
     key: 'arena',
     url: './assets/maps/arena-map.png?v=20260112',
     solidBodyType: 'stone',
-    solidBodyShape: 'pixelRuns',
+    solidBodyShape: 'polygon',
     solidPlatformType: 'grass',
     oneWayType: 'grass',
     movingPlatformType: 'grass',

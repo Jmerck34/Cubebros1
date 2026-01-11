@@ -7,8 +7,8 @@ export class MapBuilder {
         const platforms = mapData.platforms || [];
         platforms.forEach((platform) => {
             if (!platform) return;
-            const { x, y, width, height, type = 'grass' } = platform;
-            level.addPlatform(x, y, width, height, type);
+            const { x, y, width, height, type = 'grass', collisionShape = null } = platform;
+            level.addPlatform(x, y, width, height, type, { collisionShape });
         });
 
         const oneWayPlatforms = mapData.oneWayPlatforms || [];
