@@ -1,8 +1,8 @@
 export const ctfBtbMaskConfig = {
     key: 'ctf-btb',
-    url: './assets/maps/ctf-btb-map.png?v=20260112',
+    url: './assets/maps/ctf-btb-map.png?v=20260113',
     solidBodyType: 'stone',
-    solidBodyShape: 'polygon',
+    solidBodyShape: 'pixelRuns',
     solidPlatformType: 'grass',
     oneWayType: 'grass',
     movingPlatformType: 'grass',

@@ -91,7 +91,7 @@ let heroFocusEnterOrder = Array(MAX_PLAYERS).fill(0);
 let heroFocusOrderCounter = 0;
 let p1GamepadSelect, p2GamepadSelect, p3GamepadSelect, p4GamepadSelect;
 let p2GamepadRow, p3GamepadRow, p4GamepadRow;
-let controllerToggleButton, gamepadAssign;
+let controllerToggleButton, fullscreenToggleButton, gamepadAssign;
 let controllerMenuVisible = true;
 let controllerIndicatorsActive = false;
 let teamMenu;
@@ -462,6 +462,40 @@ function updateControllerIndicatorVisibility() {
             item.classList.remove('menu-focus-p1', 'menu-focus-p2', 'menu-focus-p3', 'menu-focus-p4');
         });
     }
+}
+
+function isFullscreenActive() {
+    return Boolean(document.fullscreenElement);
+}
+
+function updateFullscreenToggleState() {
+    if (!fullscreenToggleButton) {
+        return;
+    }
+    fullscreenToggleButton.setAttribute('aria-pressed', isFullscreenActive() ? 'true' : 'false');
+}
+
+async function toggleFullscreen() {
+    if (!document.fullscreenEnabled) {
+        return;
+    }
+    try {
+        if (isFullscreenActive()) {
+            await document.exitFullscreen();
+            return;
+        }
+        await document.documentElement.requestFullscreen();
+    } catch (error) {
+        console.warn('Fullscreen toggle failed.', error);
+    }
+}
+
+function handleFullscreenShortcut(event) {
+    if (event.key !== 'F11') {
+        return;
+    }
+    event.preventDefault();
+    toggleFullscreen();
 }
 
 function resolveGamepadAssignments() {
@@ -2553,6 +2587,7 @@ window.addEventListener('load', () => {
     if (heroMenu) {
         heroMenu.addEventListener('scroll', () => updateAllHeroFocusTags());
     }
+    fullscreenToggleButton = document.getElementById('fullscreen-toggle');
     controllerToggleButton = document.getElementById('controller-toggle');
     gamepadAssign = document.getElementById('gamepad-assign');
     readyMenu = document.getElementById('ready-menu');
@@ -2650,6 +2685,13 @@ window.addEventListener('load', () => {
     if (heroMenuTitle) {
         heroMenuTitleDefault = heroMenuTitle.textContent;
     }
+
+    if (fullscreenToggleButton) {
+        fullscreenToggleButton.addEventListener('click', () => toggleFullscreen());
+    }
+    document.addEventListener('fullscreenchange', updateFullscreenToggleState);
+    document.addEventListener('keydown', handleFullscreenShortcut);
+    updateFullscreenToggleState();
     if (heroMenuSubtitle) {
         heroMenuSubtitleDefault = heroMenuSubtitle.textContent;
     }
