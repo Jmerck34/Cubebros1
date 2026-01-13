@@ -28,6 +28,7 @@ export class Warlock extends Hero {
         this.hoverTimeout = null;
         this.hoverAnimationInterval = null;
         this.hoverToggleCooldownUntil = 0;
+        this.hoverToggleHeld = false;
 
         // Chaos storm state (ultimate)
         this.isChaosStormActive = false;
@@ -207,6 +208,37 @@ export class Warlock extends Hero {
             this.handleAbilityInput(input);
         } else {
             super.update(deltaTime, input);
+        }
+    }
+
+    /**
+     * Handle ability input with hover toggle requiring a full release between presses.
+     * @param {InputManager} input
+     */
+    handleAbilityInput(input) {
+        const hoverPressed = input.isAbility3Pressed();
+        if (this.controlsLocked) {
+            this.hoverToggleHeld = hoverPressed;
+            return;
+        }
+        if (this.isCarryingFlag && input.isFlagDropPressed()) {
+            this.hoverToggleHeld = hoverPressed;
+            return;
+        }
+        if (input.isAbility1Pressed() && this.abilities.q) {
+            this.useAbility('q');
+        }
+        if (input.isAbility2Pressed() && this.abilities.w) {
+            this.useAbility('w');
+        }
+        if (hoverPressed && !this.hoverToggleHeld && this.abilities.e) {
+            if (!this.isCarryingFlag || !this.flagCarryBlocksAbility3) {
+                this.useAbility('e');
+            }
+        }
+        this.hoverToggleHeld = hoverPressed;
+        if (input.isUltimatePressed() && this.abilities.r) {
+            this.useUltimate();
         }
     }
 

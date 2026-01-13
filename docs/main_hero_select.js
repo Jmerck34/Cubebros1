@@ -42,6 +42,7 @@ let cameras = [];
 let cameraFollows = [];
 let miniMaps = [];
 let teamScoreboard, scoreBlueEl, scoreRedEl, scoreYellowEl, scoreGreenEl;
+let scoreCardBlue, scoreCardRed, scoreCardYellow, scoreCardGreen;
 let teamScores = { blue: 0, red: 0, yellow: 0, green: 0 };
 let gameMode = null;
 let playerStateOverlay = null;
@@ -324,7 +325,12 @@ function initScoreboard() {
     scoreRedEl = document.getElementById('score-red');
     scoreYellowEl = document.getElementById('score-yellow');
     scoreGreenEl = document.getElementById('score-green');
+    scoreCardBlue = scoreBlueEl ? scoreBlueEl.closest('.score-card') : null;
+    scoreCardRed = scoreRedEl ? scoreRedEl.closest('.score-card') : null;
+    scoreCardYellow = scoreYellowEl ? scoreYellowEl.closest('.score-card') : null;
+    scoreCardGreen = scoreGreenEl ? scoreGreenEl.closest('.score-card') : null;
     setScoreboardVisible(false);
+    updateScoreboardVisibility();
 }
 
 function setScoreboardVisible(visible) {
@@ -333,8 +339,25 @@ function setScoreboardVisible(visible) {
     }
 }
 
+function updateScoreboardVisibility() {
+    const allowedTeams = new Set(getTeamOptionsForMode());
+    if (scoreCardBlue) {
+        scoreCardBlue.style.display = allowedTeams.has('blue') ? '' : 'none';
+    }
+    if (scoreCardRed) {
+        scoreCardRed.style.display = allowedTeams.has('red') ? '' : 'none';
+    }
+    if (scoreCardYellow) {
+        scoreCardYellow.style.display = allowedTeams.has('yellow') ? '' : 'none';
+    }
+    if (scoreCardGreen) {
+        scoreCardGreen.style.display = allowedTeams.has('green') ? '' : 'none';
+    }
+}
+
 function updateScoreboard(scores = teamScores) {
     if (!scores) return;
+    updateScoreboardVisibility();
     if (scoreBlueEl) {
         scoreBlueEl.textContent = `${scores.blue ?? 0}`;
     }

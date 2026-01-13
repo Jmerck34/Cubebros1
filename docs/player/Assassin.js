@@ -854,9 +854,11 @@ export class Assassin extends Hero {
         let closestDistance = Infinity;
 
         for (const enemy of this.getDamageTargets()) {
-            if (!enemy.isAlive) continue;
-
-            const distance = Math.abs(enemy.position.x - this.position.x);
+            if (!enemy || !enemy.isAlive || !enemy.position) continue;
+            const dx = enemy.position.x - this.position.x;
+            const dy = enemy.position.y - this.position.y;
+            if (!Number.isFinite(dx) || !Number.isFinite(dy)) continue;
+            const distance = Math.hypot(dx, dy);
             if (distance < closestDistance && distance < 15) {
                 closestDistance = distance;
                 closestEnemy = enemy;

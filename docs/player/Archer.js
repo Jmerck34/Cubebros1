@@ -37,10 +37,9 @@ export class Archer extends Hero {
         this.potionEffect = null;
         this.potionEffectTime = 0;
 
-        // Machine bow ultimate state
-        this.machineBowActive = false;
-        this.machineBowDuration = 0;
-        this.machineBowShotTimer = 0;
+        // Arrow storm ultimate state
+        this.arrowStormActive = false;
+        this.arrowStormInterval = null;
 
         // Movement boost multiplier
         this.moveSpeedMultiplier = 1;
@@ -109,18 +108,17 @@ export class Archer extends Hero {
             return true;
         };
 
-        // R - Machine Bow (ultimate)
-        const machineBow = new Ability('Machine Bow', 0, true);
-        machineBow.use = (hero) => {
-            hero.activateMachineBow();
-            return true;
+        // R - Arrow Storm (ultimate)
+        const arrowStorm = new Ability('Arrow Storm', 0, true);
+        arrowStorm.use = (hero) => {
+            return hero.activateArrowStorm();
         };
 
-        this.setAbilities(shootArrow, healingPotion, teleportArrow, machineBow);
+        this.setAbilities(shootArrow, healingPotion, teleportArrow, arrowStorm);
     }
 
     /**
-     * Update - handle charging, potion effects, and machine bow
+     * Update - handle charging and potion effects
      */
     update(deltaTime, input) {
         // Update facing direction based on aim or movement input
@@ -138,9 +136,6 @@ export class Archer extends Hero {
 
         // Handle potion effects
         this.updatePotionEffects(deltaTime);
-
-        // Handle machine bow
-        this.updateMachineBow(deltaTime);
 
         super.update(deltaTime, input);
     }
@@ -186,10 +181,6 @@ export class Archer extends Hero {
     handleChargeShot(deltaTime, input) {
         const ability = this.abilities.q;
         const isPressed = input.isAbility1Pressed();
-
-        if (this.machineBowActive) {
-            return;
-        }
 
         if (isPressed && ability && ability.isReady && !this.isCharging) {
             this.isCharging = true;
@@ -465,30 +456,274 @@ export class Archer extends Hero {
     }
 
     /**
-     * Activate machine bow ultimate
+     * Activate Arrow Storm ultimate
      */
-    activateMachineBow() {
-        this.machineBowActive = true;
-        this.machineBowDuration = 2.0;
-        this.machineBowShotTimer = 0;
+    activateArrowStorm() {
+        if (this.arrowStormActive) {
+            return false;
+        }
+        this.arrowStormActive = true;
+        const stormDurationMs = 3000;
+        this.fireUltimateArrow((impactPoint) => {
+            this.startArrowStorm(impactPoint, stormDurationMs);
+        }, stormDurationMs);
+        return true;
     }
 
-    /**
-     * Update machine bow firing
-     */
-    updateMachineBow(deltaTime) {
-        if (!this.machineBowActive) return;
+    fireUltimateArrow(onImpact, stormDurationMs = 3000) {
+        const arrowGroup = new THREE.Group();
 
-        this.machineBowDuration -= deltaTime;
-        this.machineBowShotTimer -= deltaTime;
+        const shaft = new THREE.Mesh(
+            new THREE.BoxGeometry(0.95, 0.08, 0.08),
+            new THREE.MeshBasicMaterial({ color: 0xffd166 })
+        );
+        shaft.position.set(0.35, 0, 0);
+        arrowGroup.add(shaft);
 
-        if (this.machineBowShotTimer <= 0) {
-            this.machineBowShotTimer = 0.1;
-            this.fireArrow(1, false, true, this.abilities.r);
+        const tip = new THREE.Mesh(
+            new THREE.ConeGeometry(0.1, 0.22, 10),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        tip.rotation.z = Math.PI / 2;
+        tip.position.set(0.7, 0, 0);
+        arrowGroup.add(tip);
+
+        const glow = new THREE.Mesh(
+            new THREE.RingGeometry(0.12, 0.28, 20),
+            new THREE.MeshBasicMaterial({
+                color: 0xfff1b3,
+                transparent: true,
+                opacity: 0.65,
+                side: THREE.DoubleSide
+            })
+        );
+        glow.position.set(0.35, 0, 0.02);
+        arrowGroup.add(glow);
+
+        const aim = this.getAimDirection();
+        const useAim = this.hasAimInput && Math.hypot(aim.x, aim.y) > 0.1;
+        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+        const dirLength = Math.hypot(direction.x, direction.y) || 1;
+        const dirX = direction.x / dirLength;
+        const dirY = direction.y / dirLength;
+
+        arrowGroup.position.set(
+            this.position.x + dirX * 0.7,
+            this.position.y + 0.15 + dirY * 0.6,
+            0.3
+        );
+        arrowGroup.rotation.z = Math.atan2(dirY, dirX);
+        this.mesh.parent.add(arrowGroup);
+
+        const speed = 18;
+        const maxRange = 18;
+        let traveled = 0;
+
+        const level = this.level || { platforms: [] };
+        const arrowInterval = setInterval(() => {
+            const step = speed * 0.016;
+            arrowGroup.position.x += dirX * step;
+            arrowGroup.position.y += dirY * step;
+            traveled += step;
+
+            const arrowBounds = {
+                left: arrowGroup.position.x - 0.28,
+                right: arrowGroup.position.x + 0.28,
+                top: arrowGroup.position.y + 0.12,
+                bottom: arrowGroup.position.y - 0.12
+            };
+
+            if (this.isPositionBlockedByProtectionDome &&
+                this.isPositionBlockedByProtectionDome(arrowGroup.position)) {
+                clearInterval(arrowInterval);
+                this.mesh.parent.remove(arrowGroup);
+                if (typeof onImpact === 'function') {
+                    onImpact({ x: arrowGroup.position.x, y: arrowGroup.position.y });
+                }
+                return;
+            }
+
+            for (const target of this.getDamageTargets()) {
+                if (!target || !target.isAlive) continue;
+                if (!checkAABBCollision(arrowBounds, target.getBounds())) continue;
+                this.applyArrowStormHit(target);
+                clearInterval(arrowInterval);
+                this.mesh.parent.remove(arrowGroup);
+                if (typeof onImpact === 'function') {
+                    onImpact({ x: arrowGroup.position.x, y: arrowGroup.position.y });
+                }
+                return;
+            }
+
+            if (level.platforms) {
+                for (const platform of level.platforms) {
+                    if (!platform || !platform.bounds) continue;
+                    if (checkAABBCollision(arrowBounds, platform.bounds)) {
+                        clearInterval(arrowInterval);
+                        this.fadeArrowAfterStorm(arrowGroup, stormDurationMs);
+                        if (typeof onImpact === 'function') {
+                            onImpact({ x: arrowGroup.position.x, y: arrowGroup.position.y });
+                        }
+                        return;
+                    }
+                }
+            }
+
+            if (traveled >= maxRange) {
+                clearInterval(arrowInterval);
+                this.mesh.parent.remove(arrowGroup);
+                if (typeof onImpact === 'function') {
+                    onImpact({ x: arrowGroup.position.x, y: arrowGroup.position.y });
+                }
+            }
+        }, 16);
+    }
+
+    startArrowStorm(impactPoint, durationMs = 3000) {
+        const center = impactPoint || { x: this.position.x, y: this.position.y };
+        const radius = 5;
+        const spawnIntervalMs = 120;
+        const arrowsPerBurst = 2;
+        const spawnTopY = this.getArrowStormTopY(center);
+        const targetY = center.y;
+        const startTime = performance.now();
+
+        if (this.arrowStormInterval) {
+            clearInterval(this.arrowStormInterval);
         }
 
-        if (this.machineBowDuration <= 0) {
-            this.machineBowActive = false;
+        this.arrowStormInterval = setInterval(() => {
+            if (performance.now() - startTime >= durationMs) {
+                clearInterval(this.arrowStormInterval);
+                this.arrowStormInterval = null;
+                this.arrowStormActive = false;
+                return;
+            }
+
+            for (let i = 0; i < arrowsPerBurst; i += 1) {
+                const offset = (Math.random() * 2 - 1) * radius;
+                const x = center.x + offset;
+                this.spawnArrowStormArrow({ x, startY: spawnTopY, targetY });
+            }
+        }, spawnIntervalMs);
+    }
+
+    getArrowStormTopY(center) {
+        const level = this.level;
+        const boundsTop = level?.cameraConfig?.bounds?.top;
+        if (Number.isFinite(boundsTop)) {
+            return boundsTop + 6;
         }
+        let maxTop = null;
+        if (level && Array.isArray(level.platforms)) {
+            level.platforms.forEach((platform) => {
+                if (!platform || !platform.bounds) return;
+                if (!Number.isFinite(platform.bounds.top)) return;
+                maxTop = maxTop === null ? platform.bounds.top : Math.max(maxTop, platform.bounds.top);
+            });
+        }
+        if (Number.isFinite(maxTop)) {
+            return maxTop + 6;
+        }
+        return (center?.y ?? this.position.y) + 18;
+    }
+
+    spawnArrowStormArrow({ x, startY, targetY }) {
+        const arrowGroup = new THREE.Group();
+
+        const shaft = new THREE.Mesh(
+            new THREE.BoxGeometry(0.55, 0.06, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0xffe08a })
+        );
+        shaft.position.set(0, -0.2, 0);
+        arrowGroup.add(shaft);
+
+        const tip = new THREE.Mesh(
+            new THREE.ConeGeometry(0.07, 0.18, 8),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        tip.rotation.z = -Math.PI / 2;
+        tip.position.set(0, -0.42, 0);
+        arrowGroup.add(tip);
+
+        const glow = new THREE.Mesh(
+            new THREE.CircleGeometry(0.18, 16),
+            new THREE.MeshBasicMaterial({
+                color: 0xfff1b3,
+                transparent: true,
+                opacity: 0.4
+            })
+        );
+        glow.position.set(0, -0.1, -0.01);
+        arrowGroup.add(glow);
+
+        arrowGroup.position.set(x, startY, 0.25);
+        arrowGroup.rotation.z = -Math.PI / 2;
+        this.mesh.parent.add(arrowGroup);
+
+        const fallSpeed = 22;
+        const arrowInterval = setInterval(() => {
+            arrowGroup.position.y -= fallSpeed * 0.016;
+
+            const arrowBounds = {
+                left: arrowGroup.position.x - 0.25,
+                right: arrowGroup.position.x + 0.25,
+                top: arrowGroup.position.y + 0.2,
+                bottom: arrowGroup.position.y - 0.4
+            };
+
+            for (const target of this.getDamageTargets()) {
+                if (!target || !target.isAlive) continue;
+                if (!checkAABBCollision(arrowBounds, target.getBounds())) continue;
+                this.applyArrowStormHit(target);
+                clearInterval(arrowInterval);
+                this.mesh.parent.remove(arrowGroup);
+                return;
+            }
+
+            if (arrowGroup.position.y <= targetY) {
+                clearInterval(arrowInterval);
+                this.mesh.parent.remove(arrowGroup);
+            }
+        }, 16);
+    }
+
+    applyArrowStormHit(target) {
+        const damage = 30;
+        if (typeof target.takeDamage === 'function') {
+            target.takeDamage(damage, this);
+        }
+        if (typeof target.setSlowed === 'function') {
+            target.setSlowed(1.5, 0.6);
+        }
+    }
+
+    fadeArrowAfterStorm(arrowGroup, durationMs) {
+        if (!arrowGroup) return;
+        const fadeDurationMs = 350;
+        const startDelay = Math.max(0, durationMs - fadeDurationMs);
+        setTimeout(() => {
+            const startTime = performance.now();
+            arrowGroup.children.forEach((child) => {
+                if (child.material) {
+                    child.material.transparent = true;
+                }
+            });
+            const fadeInterval = setInterval(() => {
+                const t = (performance.now() - startTime) / fadeDurationMs;
+                const alpha = Math.max(0, 1 - t);
+                arrowGroup.children.forEach((child) => {
+                    if (child.material) {
+                        child.material.opacity = alpha;
+                    }
+                });
+                if (t >= 1) {
+                    clearInterval(fadeInterval);
+                    if (arrowGroup.parent) {
+                        arrowGroup.parent.remove(arrowGroup);
+                    }
+                }
+            }, 16);
+        }, startDelay);
     }
 }
