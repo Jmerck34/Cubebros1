@@ -1065,9 +1065,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
         }
     });
 
-    if (selectedGameMode === 'game-test' && typeof debugMenu.spawnTrainingDummy === 'function') {
-        debugMenu.spawnTrainingDummy();
-    } else if (debugMenu && typeof debugMenu.removeTrainingDummy === 'function') {
+    if (debugMenu && typeof debugMenu.removeTrainingDummy === 'function') {
         debugMenu.removeTrainingDummy();
     }
 
