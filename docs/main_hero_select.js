@@ -41,11 +41,19 @@ let uiManagers = [];
 let cameras = [];
 let cameraFollows = [];
 let miniMaps = [];
-let teamScoreboard, scoreBlueEl, scoreRedEl;
-let teamScores = { blue: 0, red: 0 };
+let teamScoreboard, scoreBlueEl, scoreRedEl, scoreYellowEl, scoreGreenEl;
+let teamScores = { blue: 0, red: 0, yellow: 0, green: 0 };
 let gameMode = null;
 let playerStateOverlay = null;
 let freeCameraControllers = [];
+let arenaTimer = null;
+let arenaTimerFill = null;
+let arenaTimerLabel = null;
+let endGameOverlay = null;
+let endGameSubtitle = null;
+let endGameTitle = null;
+let endGameBackButton = null;
+let arenaMatchEnded = false;
 let selectedGameMode = null;
 let modeMenu = null;
 let modeButtons = [];
@@ -77,6 +85,7 @@ let kothMeterFillRed = null;
 let mapLoadingScreen = null;
 let mapLoadingTitle = null;
 let mapLoadingSubtitle = null;
+const TEAM_OPTIONS = ['blue', 'red', 'yellow', 'green'];
 
 // Hero selection
 const MAX_PLAYERS = 4;
@@ -102,6 +111,8 @@ let teamMenuTitles = [];
 let teamMenuSubtitles = [];
 let teamButtonBlue = [];
 let teamButtonRed = [];
+let teamButtonYellow = [];
+let teamButtonGreen = [];
 let heroMenuTitleDefault = '';
 let heroMenuSubtitleDefault = '';
 let heroMenuControlsDefault = '';
@@ -302,6 +313,8 @@ function initScoreboard() {
     teamScoreboard = document.getElementById('team-scoreboard');
     scoreBlueEl = document.getElementById('score-blue');
     scoreRedEl = document.getElementById('score-red');
+    scoreYellowEl = document.getElementById('score-yellow');
+    scoreGreenEl = document.getElementById('score-green');
     setScoreboardVisible(false);
 }
 
@@ -318,6 +331,12 @@ function updateScoreboard(scores = teamScores) {
     }
     if (scoreRedEl) {
         scoreRedEl.textContent = `${scores.red ?? 0}`;
+    }
+    if (scoreYellowEl) {
+        scoreYellowEl.textContent = `${scores.yellow ?? 0}`;
+    }
+    if (scoreGreenEl) {
+        scoreGreenEl.textContent = `${scores.green ?? 0}`;
     }
 }
 
@@ -336,6 +355,68 @@ function updateKothMeter({ team, score, max }) {
     kothMeterLabelRed.textContent = `RED ${redScore}/${safeMax}`;
     kothMeterFillBlue.style.width = `${safeMax > 0 ? (blueScore / safeMax) * 100 : 0}%`;
     kothMeterFillRed.style.width = `${safeMax > 0 ? (redScore / safeMax) * 100 : 0}%`;
+}
+
+function setUiScaleForPlayers(count) {
+    const safeCount = Math.max(1, Math.min(MAX_PLAYERS, Number.isFinite(count) ? count : 1));
+    const scale = safeCount === 1 ? 1 : safeCount === 2 ? 0.9 : 0.8;
+    document.body.style.setProperty('--ui-scale', `${scale}`);
+}
+
+function setArenaTimerVisible(visible) {
+    if (arenaTimer) {
+        arenaTimer.style.display = visible ? 'flex' : 'none';
+    }
+}
+
+function updateArenaTimer({ remaining, duration }) {
+    if (!arenaTimer || !arenaTimerLabel || !arenaTimerFill) return;
+    const safeDuration = Number.isFinite(duration) ? duration : 600;
+    const safeRemaining = Math.max(0, Number.isFinite(remaining) ? remaining : safeDuration);
+    const minutes = Math.floor(safeRemaining / 60);
+    const seconds = Math.floor(safeRemaining % 60);
+    arenaTimerLabel.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    arenaTimerFill.style.width = `${safeDuration > 0 ? (safeRemaining / safeDuration) * 100 : 0}%`;
+}
+
+function showEndGameOverlay(message) {
+    if (!endGameOverlay) return;
+    if (endGameSubtitle) {
+        endGameSubtitle.textContent = message || 'Time limit reached';
+    }
+    endGameOverlay.classList.add('active');
+}
+
+function hideEndGameOverlay() {
+    if (endGameOverlay) {
+        endGameOverlay.classList.remove('active');
+    }
+}
+
+function handleArenaMatchEnd({ scores } = {}) {
+    if (arenaMatchEnded) return;
+    arenaMatchEnded = true;
+    if (gameLoop) {
+        gameLoop.stop();
+    }
+    setArenaTimerVisible(false);
+    const snapshot = scores || teamScores || {};
+    const entries = TEAM_OPTIONS.map((team) => ({
+        team,
+        score: Number.isFinite(snapshot[team]) ? snapshot[team] : 0
+    }));
+    entries.sort((a, b) => b.score - a.score);
+    const top = entries[0];
+    const runnerUp = entries[1];
+    if (endGameTitle) {
+        if (top && runnerUp && top.score === runnerUp.score) {
+            endGameTitle.textContent = 'Draw!';
+        } else {
+            const label = top && top.team ? `${top.team[0].toUpperCase()}${top.team.slice(1)}` : 'Unknown';
+            endGameTitle.textContent = `${label} Team Wins!`;
+        }
+    }
+    showEndGameOverlay('Arena time limit reached');
 }
 
 
@@ -714,6 +795,8 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     hideReadyMenu();
     hideModeMenu();
     updateMenuSplitState();
+    arenaMatchEnded = false;
+    hideEndGameOverlay();
     document.getElementById('ability-ui').style.display = 'flex';
     const abilityUiP2 = document.getElementById('ability-ui-p2');
     const abilityUiP3 = document.getElementById('ability-ui-p3');
@@ -729,6 +812,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
     }
     document.body.classList.toggle('split-screen-active', localPlayerCount === 2);
     document.body.classList.toggle('split-screen-quad', localPlayerCount >= 3);
+    setUiScaleForPlayers(localPlayerCount);
 
     // Initialize input managers
     const playerOneBindings = localMultiplayerEnabled ? PLAYER_ONE_COOP_BINDINGS : null;
@@ -993,11 +1077,14 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
             onScoreChange: (scores) => {
                 teamScores = { ...scores };
                 updateScoreboard(teamScores);
-            }
+            },
+            onTimerUpdate: updateArenaTimer,
+            onMatchEnd: handleArenaMatchEnd
         });
     }
     gameMode.init();
     setKothMeterVisible(selectedGameMode === 'koth');
+    setArenaTimerVisible(selectedGameMode === 'arena');
     createMiniMaps();
 
     // Game Loop
@@ -1194,7 +1281,13 @@ function getTeamSpawn(levelInstance, team) {
     if (team === 'red') {
         return spawns.red || fallback;
     }
-    return spawns.blue || fallback;
+    if (team === 'yellow') {
+        return spawns.yellow || spawns.neutral || spawns.blue || fallback;
+    }
+    if (team === 'green') {
+        return spawns.green || spawns.neutral || spawns.blue || fallback;
+    }
+    return spawns.blue || spawns.neutral || fallback;
 }
 
 function showTeamMenu() {
@@ -1221,7 +1314,8 @@ function showTeamMenu() {
             teamMenuSubtitles[i].textContent = 'Choose your flag to spawn at.';
         }
         if (selectedTeams[i]) {
-            teamFocusIndices[i] = selectedTeams[i] === 'blue' ? 0 : 1;
+            const focusIndex = TEAM_OPTIONS.indexOf(selectedTeams[i]);
+            teamFocusIndices[i] = focusIndex >= 0 ? focusIndex : -1;
         }
         updateTeamMenuFocus(i + 1);
     }
@@ -1452,6 +1546,9 @@ function resetGame() {
     }
     destroyMiniMaps();
     setKothMeterVisible(false);
+    setArenaTimerVisible(false);
+    hideEndGameOverlay();
+    teamScores = { blue: 0, red: 0, yellow: 0, green: 0 };
     clearDamageNumbers();
     removeHealthPotions();
     parallaxManager = null;
@@ -1492,6 +1589,7 @@ function resetGame() {
 
     gameStarted = false;
     document.body.classList.remove('split-screen-active', 'split-screen-quad', 'menu-split-active');
+    setUiScaleForPlayers(1);
     buildTeamMenuItems();
     setPlayerCount(1);
     startMenuRender();
@@ -1888,7 +1986,7 @@ function triggerHeroSelectPop(heroKey) {
 function buildTeamMenuItems() {
     teamMenuItems = [];
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
-        teamMenuItems[i] = [teamButtonBlue[i], teamButtonRed[i]].filter(Boolean);
+        teamMenuItems[i] = [teamButtonBlue[i], teamButtonRed[i], teamButtonYellow[i], teamButtonGreen[i]].filter(Boolean);
         teamFocusIndices[i] = -1;
         updateTeamMenuFocus(i + 1);
     }
@@ -1921,10 +2019,14 @@ function updateTeamSelectionUI() {
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
         const blueButton = teamButtonBlue[i];
         const redButton = teamButtonRed[i];
+        const yellowButton = teamButtonYellow[i];
+        const greenButton = teamButtonGreen[i];
         const team = selectedTeams[i];
-        if (blueButton && redButton) {
+        if (blueButton && redButton && yellowButton && greenButton) {
             blueButton.classList.toggle(`selected-p${i + 1}`, team === 'blue');
             redButton.classList.toggle(`selected-p${i + 1}`, team === 'red');
+            yellowButton.classList.toggle(`selected-p${i + 1}`, team === 'yellow');
+            greenButton.classList.toggle(`selected-p${i + 1}`, team === 'green');
         }
     }
 }
@@ -2482,7 +2584,7 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
             teamSelectLocked[index] = true;
             return;
         }
-        const team = teamFocusIndices[index] === 0 ? 'blue' : 'red';
+        const team = TEAM_OPTIONS[teamFocusIndices[index]] || 'blue';
         handleTeamSelect(team, playerIndex);
         teamSelectLocked[index] = true;
     } else if (!selectPressed) {
@@ -2738,6 +2840,16 @@ window.addEventListener('load', () => {
     kothMeterLabelRed = document.getElementById('koth-meter-label-red');
     kothMeterFillBlue = document.getElementById('koth-meter-fill-blue');
     kothMeterFillRed = document.getElementById('koth-meter-fill-red');
+    arenaTimer = document.getElementById('arena-timer');
+    arenaTimerLabel = document.getElementById('arena-timer-label');
+    arenaTimerFill = document.getElementById('arena-timer-fill');
+    endGameOverlay = document.getElementById('endgame-overlay');
+    endGameTitle = document.getElementById('endgame-title');
+    endGameSubtitle = document.getElementById('endgame-subtitle');
+    endGameBackButton = document.getElementById('endgame-back');
+    if (endGameBackButton) {
+        endGameBackButton.addEventListener('click', () => resetGame());
+    }
     mapLoadingScreen = document.getElementById('map-loading-screen');
     mapLoadingTitle = document.getElementById('map-loading-title');
     mapLoadingSubtitle = document.getElementById('map-loading-subtitle');
@@ -2821,6 +2933,18 @@ window.addEventListener('load', () => {
         document.getElementById('team-red-p3'),
         document.getElementById('team-red-p4')
     ];
+    teamButtonYellow = [
+        document.getElementById('team-yellow-p1'),
+        document.getElementById('team-yellow-p2'),
+        document.getElementById('team-yellow-p3'),
+        document.getElementById('team-yellow-p4')
+    ];
+    teamButtonGreen = [
+        document.getElementById('team-green-p1'),
+        document.getElementById('team-green-p2'),
+        document.getElementById('team-green-p3'),
+        document.getElementById('team-green-p4')
+    ];
 
     if (heroMenuTitle) {
         heroMenuTitleDefault = heroMenuTitle.textContent;
@@ -2901,6 +3025,12 @@ window.addEventListener('load', () => {
         if (teamButtonRed[i]) {
             teamButtonRed[i].addEventListener('click', () => handleTeamSelect('red', playerIndex));
         }
+        if (teamButtonYellow[i]) {
+            teamButtonYellow[i].addEventListener('click', () => handleTeamSelect('yellow', playerIndex));
+        }
+        if (teamButtonGreen[i]) {
+            teamButtonGreen[i].addEventListener('click', () => handleTeamSelect('green', playerIndex));
+        }
     }
 
     document.addEventListener('keydown', (event) => {
@@ -2947,14 +3077,18 @@ window.addEventListener('load', () => {
                 handleTeamSelect('blue', 1);
             } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
                 handleTeamSelect('red', 1);
+            } else if (event.code === 'ArrowUp' || event.code === 'KeyW') {
+                handleTeamSelect('yellow', 1);
+            } else if (event.code === 'ArrowDown' || event.code === 'KeyS') {
+                handleTeamSelect('green', 1);
             }
             return;
         }
         const keyMap = [
-            { left: 'KeyA', right: 'KeyD' },
-            { left: 'ArrowLeft', right: 'ArrowRight' },
-            { left: 'KeyZ', right: 'KeyC' },
-            { left: 'Numpad4', right: 'Numpad6' }
+            { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS' },
+            { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown' },
+            { left: 'KeyZ', right: 'KeyC', up: 'KeyX', down: 'KeyV' },
+            { left: 'Numpad4', right: 'Numpad6', up: 'Numpad8', down: 'Numpad5' }
         ];
         for (let i = 0; i < localPlayerCount; i += 1) {
             const map = keyMap[i];
@@ -2965,6 +3099,14 @@ window.addEventListener('load', () => {
             }
             if (event.code === map.right) {
                 handleTeamSelect('red', i + 1);
+                return;
+            }
+            if (event.code === map.up) {
+                handleTeamSelect('yellow', i + 1);
+                return;
+            }
+            if (event.code === map.down) {
+                handleTeamSelect('green', i + 1);
                 return;
             }
         }

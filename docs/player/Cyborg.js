@@ -940,8 +940,9 @@ export class Cyborg extends Hero {
         this.isChargingBeam = false;
 
         const direction = this.beamAimDirection || { x: this.facingDirection, y: 0 };
-        const perpendicular = { x: -direction.y, y: direction.x };
-        const angle = Math.atan2(direction.y, direction.x);
+        const dir = { x: direction.x, y: direction.y };
+        let perpendicular = { x: -dir.y, y: dir.x };
+        let angle = Math.atan2(dir.y, dir.x);
         const damage = 60;
         const beamLength = 20;
         const beamSpeed = 22;
@@ -992,8 +993,8 @@ export class Cyborg extends Hero {
 
         const halfLength = beamLength * 0.5;
         const beamPos = {
-            x: this.position.x + direction.x * halfLength,
-            y: this.position.y + direction.y * halfLength
+            x: this.position.x + dir.x * halfLength,
+            y: this.position.y + dir.y * halfLength
         };
         beamGroup.position.set(beamPos.x, beamPos.y, 0.2);
         beamGroup.rotation.z = angle;
@@ -1014,8 +1015,8 @@ export class Cyborg extends Hero {
             const offsetX = (Math.random() - 0.5) * beamLength;
             const offsetY = (Math.random() - 0.5) * 1.2;
             particle.position.set(
-                beamPos.x + direction.x * offsetX + perpendicular.x * offsetY,
-                beamPos.y + direction.y * offsetX + perpendicular.y * offsetY,
+                beamPos.x + dir.x * offsetX + perpendicular.x * offsetY,
+                beamPos.y + dir.y * offsetX + perpendicular.y * offsetY,
                 0.15
             );
             this.mesh.parent.add(particle);
@@ -1029,30 +1030,60 @@ export class Cyborg extends Hero {
             });
         }
 
-        const hitEnemies = new Set();
+        let hitEnemies = new Set();
         let traveled = 0;
+        const projectile = {
+            type: 'beam',
+            mesh: beamGroup,
+            length: beamLength,
+            direction: dir,
+            owner: this,
+            lastDeflectTime: 0,
+            deflect: (newOwner) => {
+                const now = performance.now();
+                if (now - projectile.lastDeflectTime < 200) {
+                    return;
+                }
+                projectile.lastDeflectTime = now;
+                projectile.owner = newOwner;
+                dir.x *= -1;
+                dir.y *= -1;
+                perpendicular = { x: -dir.y, y: dir.x };
+                angle = Math.atan2(dir.y, dir.x);
+                beamGroup.rotation.z = angle;
+                traveled = 0;
+                hitEnemies = new Set();
+            }
+        };
+        Hero.addProjectile(projectile);
+        const cleanupProjectile = () => {
+            Hero.removeProjectile(projectile);
+        };
 
         // Animate flowing particles + move beam
         const particleInterval = setInterval(() => {
             const step = beamSpeed * 0.016;
             traveled += step;
-            beamPos.x += direction.x * step;
-            beamPos.y += direction.y * step;
+            beamPos.x += dir.x * step;
+            beamPos.y += dir.y * step;
             beamGroup.position.set(beamPos.x, beamPos.y, 0.2);
 
             beamParticles.forEach(p => {
                 p.life += 0.016;
                 p.offsetX += p.speed * 0.016;
 
-                p.mesh.position.x = beamPos.x + direction.x * p.offsetX + perpendicular.x * p.offsetY;
-                p.mesh.position.y = beamPos.y + direction.y * p.offsetX + perpendicular.y * p.offsetY;
+                p.mesh.position.x = beamPos.x + dir.x * p.offsetX + perpendicular.x * p.offsetY;
+                p.mesh.position.y = beamPos.y + dir.y * p.offsetX + perpendicular.y * p.offsetY;
 
                 // Fade out particles as they travel
                 p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
             });
 
-            if (this.isPositionBlockedByProtectionDome(beamPos)) {
+            const owner = projectile.owner || this;
+            if (owner && typeof owner.isPositionBlockedByProtectionDome === 'function' &&
+                owner.isPositionBlockedByProtectionDome(beamPos)) {
                 clearInterval(particleInterval);
+                cleanupProjectile();
                 this.mesh.parent.remove(beamGroup);
                 beamParticles.forEach(p => {
                     if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
@@ -1062,10 +1093,10 @@ export class Cyborg extends Hero {
 
             // Beam damage area
             const halfLength = beamLength * 0.5;
-            const startX = beamPos.x - direction.x * halfLength;
-            const startY = beamPos.y - direction.y * halfLength;
-            const endX = beamPos.x + direction.x * halfLength;
-            const endY = beamPos.y + direction.y * halfLength;
+            const startX = beamPos.x - dir.x * halfLength;
+            const startY = beamPos.y - dir.y * halfLength;
+            const endX = beamPos.x + dir.x * halfLength;
+            const endY = beamPos.y + dir.y * halfLength;
             const thickness = 0.7;
             const beamBounds = {
                 left: Math.min(startX, endX) - thickness,
@@ -1075,17 +1106,17 @@ export class Cyborg extends Hero {
             };
 
             // Damage enemies in beam (once per enemy)
-            for (const enemy of this.getDamageTargets()) {
+            for (const enemy of owner && typeof owner.getDamageTargets === 'function' ? owner.getDamageTargets() : []) {
                 if (!enemy.isAlive || hitEnemies.has(enemy)) continue;
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(beamBounds, enemyBounds)) {
                     const adjustedDamage = this.abilities.r && typeof this.abilities.r.getAdjustedDamage === 'function'
                         ? this.abilities.r.getAdjustedDamage(damage)
                         : damage;
-                    enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)), this);
+                    enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)), owner);
                     hitEnemies.add(enemy);
-                    if (enemy.type !== 'player') {
-                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    if (enemy.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                        owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                     }
                     console.log(`KAME HAME HA hit for ${damage} damage!`);
                 }
@@ -1093,6 +1124,7 @@ export class Cyborg extends Hero {
 
             if (traveled >= maxTravel) {
                 clearInterval(particleInterval);
+                cleanupProjectile();
                 this.mesh.parent.remove(beamGroup);
                 beamParticles.forEach(p => {
                     if (p.mesh.parent) this.mesh.parent.remove(p.mesh);

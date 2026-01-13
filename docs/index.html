@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ThreeJS MOBA Platformer - Hero Select</title>
     <style>
+        body {
+            --ui-scale: 1;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -178,6 +182,8 @@
             padding: 0;
             box-sizing: border-box;
             overflow: hidden;
+            transform: scale(var(--ui-scale));
+            transform-origin: bottom left;
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             background: rgba(10, 12, 16, 0.55);
@@ -532,7 +538,8 @@
             position: fixed;
             top: 14px;
             left: 50%;
-            transform: translateX(-50%);
+            transform: translateX(-50%) scale(var(--ui-scale));
+            transform-origin: top center;
             display: none;
             align-items: center;
             gap: 18px;
@@ -629,6 +636,14 @@
             box-shadow: 0 0 14px rgba(204, 47, 47, 0.6);
         }
 
+        .team-button.yellow {
+            box-shadow: 0 0 14px rgba(244, 208, 63, 0.6);
+        }
+
+        .team-button.green {
+            box-shadow: 0 0 14px rgba(63, 163, 77, 0.6);
+        }
+
         .team-button.blue.menu-focus-p1,
         .team-button.blue.menu-focus-p2,
         .team-button.blue.menu-focus-p3,
@@ -645,6 +660,22 @@
             box-shadow: 0 0 16px rgba(204, 47, 47, 0.6);
         }
 
+        .team-button.yellow.menu-focus-p1,
+        .team-button.yellow.menu-focus-p2,
+        .team-button.yellow.menu-focus-p3,
+        .team-button.yellow.menu-focus-p4 {
+            outline: 3px solid rgba(244, 208, 63, 0.95);
+            box-shadow: 0 0 16px rgba(244, 208, 63, 0.6);
+        }
+
+        .team-button.green.menu-focus-p1,
+        .team-button.green.menu-focus-p2,
+        .team-button.green.menu-focus-p3,
+        .team-button.green.menu-focus-p4 {
+            outline: 3px solid rgba(63, 163, 77, 0.95);
+            box-shadow: 0 0 16px rgba(63, 163, 77, 0.6);
+        }
+
         .team-button.blue.selected-p1,
         .team-button.blue.selected-p2,
         .team-button.blue.selected-p3,
@@ -659,6 +690,22 @@
         .team-button.red.selected-p4 {
             border-color: rgba(204, 47, 47, 0.95);
             box-shadow: 0 0 18px rgba(204, 47, 47, 0.6);
+        }
+
+        .team-button.yellow.selected-p1,
+        .team-button.yellow.selected-p2,
+        .team-button.yellow.selected-p3,
+        .team-button.yellow.selected-p4 {
+            border-color: rgba(244, 208, 63, 0.95);
+            box-shadow: 0 0 18px rgba(244, 208, 63, 0.6);
+        }
+
+        .team-button.green.selected-p1,
+        .team-button.green.selected-p2,
+        .team-button.green.selected-p3,
+        .team-button.green.selected-p4 {
+            border-color: rgba(63, 163, 77, 0.95);
+            box-shadow: 0 0 18px rgba(63, 163, 77, 0.6);
         }
 
         .team-controls {
@@ -1173,37 +1220,44 @@
 
         #ability-ui {
             left: 50%;
-            transform: translateX(-50%);
+            transform: translateX(-50%) scale(var(--ui-scale));
+            transform-origin: bottom center;
         }
 
         #ability-ui-p2 {
             right: 20px;
+            transform: scale(var(--ui-scale));
+            transform-origin: bottom right;
         }
 
         #ability-ui-p3 {
             left: 20px;
+            transform: scale(var(--ui-scale));
+            transform-origin: bottom left;
         }
 
         #ability-ui-p4 {
             right: 20px;
+            transform: scale(var(--ui-scale));
+            transform-origin: bottom right;
         }
 
         body.split-screen-active #ability-ui {
             left: 25%;
-            transform: translateX(-50%);
+            transform: translateX(-50%) scale(var(--ui-scale));
         }
 
         body.split-screen-active #ability-ui-p2 {
             left: 75%;
             right: auto;
-            transform: translateX(-50%);
+            transform: translateX(-50%) scale(var(--ui-scale));
         }
 
         body.split-screen-quad #ability-ui,
         body.split-screen-quad #ability-ui-p2 {
             top: 50%;
             bottom: auto;
-            transform: translate(-50%, -100%);
+            transform: translate(-50%, -100%) scale(var(--ui-scale));
         }
 
         body.split-screen-quad #ability-ui {
@@ -1218,7 +1272,7 @@
         body.split-screen-quad #ability-ui-p4 {
             top: auto;
             bottom: 20px;
-            transform: translateX(-50%);
+            transform: translateX(-50%) scale(var(--ui-scale));
         }
 
         body.split-screen-quad #ability-ui-p3 {
@@ -1349,13 +1403,115 @@
             position: fixed;
             top: 16px;
             left: 50%;
-            transform: translateX(-50%);
+            transform: translateX(-50%) scale(var(--ui-scale));
+            transform-origin: top center;
             display: none;
             gap: 14px;
             z-index: 150;
             font-family: 'Arial', sans-serif;
             text-transform: uppercase;
             letter-spacing: 1px;
+        }
+
+        #arena-timer {
+            position: fixed;
+            top: 58px;
+            left: 50%;
+            transform: translateX(-50%) scale(var(--ui-scale));
+            transform-origin: top center;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            z-index: 150;
+            padding: 6px 14px 10px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.65);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: #f2f6ff;
+            font-family: 'Arial', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            min-width: 140px;
+        }
+
+        #arena-timer-label {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .arena-timer-bar {
+            width: 140px;
+            height: 8px;
+            border-radius: 6px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        #arena-timer-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #7fd1ff, #bfe9ff);
+            transition: width 0.2s ease;
+        }
+
+        #endgame-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.78);
+            z-index: 2500;
+        }
+
+        #endgame-overlay.active {
+            display: flex;
+        }
+
+        .endgame-card {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at top, rgba(30, 40, 70, 0.95), rgba(5, 8, 16, 0.98));
+            border-radius: 0;
+            padding: 48px;
+            text-align: center;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+        }
+
+        .endgame-card h2 {
+            margin: 0 0 8px;
+            font-size: 42px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .endgame-card p {
+            margin: 0 0 22px;
+            font-size: 16px;
+            color: rgba(220, 230, 255, 0.85);
+        }
+
+        .endgame-card button {
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #3a6ea5 0%, #2b5a88 100%);
+            border: 2px solid #ffffff;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .endgame-card button:hover {
+            transform: scale(1.03);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.35);
         }
 
         .score-card {
@@ -1383,6 +1539,16 @@
         .score-card.red {
             border-color: rgba(204, 47, 47, 0.9);
             color: #ffb2b2;
+        }
+
+        .score-card.yellow {
+            border-color: rgba(244, 208, 63, 0.9);
+            color: #ffe899;
+        }
+
+        .score-card.green {
+            border-color: rgba(63, 163, 77, 0.9);
+            color: #b7f3c2;
         }
 
         .charge-meter {
@@ -1438,6 +1604,27 @@
         <div class="score-card red">
             <span>Red</span>
             <span class="score-value" id="score-red">0</span>
+        </div>
+        <div class="score-card yellow">
+            <span>Yellow</span>
+            <span class="score-value" id="score-yellow">0</span>
+        </div>
+        <div class="score-card green">
+            <span>Green</span>
+            <span class="score-value" id="score-green">0</span>
+        </div>
+    </div>
+    <div id="arena-timer" aria-live="polite">
+        <span id="arena-timer-label">10:00</span>
+        <div class="arena-timer-bar">
+            <div id="arena-timer-fill"></div>
+        </div>
+    </div>
+    <div id="endgame-overlay" aria-hidden="true">
+        <div class="endgame-card">
+            <h2 id="endgame-title">Match Over</h2>
+            <p id="endgame-subtitle">Time limit reached</p>
+            <button id="endgame-back" type="button">Back to Menu</button>
         </div>
     </div>
 
@@ -1601,6 +1788,8 @@
             <div class="team-buttons">
                 <button id="team-blue-p1" class="team-button blue" type="button">Blue Team</button>
                 <button id="team-red-p1" class="team-button red" type="button">Red Team</button>
+                <button id="team-yellow-p1" class="team-button yellow" type="button">Yellow Team</button>
+                <button id="team-green-p1" class="team-button green" type="button">Green Team</button>
             </div>
             <p class="team-controls">D-pad/Stick + A to select</p>
         </div>
@@ -1610,6 +1799,8 @@
             <div class="team-buttons">
                 <button id="team-blue-p2" class="team-button blue" type="button">Blue Team</button>
                 <button id="team-red-p2" class="team-button red" type="button">Red Team</button>
+                <button id="team-yellow-p2" class="team-button yellow" type="button">Yellow Team</button>
+                <button id="team-green-p2" class="team-button green" type="button">Green Team</button>
             </div>
             <p class="team-controls">D-pad/Stick + A to select</p>
         </div>
@@ -1619,6 +1810,8 @@
             <div class="team-buttons">
                 <button id="team-blue-p3" class="team-button blue" type="button">Blue Team</button>
                 <button id="team-red-p3" class="team-button red" type="button">Red Team</button>
+                <button id="team-yellow-p3" class="team-button yellow" type="button">Yellow Team</button>
+                <button id="team-green-p3" class="team-button green" type="button">Green Team</button>
             </div>
             <p class="team-controls">D-pad/Stick + A to select</p>
         </div>
@@ -1628,6 +1821,8 @@
             <div class="team-buttons">
                 <button id="team-blue-p4" class="team-button blue" type="button">Blue Team</button>
                 <button id="team-red-p4" class="team-button red" type="button">Red Team</button>
+                <button id="team-yellow-p4" class="team-button yellow" type="button">Yellow Team</button>
+                <button id="team-green-p4" class="team-button green" type="button">Green Team</button>
             </div>
             <p class="team-controls">D-pad/Stick + A to select</p>
         </div>

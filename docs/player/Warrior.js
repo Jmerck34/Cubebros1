@@ -29,6 +29,7 @@ export class Warrior extends Hero {
         this.deflectTimer = 0;
         this.deflectDuration = 0.6;
         this.deflectRadius = 2.4;
+        this.deflectIndicator = null;
         this.isSpinningUltimate = false;
         this.swordComboStep = 0;
         this.swordComboTimers = [];
@@ -511,6 +512,7 @@ export class Warrior extends Hero {
         this.deflectTimer = this.deflectDuration;
         this.setEffectColor(0xe6f2ff);
         this.playShieldBashSound();
+        this.showDeflectIndicator();
 
         const originalX = this.shieldBase.x;
         const originalY = this.shieldBase.y;
@@ -533,11 +535,32 @@ export class Warrior extends Hero {
             if (owner && owner.team && this.team && owner.team === this.team) {
                 continue;
             }
-            const dx = projectile.mesh.position.x - this.position.x;
-            const dy = projectile.mesh.position.y - this.position.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist <= this.deflectRadius) {
-                projectile.deflect(this);
+            if (projectile.type === 'beam' && projectile.length && projectile.direction) {
+                const dir = projectile.direction;
+                const dirLength = Math.hypot(dir.x, dir.y) || 1;
+                const dirX = dir.x / dirLength;
+                const dirY = dir.y / dirLength;
+                const halfLength = projectile.length * 0.5;
+                const startX = projectile.mesh.position.x - dirX * halfLength;
+                const startY = projectile.mesh.position.y - dirY * halfLength;
+                const px = this.position.x - startX;
+                const py = this.position.y - startY;
+                const proj = Math.max(0, Math.min(projectile.length, px * dirX + py * dirY));
+                const closestX = startX + dirX * proj;
+                const closestY = startY + dirY * proj;
+                const dx = this.position.x - closestX;
+                const dy = this.position.y - closestY;
+                const dist = Math.hypot(dx, dy);
+                if (dist <= this.deflectRadius) {
+                    projectile.deflect(this);
+                }
+            } else {
+                const dx = projectile.mesh.position.x - this.position.x;
+                const dy = projectile.mesh.position.y - this.position.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist <= this.deflectRadius) {
+                    projectile.deflect(this);
+                }
             }
         }
     }
@@ -850,9 +873,33 @@ export class Warrior extends Hero {
             this.deflectProjectiles();
             if (this.deflectTimer === 0) {
                 this.setEffectColor(this.baseColor);
+                this.hideDeflectIndicator();
             }
         }
 
+    }
+
+    showDeflectIndicator() {
+        if (this.deflectIndicator) {
+            this.deflectIndicator.visible = true;
+            return;
+        }
+        const geometry = new THREE.RingGeometry(this.deflectRadius - 0.18, this.deflectRadius, 48);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x9aa0a6,
+            transparent: true,
+            opacity: 0.25
+        });
+        const indicator = new THREE.Mesh(geometry, material);
+        indicator.position.set(0, 0, -0.1);
+        this.mesh.add(indicator);
+        this.deflectIndicator = indicator;
+    }
+
+    hideDeflectIndicator() {
+        if (this.deflectIndicator) {
+            this.deflectIndicator.visible = false;
+        }
     }
 
     destroy() {

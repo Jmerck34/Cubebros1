@@ -1,21 +1,40 @@
 export class ArenaMode {
-    constructor({ onScoreboardVisible, onScoreChange } = {}) {
+    constructor({ onScoreboardVisible, onScoreChange, onTimerUpdate, onMatchEnd } = {}) {
         this.onScoreboardVisible = onScoreboardVisible || (() => {});
         this.onScoreChange = onScoreChange || (() => {});
-        this.scores = { blue: 0, red: 0 };
+        this.onTimerUpdate = onTimerUpdate || (() => {});
+        this.onMatchEnd = onMatchEnd || (() => {});
+        this.scores = { blue: 0, red: 0, yellow: 0, green: 0 };
         this.playerStates = new Map();
         this.killCreditWindowMs = 2500;
+        this.matchDuration = 600;
+        this.timeRemaining = this.matchDuration;
+        this.matchEnded = false;
     }
 
     init() {
-        this.scores = { blue: 0, red: 0 };
+        this.scores = { blue: 0, red: 0, yellow: 0, green: 0 };
         this.playerStates.clear();
+        this.timeRemaining = this.matchDuration;
+        this.matchEnded = false;
         this.onScoreChange(this.scores);
         this.onScoreboardVisible(true);
+        this.onTimerUpdate({ remaining: this.timeRemaining, duration: this.matchDuration });
     }
 
     update(deltaTime, players = []) {
+        if (this.matchEnded) {
+            return;
+        }
         if (!Array.isArray(players) || players.length === 0) {
+            return;
+        }
+
+        this.timeRemaining = Math.max(0, this.timeRemaining - deltaTime);
+        this.onTimerUpdate({ remaining: this.timeRemaining, duration: this.matchDuration });
+        if (this.timeRemaining <= 0) {
+            this.matchEnded = true;
+            this.onMatchEnd({ scores: { ...this.scores } });
             return;
         }
 
@@ -32,7 +51,7 @@ export class ArenaMode {
     handlePlayerDeath(player) {
         const killer = this.getKillCredit(player);
         if (!killer) return;
-        if (killer.team === 'blue' || killer.team === 'red') {
+        if (killer.team === 'blue' || killer.team === 'red' || killer.team === 'yellow' || killer.team === 'green') {
             this.scores[killer.team] += 1;
             this.onScoreChange(this.scores);
         }

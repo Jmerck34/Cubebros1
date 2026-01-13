@@ -1,6 +1,8 @@
 const TEAM_COLORS = {
     blue: '#2f6cb0',
     red: '#cc2f2f',
+    yellow: '#f4d03f',
+    green: '#3fa34d',
     neutral: '#8b8f96'
 };
 
@@ -85,10 +87,11 @@ export class MiniMap {
         if (!viewport || !Number.isFinite(viewport.x) || !Number.isFinite(fullHeight)) {
             return;
         }
-        const top = Math.max(0, fullHeight - (viewport.y + viewport.height));
         const left = viewport.x;
+        const bottom = viewport.y;
         this.container.style.left = `${left + this.padding}px`;
-        this.container.style.top = `${top + this.padding}px`;
+        this.container.style.bottom = `${bottom + this.padding}px`;
+        this.container.style.top = '';
     }
 
     buildBase(level) {
