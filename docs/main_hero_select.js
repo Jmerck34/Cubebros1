@@ -86,6 +86,15 @@ let mapLoadingScreen = null;
 let mapLoadingTitle = null;
 let mapLoadingSubtitle = null;
 const TEAM_OPTIONS = ['blue', 'red', 'yellow', 'green'];
+const CTF_TEAM_OPTIONS = ['blue', 'red'];
+
+function getTeamOptionsForMode(modeKey = selectedGameMode) {
+    return modeKey === 'ctf' ? CTF_TEAM_OPTIONS : TEAM_OPTIONS;
+}
+
+function isTeamAllowedForMode(team, modeKey = selectedGameMode) {
+    return getTeamOptionsForMode(modeKey).includes(team);
+}
 
 // Hero selection
 const MAX_PLAYERS = 4;
@@ -1292,6 +1301,7 @@ function getTeamSpawn(levelInstance, team) {
 
 function showTeamMenu() {
     hideReadyMenu();
+    syncTeamMenuForMode();
     if (teamMenu) {
         teamMenu.style.display = 'flex';
         teamMenu.classList.toggle('split', localMultiplayerEnabled);
@@ -1314,7 +1324,8 @@ function showTeamMenu() {
             teamMenuSubtitles[i].textContent = 'Choose your flag to spawn at.';
         }
         if (selectedTeams[i]) {
-            const focusIndex = TEAM_OPTIONS.indexOf(selectedTeams[i]);
+            const teamOptions = getTeamOptionsForMode();
+            const focusIndex = teamOptions.indexOf(selectedTeams[i]);
             teamFocusIndices[i] = focusIndex >= 0 ? focusIndex : -1;
         }
         updateTeamMenuFocus(i + 1);
@@ -1497,6 +1508,9 @@ function selectGameMode(modeKey) {
 }
 
 function handleTeamSelect(team, playerIndex = 1) {
+    if (!isTeamAllowedForMode(team)) {
+        return;
+    }
     if (!localMultiplayerEnabled) {
         selectedTeams[0] = team;
         hideTeamMenu();
@@ -1984,12 +1998,36 @@ function triggerHeroSelectPop(heroKey) {
 }
 
 function buildTeamMenuItems() {
+    const teamOptions = getTeamOptionsForMode();
     teamMenuItems = [];
     for (let i = 0; i < MAX_PLAYERS; i += 1) {
-        teamMenuItems[i] = [teamButtonBlue[i], teamButtonRed[i], teamButtonYellow[i], teamButtonGreen[i]].filter(Boolean);
+        const buttonMap = {
+            blue: teamButtonBlue[i],
+            red: teamButtonRed[i],
+            yellow: teamButtonYellow[i],
+            green: teamButtonGreen[i]
+        };
+        teamMenuItems[i] = teamOptions.map((team) => buttonMap[team]).filter(Boolean);
         teamFocusIndices[i] = -1;
         updateTeamMenuFocus(i + 1);
     }
+}
+
+function syncTeamMenuForMode() {
+    const ctfTeamsOnly = selectedGameMode === 'ctf';
+    for (let i = 0; i < MAX_PLAYERS; i += 1) {
+        if (teamButtonYellow[i]) {
+            teamButtonYellow[i].style.display = ctfTeamsOnly ? 'none' : '';
+        }
+        if (teamButtonGreen[i]) {
+            teamButtonGreen[i].style.display = ctfTeamsOnly ? 'none' : '';
+        }
+        if (selectedTeams[i] && !isTeamAllowedForMode(selectedTeams[i])) {
+            selectedTeams[i] = null;
+        }
+    }
+    buildTeamMenuItems();
+    updateTeamSelectionUI();
 }
 
 function updateTeamMenuFocus(playerIndex) {
@@ -2584,7 +2622,8 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
             teamSelectLocked[index] = true;
             return;
         }
-        const team = TEAM_OPTIONS[teamFocusIndices[index]] || 'blue';
+        const teamOptions = getTeamOptionsForMode();
+        const team = teamOptions[teamFocusIndices[index]] || teamOptions[0] || 'blue';
         handleTeamSelect(team, playerIndex);
         teamSelectLocked[index] = true;
     } else if (!selectPressed) {
@@ -3072,14 +3111,15 @@ window.addEventListener('load', () => {
             }
         }
         if (!teamMenu || teamMenu.style.display !== 'flex') return;
+        const ctfTeamsOnly = selectedGameMode === 'ctf';
         if (!localMultiplayerEnabled) {
             if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
                 handleTeamSelect('blue', 1);
             } else if (event.code === 'ArrowRight' || event.code === 'KeyD') {
                 handleTeamSelect('red', 1);
-            } else if (event.code === 'ArrowUp' || event.code === 'KeyW') {
+            } else if (!ctfTeamsOnly && (event.code === 'ArrowUp' || event.code === 'KeyW')) {
                 handleTeamSelect('yellow', 1);
-            } else if (event.code === 'ArrowDown' || event.code === 'KeyS') {
+            } else if (!ctfTeamsOnly && (event.code === 'ArrowDown' || event.code === 'KeyS')) {
                 handleTeamSelect('green', 1);
             }
             return;
@@ -3101,11 +3141,11 @@ window.addEventListener('load', () => {
                 handleTeamSelect('red', i + 1);
                 return;
             }
-            if (event.code === map.up) {
+            if (!ctfTeamsOnly && event.code === map.up) {
                 handleTeamSelect('yellow', i + 1);
                 return;
             }
-            if (event.code === map.down) {
+            if (!ctfTeamsOnly && event.code === map.down) {
                 handleTeamSelect('green', i + 1);
                 return;
             }

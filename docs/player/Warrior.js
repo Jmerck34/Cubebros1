@@ -27,7 +27,7 @@ export class Warrior extends Hero {
         this.dashResetCount = 0;
         this.shieldBashInvuln = 0;
         this.deflectTimer = 0;
-        this.deflectDuration = 0.6;
+        this.deflectDuration = 0.5;
         this.deflectRadius = 2.4;
         this.deflectIndicator = null;
         this.isSpinningUltimate = false;
@@ -328,20 +328,25 @@ export class Warrior extends Hero {
             this.setFacingDirection(dirX >= 0 ? 1 : -1);
         }
         const aimAngle = aimDir.angle;
-        const arcSpan = nextStep === 1 ? Math.PI * 0.8 : nextStep === 2 ? Math.PI * 1.05 : Math.PI * 1.25;
+        const arcSpan = nextStep === 1 ? Math.PI * 0.95 : nextStep === 2 ? Math.PI * 1.15 : Math.PI * 1.35;
         const swingStart = aimAngle - arcSpan * 0.5;
         const swingEnd = aimAngle + arcSpan * 0.5;
-        if (dirY > 0.25) {
-            this.sword.position.y = 0.5;
-        } else {
-            this.sword.position.y = this.swordBase.y;
-        }
+        const swingDuration = nextStep === 3 ? 180 : nextStep === 2 ? 160 : 140;
+        const swingX = this.swordBase.x + dirX * 0.08;
+        const swingY = dirY > 0.25 ? 0.55 : this.swordBase.y + 0.05;
+        this.sword.position.x = swingX;
+        this.sword.position.y = swingY;
         this.sword.rotation.z = swingStart;
-        const slashTimer = setTimeout(() => {
-            this.sword.rotation.z = swingEnd;
-            this.playSwordSwingSound();
+
+        this.animateSwordTo(swingX, swingY, swingEnd, 1, swingDuration);
+
+        const trailTimer = setTimeout(() => {
             const tint = nextStep === 3 ? 0xffd6a6 : nextStep === 2 ? 0xaad7ff : 0xbfe3ff;
             this.createSlashTrail(swingStart, swingEnd, { x: dirX, y: dirY }, tint);
+        }, Math.max(30, swingDuration * 0.35));
+
+        const hitTimer = setTimeout(() => {
+            this.playSwordSwingSound();
             this.applySlashDamage({ x: dirX, y: dirY }, nextStep);
             if (nextStep === 3) {
                 this.swordFinisherSpinElapsed = this.swordFinisherSpinDuration;
@@ -350,13 +355,14 @@ export class Warrior extends Hero {
                     this.abilities.q.isReady = false;
                 }
             }
-        }, 140);
+        }, Math.max(70, swingDuration * 0.6));
+
         const resetRotTimer = setTimeout(() => {
             this.sword.rotation.z = originalRot;
             this.sword.position.x = this.swordBase.x;
             this.sword.position.y = this.swordBase.y;
-        }, 360);
-        this.swordComboTimers.push(slashTimer, resetRotTimer);
+        }, swingDuration + 220);
+        this.swordComboTimers.push(trailTimer, hitTimer, resetRotTimer);
 
         const resetDelay = nextStep === 3 ? this.swordComboResetAfterFinisherMs : this.swordComboWindowMs;
         this.swordComboResetTimer = setTimeout(() => {
@@ -370,56 +376,94 @@ export class Warrior extends Hero {
     createSlashTrail(startAngle, endAngle, direction, tint = 0xbfe3ff) {
         const slashGroup = new THREE.Group();
 
-        const swordLength = 1.4;
-        const segmentCount = 8;
-        const angleRange = endAngle - startAngle;
-        const baseX = direction.x * 0.2;
-        const baseY = direction.y * 0.1 - 0.05;
+        const arcSpan = Math.max(0.2, endAngle - startAngle);
+        const dirX = direction.x || 0;
+        const dirY = direction.y || 0;
+        const baseX = dirX * 0.35;
+        const baseY = dirY * 0.2 + (dirY > 0.25 ? 0.25 : 0.08);
+        const outerRadius = 1.65;
+        const innerRadius = 0.95;
+        const segments = Math.max(14, Math.round(arcSpan / (Math.PI / 14)));
 
-        for (let i = 0; i < segmentCount; i++) {
-            const t = i / (segmentCount - 1);
-            const angle = startAngle + angleRange * t;
-            const tipX = baseX + Math.cos(angle) * swordLength;
-            const tipY = baseY + Math.sin(angle) * swordLength;
+        const arcGeometry = new THREE.RingGeometry(
+            innerRadius,
+            outerRadius,
+            segments,
+            1,
+            startAngle,
+            arcSpan
+        );
+        const arcMaterial = new THREE.MeshBasicMaterial({
+            color: tint,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+        });
+        const arcMesh = new THREE.Mesh(arcGeometry, arcMaterial);
+        arcMesh.position.set(baseX, baseY, 0);
+        slashGroup.add(arcMesh);
 
-            const segmentGeometry = new THREE.PlaneGeometry(0.32, 0.14);
-            const segmentMaterial = new THREE.MeshBasicMaterial({
-                color: tint,
-                transparent: true,
-                opacity: 0.55,
-                side: THREE.DoubleSide
-            });
-            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+        const glowGeometry = new THREE.RingGeometry(
+            innerRadius * 0.7,
+            innerRadius,
+            segments,
+            1,
+            startAngle,
+            arcSpan
+        );
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: tint,
+            transparent: true,
+            opacity: 0.45,
+            side: THREE.DoubleSide
+        });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        glowMesh.position.set(baseX, baseY, 0.01);
+        slashGroup.add(glowMesh);
 
-            segment.position.set(tipX, tipY, 0);
-            segment.rotation.z = angle - Math.PI / 2; // Align tangent to arc
+        const tipColor = new THREE.Color(tint).lerp(new THREE.Color(0xffffff), 0.35);
+        const tipGeometry = new THREE.PlaneGeometry(0.55, 0.24);
+        const tipMaterial = new THREE.MeshBasicMaterial({
+            color: tipColor,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+        });
+        const tipMesh = new THREE.Mesh(tipGeometry, tipMaterial);
+        const tipAngle = startAngle + arcSpan;
+        const tipRadius = outerRadius * 0.92;
+        tipMesh.position.set(
+            baseX + Math.cos(tipAngle) * tipRadius,
+            baseY + Math.sin(tipAngle) * tipRadius,
+            0.02
+        );
+        tipMesh.rotation.z = tipAngle - Math.PI / 2;
+        slashGroup.add(tipMesh);
 
-            slashGroup.add(segment);
-        }
-
-        slashGroup.position.set(this.position.x, this.position.y, 0.2);
+        const followZ = 0.2;
+        slashGroup.position.set(this.position.x, this.position.y, followZ);
 
         // Add to scene
         this.mesh.parent.add(slashGroup);
 
-        // Animate - fade out and scale up (faster fade)
-        let opacity = 0.5;
-        let scale = 1.0;
+        const startTime = performance.now();
+        const durationMs = 160;
         const animInterval = setInterval(() => {
-            opacity -= 0.2; // Increased from 0.12 for faster fade
-            scale += 0.2;
-
-            // Update all segments
-            slashGroup.children.forEach(segment => {
-                segment.material.opacity = opacity;
-            });
-            slashGroup.scale.set(scale, scale, 1);
-
-            if (opacity <= 0) {
+            slashGroup.position.set(this.position.x, this.position.y, followZ);
+            const t = (performance.now() - startTime) / durationMs;
+            if (t >= 1) {
                 clearInterval(animInterval);
                 this.mesh.parent.remove(slashGroup);
+                return;
             }
-        }, 30); // Reduced from 40ms for faster animation
+            const eased = 1 - Math.pow(1 - t, 2);
+            const opacity = Math.max(0, 0.85 * (1 - eased));
+            const scale = 0.95 + eased * 0.18;
+            arcMaterial.opacity = opacity;
+            glowMaterial.opacity = opacity * 0.7;
+            tipMaterial.opacity = opacity * 0.9;
+            slashGroup.scale.set(scale, scale, 1);
+        }, 16);
     }
 
     applySlashDamage(direction, comboStep = 1) {
