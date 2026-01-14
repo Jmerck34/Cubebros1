@@ -3,6 +3,10 @@ const COLOR_MAP = {
     solidPlatform: '#99FF00',
     oneWay: '#FFEF00',
     movingPlatform: '#F8A900',
+    bridge: '#CEFF00',
+    explodingBarrel: '#FF7000',
+    flagPlateBlue: '#0012FF',
+    flagPlateRed: '#FF0037',
     ladder: '#CC00FF',
     travel: '#FF0008',
     killFloor: '#FF8B00',
@@ -463,6 +467,9 @@ export class MaskMapBuilder {
             platforms: [],
             oneWayPlatforms: [],
             movingPlatforms: [],
+            bridges: [],
+            explodingBarrels: [],
+            flagPlates: [],
             ladders: [],
             travellers: [],
             playerSpawns: config.playerSpawns || null,
@@ -566,6 +573,37 @@ export class MaskMapBuilder {
                 });
             } else if (type === 'oneWay') {
                 mapData.oneWayPlatforms.push({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, type: config.oneWayType || 'grass' });
+            } else if (type === 'bridge') {
+                mapData.bridges.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    type: config.bridgeType || config.oneWayType || 'rope'
+                });
+            } else if (type === 'explodingBarrel') {
+                mapData.explodingBarrels.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height
+                });
+            } else if (type === 'flagPlateBlue') {
+                mapData.flagPlates.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    team: 'blue'
+                });
+            } else if (type === 'flagPlateRed') {
+                mapData.flagPlates.push({
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    team: 'red'
+                });
             } else if (type === 'movingPlatform') {
                 if (config.movingPlatformStatic) {
                     mapData.platforms.push({

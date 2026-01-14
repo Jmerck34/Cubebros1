@@ -61,6 +61,7 @@ Brief descriptions of every exported class in `threejs-platformer/docs`.
 - `Lever` - Triggerable toggle switch.
 - `Bridge` - Destructible one-way platform.
 - `ExplodingBarrel` - Physics body that explodes after damage.
+- `FlagPlate` - Team flag spawn/capture plate for CTF.
 - `SpawnPoint` - Player spawn location selector.
 
 ## Game Modes

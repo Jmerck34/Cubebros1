@@ -581,11 +581,11 @@ export class Archer extends Hero {
 
     startArrowStorm(impactPoint, durationMs = 3000) {
         const center = impactPoint || { x: this.position.x, y: this.position.y };
-        const radius = 5;
+        const radius = 7;
         const spawnIntervalMs = 120;
         const arrowsPerBurst = 2;
         const spawnTopY = this.getArrowStormTopY(center);
-        const targetY = center.y;
+        const targetY = center.y - 2;
         const startTime = performance.now();
 
         if (this.arrowStormInterval) {
@@ -661,7 +661,7 @@ export class Archer extends Hero {
         arrowGroup.rotation.z = -Math.PI / 2;
         this.mesh.parent.add(arrowGroup);
 
-        const fallSpeed = 22;
+        const fallSpeed = 30;
         const arrowInterval = setInterval(() => {
             arrowGroup.position.y -= fallSpeed * 0.016;
 

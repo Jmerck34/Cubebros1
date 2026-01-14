@@ -314,6 +314,9 @@ export class Hero extends Player {
         for (const enemy of this.enemies || []) {
             addTarget(enemy);
         }
+        if (this.level && Array.isArray(this.level.explodingBarrels)) {
+            this.level.explodingBarrels.forEach((barrel) => addTarget(barrel));
+        }
         for (const opponent of this.opponents || []) {
             addTarget(opponent);
         }

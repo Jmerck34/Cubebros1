@@ -11,6 +11,9 @@ import { hilltowerMaskConfig } from './maps/hilltowerMap.js';
 import { arenaMaskConfig } from './maps/arenaMap.js';
 import { ctfBtbMaskConfig } from './maps/ctfBtbMap.js';
 import { applyVisibilityLayer, normalizeVisibilityLayer, VISIBILITY_LAYERS } from '../utils/visibility.js';
+import { ExplodingBarrel } from './ExplodingBarrel.js';
+import { FlagPlate } from './FlagPlate.js';
+import { Player } from '../player/Player.js';
 
 const FOREGROUND_PALETTE = {
     groundBody: 0x8f563b,
@@ -65,6 +68,8 @@ export class Level {
         this.windStreaks = [];
         this.bodies = [];
         this.travellers = [];
+        this.explodingBarrels = [];
+        this.flagPlates = [];
         this.mapKey = null;
         this.cameraConfig = null;
         this.deathY = null;
@@ -417,6 +422,141 @@ export class Level {
         return platform;
     }
 
+    addExplodingBarrel(x, y, width, height, options = {}) {
+        const barrelGroup = new THREE.Group();
+        const radius = Math.max(0.2, (width || 1) * 0.3);
+        const barrelHeight = Math.max(0.7, height || 1);
+        const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
+        const bandMaterial = new THREE.MeshBasicMaterial({ color: 0x3a2515 });
+        const capMaterial = new THREE.MeshBasicMaterial({ color: 0x5a331c });
+
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, barrelHeight, 14), bodyMaterial);
+        barrelGroup.add(body);
+
+        const bandTop = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.02, radius * 0.12, 8, 16), bandMaterial);
+        bandTop.rotation.x = Math.PI / 2;
+        bandTop.position.y = barrelHeight * 0.32;
+        barrelGroup.add(bandTop);
+
+        const bandBottom = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.02, radius * 0.12, 8, 16), bandMaterial);
+        bandBottom.rotation.x = Math.PI / 2;
+        bandBottom.position.y = -barrelHeight * 0.32;
+        barrelGroup.add(bandBottom);
+
+        const cap = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.9, 12), capMaterial);
+        cap.rotation.x = -Math.PI / 2;
+        cap.position.y = barrelHeight * 0.5;
+        barrelGroup.add(cap);
+
+        barrelGroup.position.set(x, y, 0.2);
+        applyVisibilityLayer(barrelGroup, this.defaultVisibilityLayer);
+        this.group.add(barrelGroup);
+
+        const boundsWidth = Math.max(width || radius * 2, radius * 2);
+        const boundsHeight = Math.max(height || barrelHeight, barrelHeight);
+        const bounds = {
+            left: x - boundsWidth / 2,
+            right: x + boundsWidth / 2,
+            top: y + boundsHeight / 2,
+            bottom: y - boundsHeight / 2
+        };
+
+        const barrelBody = new ExplodingBarrel({
+            collisionShape: { type: 'aabb', bounds },
+            mapKey: this.mapKey,
+            scene: this.scene,
+            position: { x, y },
+            maxHealth: options.maxHealth != null ? options.maxHealth : 40,
+            respawnDelay: options.respawnDelay != null ? options.respawnDelay : 30,
+            damageOverTime: 0,
+            detonateDelay: options.detonateDelay != null ? options.detonateDelay : 1,
+            onExplode: () => {
+                this.handleBarrelExplosion({ x: barrelBody.position.x, y: barrelBody.position.y });
+            }
+        });
+        barrelBody.gravity = 0;
+
+        const platform = {
+            mesh: barrelGroup,
+            bounds: { ...bounds },
+            type: 'barrel',
+            isExplodingBarrel: true,
+            isAlive: true,
+            position: { x, y, z: 0 },
+            disabled: false,
+            baseY: y,
+            baseScale: { x: 1, y: 1, z: 1 },
+            springTimer: 0,
+            springDuration: 0.2,
+            visibilityLayer: this.defaultVisibilityLayer,
+            body: barrelBody,
+            flashTimer: 0,
+            smokeTimer: 0,
+            smokePuffs: [],
+            baseColor: bodyMaterial.color.getHex()
+        };
+
+        platform.getBounds = () => ({ ...platform.bounds });
+        platform.takeDamage = (amount, source = null) => {
+            if (platform.body) {
+                platform.body.takeDamage(amount);
+            }
+        };
+
+        this.bodies.push(barrelBody);
+        this.platforms.push(platform);
+        this.explodingBarrels.push(platform);
+        return platform;
+    }
+
+    addFlagPlate(x, y, width, height, team = 'neutral') {
+        const plateGroup = new THREE.Group();
+        const baseColor = team === 'red' ? 0xff3d5a : team === 'blue' ? 0x2f6cb0 : 0x8b8f96;
+        const rimColor = team === 'red' ? 0xff8796 : team === 'blue' ? 0x8bb6ff : 0xb8bcc4;
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(width, height, 0.08),
+            new THREE.MeshBasicMaterial({ color: baseColor })
+        );
+        base.position.set(0, 0, 0.02);
+        plateGroup.add(base);
+
+        const rim = new THREE.Mesh(
+            new THREE.BoxGeometry(width * 1.02, height * 1.02, 0.04),
+            new THREE.MeshBasicMaterial({ color: rimColor, transparent: true, opacity: 0.7 })
+        );
+        rim.position.set(0, 0, 0.05);
+        plateGroup.add(rim);
+
+        plateGroup.position.set(x, y, 0.1);
+        applyVisibilityLayer(plateGroup, this.defaultVisibilityLayer);
+        this.group.add(plateGroup);
+
+        const bounds = {
+            left: x - width / 2,
+            right: x + width / 2,
+            top: y + height / 2,
+            bottom: y - height / 2
+        };
+        const plateBody = new FlagPlate({
+            team,
+            bounds,
+            mapKey: this.mapKey,
+            position: { x, y }
+        });
+        this.bodies.push(plateBody);
+
+        const plate = {
+            mesh: plateGroup,
+            bounds: { ...bounds },
+            type: 'flagPlate',
+            team,
+            isFlagPlate: true,
+            body: plateBody
+        };
+        this.flagPlates.push(plate);
+        return plate;
+    }
+
     /**
      * Check and resolve collisions with platforms
      * @param {Player} player - Player instance
@@ -588,6 +728,12 @@ export class Level {
             }
             if ((platform.type === 'cloud' || platform.isCloudPlatform) && playerVelocity.y > 0) {
                 continue;
+            }
+            if (platform.isExplodingBarrel && platform.body && typeof platform.body.applyImpulse === 'function') {
+                const impulse = Math.max(-2.4, Math.min(2.4, playerVelocity.x * 0.2));
+                if (Math.abs(impulse) > 0.05) {
+                    platform.body.applyImpulse(impulse, 0);
+                }
             }
             // Special handling for ladders - only if not standing on wall
             if (platform.isLadder && !onWall && overlaps) {
@@ -929,6 +1075,80 @@ export class Level {
         }
     }
 
+    updateExplodingBarrels(deltaTime) {
+        if (!this.explodingBarrels.length) return;
+        const flashRate = 14;
+        const smokeRate = 0.12;
+        const friction = 0.86;
+        this.explodingBarrels.forEach((barrel) => {
+            if (!barrel || !barrel.body || !barrel.mesh) return;
+
+            barrel.body.update(deltaTime);
+            barrel.body.velocity.x *= friction;
+            barrel.body.velocity.y = 0;
+            barrel.body.position.y = barrel.body.spawnPoint.y;
+
+            barrel.mesh.position.x = barrel.body.position.x;
+            barrel.mesh.position.y = barrel.body.position.y;
+            barrel.position.x = barrel.body.position.x;
+            barrel.position.y = barrel.body.position.y;
+            barrel.mesh.visible = !barrel.body.isDestroyed;
+            barrel.isAlive = !barrel.body.isDestroyed;
+            barrel.disabled = barrel.body.isDestroyed;
+
+            const boundsWidth = barrel.bounds.right - barrel.bounds.left;
+            const boundsHeight = barrel.bounds.top - barrel.bounds.bottom;
+            barrel.bounds.left = barrel.body.position.x - boundsWidth / 2;
+            barrel.bounds.right = barrel.body.position.x + boundsWidth / 2;
+            barrel.bounds.top = barrel.body.position.y + boundsHeight / 2;
+            barrel.bounds.bottom = barrel.body.position.y - boundsHeight / 2;
+
+            if (barrel.body.isIgnited && barrel.mesh.visible) {
+                barrel.flashTimer += deltaTime * flashRate;
+                const flashOn = Math.sin(barrel.flashTimer) > 0;
+                barrel.mesh.children.forEach((child) => {
+                    if (child.material && child.material.color) {
+                        child.material.color.setHex(flashOn ? 0xff4b4b : barrel.baseColor);
+                    }
+                });
+
+                barrel.smokeTimer += deltaTime;
+                if (barrel.smokeTimer >= smokeRate) {
+                    barrel.smokeTimer = 0;
+                    const puff = new THREE.Mesh(
+                        new THREE.CircleGeometry(0.18 + Math.random() * 0.12, 12),
+                        new THREE.MeshBasicMaterial({ color: 0x2d2d2d, transparent: true, opacity: 0.35 })
+                    );
+                    puff.position.set(
+                        barrel.mesh.position.x + (Math.random() - 0.5) * 0.6,
+                        barrel.mesh.position.y + 0.5 + Math.random() * 0.3,
+                        0.18
+                    );
+                    puff.userData = { life: 0.6 + Math.random() * 0.4 };
+                    this.group.add(puff);
+                    barrel.smokePuffs.push(puff);
+                }
+            }
+
+            if (barrel.smokePuffs.length) {
+                barrel.smokePuffs = barrel.smokePuffs.filter((puff) => {
+                    puff.userData.life -= deltaTime;
+                    puff.position.y += deltaTime * 0.6;
+                    if (puff.material) {
+                        puff.material.opacity = Math.max(0, puff.userData.life);
+                    }
+                    if (puff.userData.life <= 0) {
+                        if (puff.parent) {
+                            puff.parent.remove(puff);
+                        }
+                        return false;
+                    }
+                    return true;
+                });
+            }
+        });
+    }
+
     /**
      * Update level systems
      * @param {number} deltaTime - Time since last frame
@@ -939,7 +1159,52 @@ export class Level {
         this.updateLaunchers(deltaTime);
         this.updateWindVisuals(deltaTime);
         this.updateBreakablePlatforms(deltaTime);
+        this.updateExplodingBarrels(deltaTime);
         this.updateFlags();
+    }
+
+    handleBarrelExplosion(position) {
+        const radius = 5;
+        const damage = 40;
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.4, radius, 32),
+            new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.6 })
+        );
+        ring.position.set(position.x, position.y, 0.3);
+        ring.rotation.x = Math.PI / 2;
+        this.group.add(ring);
+
+        let scale = 0.4;
+        let opacity = 0.6;
+        const impactInterval = setInterval(() => {
+            scale += 0.25;
+            opacity -= 0.08;
+            ring.scale.set(scale, scale, 1);
+            ring.material.opacity = Math.max(0, opacity);
+            if (opacity <= 0) {
+                clearInterval(impactInterval);
+                if (ring.parent) {
+                    ring.parent.remove(ring);
+                }
+            }
+        }, 40);
+
+        const applyDamageToTargets = (targets) => {
+            targets.forEach((target) => {
+                if (!target || !target.isAlive || !target.position) return;
+                const dx = target.position.x - position.x;
+                const dy = target.position.y - position.y;
+                if ((dx * dx + dy * dy) <= radius * radius) {
+                    if (typeof target.takeDamage === 'function') {
+                        target.takeDamage(damage, null);
+                    }
+                }
+            });
+        };
+
+        applyDamageToTargets(this.enemies || []);
+        const players = Player.getAllPlayers ? Player.getAllPlayers() : [];
+        applyDamageToTargets(players);
     }
 
     /**
