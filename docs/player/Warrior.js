@@ -1025,7 +1025,7 @@ export class Warrior extends Hero {
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(ability, enemy, baseHits);
-                if (enemy.type !== 'player') {
+                if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
                 if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
@@ -1055,7 +1055,7 @@ export class Warrior extends Hero {
             const dy = closestY - this.position.y;
             if ((dx * dx + dy * dy) <= radiusSq) {
                 this.applyAbilityDamage(ability, enemy, baseHits);
-                if (enemy.type !== 'player') {
+                if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
                 if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
@@ -1100,13 +1100,17 @@ export class Warrior extends Hero {
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(this.abilities.w, enemy, 1);
-                if (enemy.type !== 'player') {
+                if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
                 if (this.abilities && this.abilities.e && this.dashResetCount < 2) {
                     this.abilities.e.currentCooldown = 0;
                     this.abilities.e.isReady = true;
                     this.dashResetCount += 1;
+                }
+
+                if (enemy.isBridge) {
+                    continue;
                 }
 
                 // Knockback away from the warrior

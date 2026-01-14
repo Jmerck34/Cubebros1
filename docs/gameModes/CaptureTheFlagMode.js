@@ -17,9 +17,14 @@ export class CaptureTheFlagMode {
     }
 
     init() {
-        const spawns = this.level?.flagSpawns || {
+        const defaultSpawns = this.level?.flagSpawns || {
             blue: { x: -60, y: 3 },
             red: { x: 60, y: 3 }
+        };
+        const plateSpawns = this.getFlagPlateSpawns();
+        const spawns = {
+            blue: plateSpawns.blue || defaultSpawns.blue,
+            red: plateSpawns.red || defaultSpawns.red
         };
         this.scores = { blue: 0, red: 0 };
         this.onScoreChange(this.scores);
@@ -56,6 +61,26 @@ export class CaptureTheFlagMode {
         }
         this.state = null;
         this.onScoreboardVisible(false);
+    }
+
+    getFlagPlateSpawns() {
+        const plates = Array.isArray(this.level?.flagPlates) ? this.level.flagPlates : [];
+        const spawns = {};
+        plates.forEach((plate) => {
+            if (!plate || !plate.team) return;
+            const team = plate.team;
+            if (team !== 'blue' && team !== 'red') return;
+            if (spawns[team]) return;
+            const bounds = plate.bounds || (plate.body && plate.body.getBounds ? plate.body.getBounds() : null);
+            const centerX = bounds
+                ? (bounds.left + bounds.right) / 2
+                : (plate.body?.position?.x ?? plate.mesh?.position?.x ?? 0);
+            const baseY = bounds
+                ? bounds.top + 0.02
+                : (plate.body?.position?.y ?? plate.mesh?.position?.y ?? 0.02);
+            spawns[team] = { x: centerX, y: baseY };
+        });
+        return spawns;
     }
 
     update(deltaTime, activePlayers, activeInputs) {

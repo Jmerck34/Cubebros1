@@ -481,7 +481,7 @@ export class Cyborg extends Hero {
                         } else if (typeof enemy.takeDamage === 'function') {
                             enemy.takeDamage(2, owner);
                         }
-                        if (enemy.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                        if (enemy.type === 'player' && typeof owner.addUltimateCharge === 'function') {
                             owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                         }
                         console.log('ðŸ”¥ Fireball hit!');
@@ -631,7 +631,7 @@ export class Cyborg extends Hero {
                 } else if (typeof enemy.frozenTimer === 'number') {
                     enemy.frozenTimer = 1.5;
                 }
-                if (enemy.type !== 'player') {
+                if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
                 console.log('ðŸ§Š Enemy frozen!');
@@ -1115,7 +1115,7 @@ export class Cyborg extends Hero {
                         : damage;
                     enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)), owner);
                     hitEnemies.add(enemy);
-                    if (enemy.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                    if (enemy.type === 'player' && typeof owner.addUltimateCharge === 'function') {
                         owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                     }
                     console.log(`KAME HAME HA hit for ${damage} damage!`);

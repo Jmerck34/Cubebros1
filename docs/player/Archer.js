@@ -324,7 +324,7 @@ export class Archer extends Hero {
                     } else if (typeof enemy.takeDamage === 'function') {
                         enemy.takeDamage(damageHits, owner);
                     }
-                    if (enemy.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                    if (enemy.type === 'player' && typeof owner.addUltimateCharge === 'function') {
                         owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                     }
                     hitEnemies.add(enemy);

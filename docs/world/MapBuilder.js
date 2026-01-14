@@ -22,19 +22,15 @@ export class MapBuilder {
         bridges.forEach((bridge) => {
             if (!bridge) return;
             const { x, y, width, height } = bridge;
-            const type = 'rope';
-            const platform = typeof level.addOneWayPlatform === 'function'
-                ? level.addOneWayPlatform(x, y, width, height, type)
-                : level.addPlatform(x, y, width, height, type);
+            const platform = typeof level.addBridge === 'function'
+                ? level.addBridge(x, y, width, height, 'rope', {
+                    maxHealth: bridge.maxHealth,
+                    respawnDelay: bridge.respawnDelay
+                })
+                : (typeof level.addOneWayPlatform === 'function'
+                    ? level.addOneWayPlatform(x, y, width, height, 'rope')
+                    : level.addPlatform(x, y, width, height, 'rope'));
             if (!platform) return;
-            platform.breakable = true;
-            platform.breakState = 'idle';
-            platform.breakDelay = bridge.breakDelay != null ? bridge.breakDelay : 0.25;
-            platform.respawnDelay = bridge.respawnDelay != null ? bridge.respawnDelay : 5;
-            platform.breakTimer = 0;
-            platform.respawnTimer = 0;
-            platform.disabled = false;
-            platform.shakeTime = 0;
             platform.isBridge = true;
         });
 

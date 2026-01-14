@@ -580,7 +580,7 @@ export class Assassin extends Hero {
                         ? this.abilities.w.getAdjustedDamage(baseDamage)
                         : baseDamage;
                     target.takeDamage(Math.max(1, Math.round(adjustedDamage)), owner);
-                    if (target.type !== 'player' && typeof owner.addUltimateCharge === 'function') {
+                    if (target.type === 'player' && typeof owner.addUltimateCharge === 'function') {
                         owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
                     }
                     if (typeof target.setSlowed === 'function') {
@@ -855,6 +855,7 @@ export class Assassin extends Hero {
 
         for (const enemy of this.getDamageTargets()) {
             if (!enemy || !enemy.isAlive || !enemy.position) continue;
+            if (enemy.type !== 'player') continue;
             const dx = enemy.position.x - this.position.x;
             const dy = enemy.position.y - this.position.y;
             if (!Number.isFinite(dx) || !Number.isFinite(dy)) continue;
@@ -879,7 +880,7 @@ export class Assassin extends Hero {
         // Deal massive damage
         this.applyAbilityDamage(this.abilities.r, closestEnemy, 3);
 
-        if (closestEnemy.type !== 'player') {
+        if (closestEnemy.type === 'player') {
             this.addUltimateCharge(this.ultimateChargePerKill);
         }
 
@@ -967,7 +968,7 @@ export class Assassin extends Hero {
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
                 this.applyAbilityDamage(ability, enemy, 1);
-                if (enemy.type !== 'player') {
+                if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
                 console.log('ðŸ’¥ Assassin hit enemy!');

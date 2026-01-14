@@ -3,6 +3,7 @@ import { checkAABBCollision, resolveCollisionY, resolveCollisionX, resolvePolygo
 import { SolidBody } from './SolidBody.js';
 import { SolidPlatform } from './SolidPlatform.js';
 import { OneWayPlatform } from './OneWayPlatform.js';
+import { Bridge } from './Bridge.js';
 import { Ladder } from './Ladder.js';
 import { MapBuilder } from './MapBuilder.js';
 import { MaskMapBuilder } from './MaskMapBuilder.js';
@@ -14,6 +15,7 @@ import { applyVisibilityLayer, normalizeVisibilityLayer, VISIBILITY_LAYERS } fro
 import { ExplodingBarrel } from './ExplodingBarrel.js';
 import { FlagPlate } from './FlagPlate.js';
 import { Player } from '../player/Player.js';
+import { GRAVITY } from '../core/constants.js';
 
 const FOREGROUND_PALETTE = {
     groundBody: 0x8f563b,
@@ -69,6 +71,7 @@ export class Level {
         this.bodies = [];
         this.travellers = [];
         this.explodingBarrels = [];
+        this.bridges = [];
         this.flagPlates = [];
         this.mapKey = null;
         this.cameraConfig = null;
@@ -326,6 +329,92 @@ export class Level {
         return platform;
     }
 
+    addBridge(x, y, width, height, type = 'rope', options = {}) {
+        const platform = this.addPlatform(x, y, width, height, 'rope', options);
+        if (platform.body) {
+            this.bodies = this.bodies.filter((body) => body !== platform.body);
+        }
+        const collisionShape = options.collisionShape || null;
+        const bridgeBody = new Bridge({
+            collisionShape,
+            bounds: platform.bounds,
+            mapKey: this.mapKey,
+            scene: null,
+            position: { x, y },
+            maxHealth: options.maxHealth != null ? options.maxHealth : 70,
+            respawnDelay: options.respawnDelay != null ? options.respawnDelay : 5,
+            solidFromAbove: options.solidFromAbove !== undefined ? options.solidFromAbove : true,
+            allowDropThrough: options.allowDropThrough !== undefined ? options.allowDropThrough : true,
+            dropThroughWindowMs: options.dropThroughWindowMs != null ? options.dropThroughWindowMs : 200
+        });
+        bridgeBody.setVisibilityLayer(platform.visibilityLayer);
+        if (bridgeBody.healthBar) {
+            bridgeBody.healthBar.destroy();
+            bridgeBody.healthBar = null;
+        }
+        platform.body = bridgeBody;
+        platform.isOneWay = true;
+        platform.isBridge = true;
+        platform.isAlive = true;
+        platform.disabled = false;
+        platform.position = { x, y, z: 0 };
+        platform.baseY = y;
+        platform.bridgeShakePhase = 0;
+        platform.bridgeShakeTimer = 0;
+        platform.bridgeDustTimer = 0;
+        platform.bridgeDustPuffs = [];
+        platform.lastBridgeHealth = bridgeBody.currentHealth;
+        platform.getBounds = () => ({ ...platform.bounds });
+        platform.takeDamage = (amount, source = null) => {
+            if (platform.body) {
+                platform.body.takeDamage(amount);
+                const destroyed = platform.body.isDestroyed;
+                platform.isAlive = !destroyed;
+                platform.disabled = destroyed;
+                if (platform.mesh) {
+                    platform.mesh.visible = !destroyed;
+                }
+            }
+        };
+        if (platform.mesh && !platform.mesh.material && platform.mesh.children && platform.mesh.children.length) {
+            platform.mesh.material = platform.mesh.children[0].material;
+        }
+        if (platform.mesh) {
+            platform.mesh.traverse((child) => {
+                if (child.material && child.material.color) {
+                    child.userData.bridgeBaseColor = child.material.color.getHex();
+                }
+            });
+            const crackGroup = new THREE.Group();
+            const crackCount = Math.max(4, Math.min(7, Math.round(width)));
+            for (let i = 0; i < crackCount; i++) {
+                const crack = new THREE.Mesh(
+                    new THREE.BoxGeometry(Math.min(0.6, width * 0.18), 0.04, 0.02),
+                    new THREE.MeshBasicMaterial({
+                        color: 0x1a0e08,
+                        transparent: true,
+                        opacity: 0,
+                        side: THREE.DoubleSide,
+                        depthTest: false,
+                        depthWrite: false
+                    })
+                );
+                crack.position.set(
+                    -width / 2 + (i + 1) * (width / (crackCount + 1)),
+                    height * 0.52 + (i % 2 === 0 ? 0.02 : -0.01),
+                    0.4
+                );
+                crack.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.05;
+                crackGroup.add(crack);
+            }
+            platform.mesh.add(crackGroup);
+            platform.bridgeCrackGroup = crackGroup;
+        }
+        this.bodies.push(bridgeBody);
+        this.bridges.push(platform);
+        return platform;
+    }
+
     addLadderZone(x, y, width, height, options = {}) {
         const ladderGroup = new THREE.Group();
         const visibilityLayer = normalizeVisibilityLayer(
@@ -466,7 +555,7 @@ export class Level {
             mapKey: this.mapKey,
             scene: this.scene,
             position: { x, y },
-            maxHealth: options.maxHealth != null ? options.maxHealth : 40,
+            maxHealth: options.maxHealth != null ? options.maxHealth : 1,
             respawnDelay: options.respawnDelay != null ? options.respawnDelay : 30,
             damageOverTime: 0,
             detonateDelay: options.detonateDelay != null ? options.detonateDelay : 1,
@@ -474,7 +563,11 @@ export class Level {
                 this.handleBarrelExplosion({ x: barrelBody.position.x, y: barrelBody.position.y });
             }
         });
-        barrelBody.gravity = 0;
+        barrelBody.gravity = GRAVITY;
+        if (barrelBody.healthBar) {
+            barrelBody.healthBar.destroy();
+            barrelBody.healthBar = null;
+        }
 
         const platform = {
             mesh: barrelGroup,
@@ -493,8 +586,14 @@ export class Level {
             flashTimer: 0,
             smokeTimer: 0,
             smokePuffs: [],
+            wasDestroyed: false,
             baseColor: bodyMaterial.color.getHex()
         };
+        barrelGroup.traverse((child) => {
+            if (child.material && child.material.color) {
+                child.userData.barrelBaseColor = child.material.color.getHex();
+            }
+        });
 
         platform.getBounds = () => ({ ...platform.bounds });
         platform.takeDamage = (amount, source = null) => {
@@ -729,11 +828,45 @@ export class Level {
             if ((platform.type === 'cloud' || platform.isCloudPlatform) && playerVelocity.y > 0) {
                 continue;
             }
-            if (platform.isExplodingBarrel && platform.body && typeof platform.body.applyImpulse === 'function') {
-                const impulse = Math.max(-2.4, Math.min(2.4, playerVelocity.x * 0.2));
-                if (Math.abs(impulse) > 0.05) {
-                    platform.body.applyImpulse(impulse, 0);
+            if (platform.isExplodingBarrel && platform.body) {
+                const overlapLeft = playerBounds.right - platform.bounds.left;
+                const overlapRight = platform.bounds.right - playerBounds.left;
+                const overlapTop = playerBounds.top - platform.bounds.bottom;
+                const overlapBottom = platform.bounds.top - playerBounds.bottom;
+                const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+                if (minOverlap === overlapBottom && playerVelocity.y <= 0) {
+                    const impactSpeed = Math.abs(playerVelocity.y);
+                    resolveCollisionY(player.position, platform.bounds, playerVelocity);
+                    player.velocity.y = 0;
+                    player.isGrounded = true;
+                    player.mesh.position.y = player.position.y;
+                    triggerLandingSound(impactSpeed);
+                    applyFallDamage(impactSpeed, platform);
+                } else if (minOverlap === overlapTop && playerVelocity.y > 0) {
+                    resolveCollisionY(player.position, platform.bounds, playerVelocity);
+                    player.velocity.y = 0;
+                    player.mesh.position.y = player.position.y;
+                } else {
+                    const overlapX = Math.min(playerBounds.right, platform.bounds.right) -
+                        Math.max(playerBounds.left, platform.bounds.left);
+                    if (overlapX > 0) {
+                        const direction = player.position.x <= platform.body.position.x ? -1 : 1;
+                        const push = overlapX / 2 + 0.01;
+                        player.position.x += direction * push;
+                        platform.body.position.x -= direction * push;
+                        player.velocity.x = 0;
+                        platform.body.velocity.x = 0;
+                        player.mesh.position.x = player.position.x;
+                        if (platform.mesh) {
+                            platform.mesh.position.x = platform.body.position.x;
+                        }
+                        platform.position.x = platform.body.position.x;
+                        const boundsWidth = platform.bounds.right - platform.bounds.left;
+                        platform.bounds.left = platform.body.position.x - boundsWidth / 2;
+                        platform.bounds.right = platform.body.position.x + boundsWidth / 2;
+                    }
                 }
+                continue;
             }
             // Special handling for ladders - only if not standing on wall
             if (platform.isLadder && !onWall && overlaps) {
@@ -879,7 +1012,7 @@ export class Level {
                 player.mesh.position.y = player.position.y;
                 triggerLandingSound(impactSpeed);
                 applyFallDamage(impactSpeed, platform);
-                if (platform.breakable && platform.breakState === 'idle') {
+                if (platform.breakable && platform.breakState === 'idle' && !platform.isBridge) {
                     platform.breakState = 'shaking';
                     platform.breakTimer = platform.breakDelay;
                     platform.shakeTime = 0;
@@ -1075,6 +1208,87 @@ export class Level {
         }
     }
 
+    updateBridges(deltaTime) {
+        if (!this.bridges.length) return;
+        this.bridges.forEach((bridge) => {
+            if (!bridge || !bridge.body || !bridge.mesh) return;
+            bridge.body.update(deltaTime);
+            const destroyed = bridge.body.isDestroyed;
+            bridge.disabled = destroyed;
+            bridge.isAlive = !destroyed;
+            bridge.mesh.visible = !destroyed;
+            if (!destroyed) {
+                const maxHealth = bridge.body.maxHealth || 1;
+                const currentHealth = bridge.body.currentHealth != null ? bridge.body.currentHealth : maxHealth;
+                const damageRatio = Math.min(1, Math.max(0, 1 - currentHealth / maxHealth));
+                const tint = new THREE.Color(0x3a2316);
+                bridge.mesh.traverse((child) => {
+                    const baseHex = child.userData?.bridgeBaseColor;
+                    if (baseHex != null && child.material && child.material.color) {
+                        const base = new THREE.Color(baseHex);
+                        child.material.color.copy(base).lerp(tint, damageRatio * 0.7);
+                    }
+                });
+                if (bridge.bridgeCrackGroup) {
+                    const crackProgress = Math.max(0, (damageRatio - 0.7) / 0.3);
+                    bridge.bridgeCrackGroup.children.forEach((crack) => {
+                        if (crack.material) {
+                            crack.material.opacity = crackProgress * 0.9;
+                        }
+                    });
+                }
+                const tookDamage = bridge.lastBridgeHealth != null && currentHealth < bridge.lastBridgeHealth;
+                if (tookDamage) {
+                    bridge.bridgeShakeTimer = 0.18;
+                    bridge.bridgeShakePhase = 0;
+                    bridge.bridgeDustTimer = Math.min(0.12, bridge.bridgeDustTimer);
+                    const damagePuff = new THREE.Mesh(
+                        new THREE.CircleGeometry(0.1 + Math.random() * 0.08, 10),
+                        new THREE.MeshBasicMaterial({ color: 0x5b3d24, transparent: true, opacity: 0.6 })
+                    );
+                    damagePuff.position.set(
+                        bridge.mesh.position.x + (Math.random() - 0.5) * 0.6,
+                        bridge.mesh.position.y + 0.12 + Math.random() * 0.12,
+                        0.3
+                    );
+                    damagePuff.userData = { life: 0.45 + Math.random() * 0.35 };
+                    this.group.add(damagePuff);
+                    bridge.bridgeDustPuffs.push(damagePuff);
+                }
+                if (bridge.bridgeShakeTimer > 0) {
+                    bridge.bridgeShakeTimer = Math.max(0, bridge.bridgeShakeTimer - deltaTime);
+                    bridge.bridgeShakePhase += deltaTime * 24;
+                    bridge.mesh.rotation.z = Math.sin(bridge.bridgeShakePhase) * 0.015;
+                    bridge.mesh.position.y = bridge.baseY + Math.sin(bridge.bridgeShakePhase * 1.6) * 0.03;
+                } else {
+                    bridge.mesh.rotation.z = 0;
+                    bridge.mesh.position.y = bridge.baseY;
+                }
+                if (bridge.bridgeDustPuffs.length) {
+                    bridge.bridgeDustPuffs = bridge.bridgeDustPuffs.filter((puff) => {
+                        puff.userData.life -= deltaTime;
+                        puff.position.y += deltaTime * 0.35;
+                        if (puff.material) {
+                            puff.material.opacity = Math.max(0, puff.userData.life);
+                        }
+                        if (puff.userData.life <= 0) {
+                            if (puff.parent) {
+                                puff.parent.remove(puff);
+                            }
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+                bridge.lastBridgeHealth = currentHealth;
+            }
+            if (bridge.position) {
+                bridge.position.x = bridge.body.position.x;
+                bridge.position.y = bridge.body.position.y;
+            }
+        });
+    }
+
     updateExplodingBarrels(deltaTime) {
         if (!this.explodingBarrels.length) return;
         const flashRate = 14;
@@ -1083,10 +1297,58 @@ export class Level {
         this.explodingBarrels.forEach((barrel) => {
             if (!barrel || !barrel.body || !barrel.mesh) return;
 
+            const prevY = barrel.body.position.y;
             barrel.body.update(deltaTime);
             barrel.body.velocity.x *= friction;
-            barrel.body.velocity.y = 0;
-            barrel.body.position.y = barrel.body.spawnPoint.y;
+            const halfW = (barrel.bounds.right - barrel.bounds.left) / 2;
+            const halfH = (barrel.bounds.top - barrel.bounds.bottom) / 2;
+
+            if (!barrel.body.isDestroyed) {
+                const barrelBounds = {
+                    left: barrel.body.position.x - halfW,
+                    right: barrel.body.position.x + halfW,
+                    top: barrel.body.position.y + halfH,
+                    bottom: barrel.body.position.y - halfH
+                };
+                const prevBottom = prevY - halfH;
+                for (const platform of this.platforms) {
+                    if (!platform || platform.disabled || platform.isLadder) continue;
+                    if (!platform.bounds) continue;
+                    if (platform.isOneWay) {
+                        if (barrel.body.velocity.y >= 0) {
+                            continue;
+                        }
+                        if (prevBottom < platform.bounds.top) {
+                            continue;
+                        }
+                    }
+                    if (!checkAABBCollision(barrelBounds, platform.bounds)) {
+                        continue;
+                    }
+                    const horizontalOverlap = barrelBounds.right > platform.bounds.left &&
+                        barrelBounds.left < platform.bounds.right;
+                    if (barrel.body.velocity.y < 0 && horizontalOverlap) {
+                        barrel.body.position.y = platform.bounds.top + halfH;
+                        barrel.body.velocity.y = 0;
+                        barrelBounds.bottom = barrel.body.position.y - halfH;
+                        barrelBounds.top = barrel.body.position.y + halfH;
+                    } else if (barrel.body.velocity.x !== 0) {
+                        if (barrel.body.velocity.x > 0) {
+                            barrel.body.position.x = platform.bounds.left - halfW;
+                        } else {
+                            barrel.body.position.x = platform.bounds.right + halfW;
+                        }
+                        barrel.body.velocity.x = 0;
+                        barrelBounds.left = barrel.body.position.x - halfW;
+                        barrelBounds.right = barrel.body.position.x + halfW;
+                    }
+                }
+            } else {
+                barrel.body.position.x = barrel.body.spawnPoint.x;
+                barrel.body.position.y = barrel.body.spawnPoint.y;
+                barrel.body.velocity.x = 0;
+                barrel.body.velocity.y = 0;
+            }
 
             barrel.mesh.position.x = barrel.body.position.x;
             barrel.mesh.position.y = barrel.body.position.y;
@@ -1095,6 +1357,23 @@ export class Level {
             barrel.mesh.visible = !barrel.body.isDestroyed;
             barrel.isAlive = !barrel.body.isDestroyed;
             barrel.disabled = barrel.body.isDestroyed;
+            if (barrel.wasDestroyed && !barrel.body.isDestroyed) {
+                barrel.flashTimer = 0;
+                barrel.smokeTimer = 0;
+                barrel.smokePuffs.forEach((puff) => {
+                    if (puff.parent) {
+                        puff.parent.remove(puff);
+                    }
+                });
+                barrel.smokePuffs = [];
+                barrel.mesh.children.forEach((child) => {
+                    if (child.material && child.material.color) {
+                        const baseHex = child.userData?.barrelBaseColor ?? barrel.baseColor;
+                        child.material.color.setHex(baseHex);
+                    }
+                });
+            }
+            barrel.wasDestroyed = barrel.body.isDestroyed;
 
             const boundsWidth = barrel.bounds.right - barrel.bounds.left;
             const boundsHeight = barrel.bounds.top - barrel.bounds.bottom;
@@ -1108,7 +1387,8 @@ export class Level {
                 const flashOn = Math.sin(barrel.flashTimer) > 0;
                 barrel.mesh.children.forEach((child) => {
                     if (child.material && child.material.color) {
-                        child.material.color.setHex(flashOn ? 0xff4b4b : barrel.baseColor);
+                        const baseHex = child.userData?.barrelBaseColor ?? barrel.baseColor;
+                        child.material.color.setHex(flashOn ? 0xff4b4b : baseHex);
                     }
                 });
 
@@ -1128,6 +1408,13 @@ export class Level {
                     this.group.add(puff);
                     barrel.smokePuffs.push(puff);
                 }
+            } else if (barrel.mesh.visible) {
+                barrel.mesh.children.forEach((child) => {
+                    if (child.material && child.material.color) {
+                        const baseHex = child.userData?.barrelBaseColor ?? barrel.baseColor;
+                        child.material.color.setHex(baseHex);
+                    }
+                });
             }
 
             if (barrel.smokePuffs.length) {
@@ -1159,6 +1446,7 @@ export class Level {
         this.updateLaunchers(deltaTime);
         this.updateWindVisuals(deltaTime);
         this.updateBreakablePlatforms(deltaTime);
+        this.updateBridges(deltaTime);
         this.updateExplodingBarrels(deltaTime);
         this.updateFlags();
     }
@@ -1166,25 +1454,84 @@ export class Level {
     handleBarrelExplosion(position) {
         const radius = 5;
         const damage = 40;
+        const blastGroup = new THREE.Group();
+        blastGroup.position.set(position.x, position.y, 0.35);
+        applyVisibilityLayer(blastGroup, this.defaultVisibilityLayer);
+        this.group.add(blastGroup);
+
         const ring = new THREE.Mesh(
             new THREE.RingGeometry(0.4, radius, 32),
-            new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.6 })
+            new THREE.MeshBasicMaterial({
+                color: 0xff7a3d,
+                transparent: true,
+                opacity: 0.8,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false
+            })
         );
-        ring.position.set(position.x, position.y, 0.3);
-        ring.rotation.x = Math.PI / 2;
-        this.group.add(ring);
+        ring.scale.set(0, 0, 1);
+        blastGroup.add(ring);
 
-        let scale = 0.4;
-        let opacity = 0.6;
+        const core = new THREE.Mesh(
+            new THREE.CircleGeometry(radius * 0.55, 28),
+            new THREE.MeshBasicMaterial({
+                color: 0xff3b1f,
+                transparent: true,
+                opacity: 0.75,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false
+            })
+        );
+        core.scale.set(0, 0, 1);
+        blastGroup.add(core);
+
+        const smokePuffs = [];
+        const puffGeometry = new THREE.CircleGeometry(0.25, 10);
+        for (let i = 0; i < 8; i++) {
+            const puff = new THREE.Mesh(
+                puffGeometry,
+                new THREE.MeshBasicMaterial({
+                    color: 0x5f3b2e,
+                    transparent: true,
+                    opacity: 0.5,
+                    side: THREE.DoubleSide,
+                    depthTest: false,
+                    depthWrite: false
+                })
+            );
+            puff.position.set((Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, 0.02);
+            puff.scale.set(0.4, 0.4, 1);
+            smokePuffs.push({ mesh: puff, drift: { x: (Math.random() - 0.5) * 0.6, y: 0.4 + Math.random() * 0.5 } });
+            blastGroup.add(puff);
+        }
+
+        let elapsed = 0;
+        const duration = 0.55;
         const impactInterval = setInterval(() => {
-            scale += 0.25;
-            opacity -= 0.08;
+            elapsed += 0.04;
+            const progress = Math.min(1, elapsed / duration);
+            const ringOpacity = 0.8 * (1 - progress);
+            const coreOpacity = 0.75 * (1 - progress);
+            const scale = progress;
             ring.scale.set(scale, scale, 1);
-            ring.material.opacity = Math.max(0, opacity);
-            if (opacity <= 0) {
+            core.scale.set(scale, scale, 1);
+            ring.material.opacity = Math.max(0, ringOpacity);
+            core.material.opacity = Math.max(0, coreOpacity);
+
+            smokePuffs.forEach((puff) => {
+                puff.mesh.position.x += puff.drift.x * 0.04;
+                puff.mesh.position.y += puff.drift.y * 0.04;
+                const puffScale = 0.4 + progress * 1.8;
+                puff.mesh.scale.set(puffScale, puffScale, 1);
+                puff.mesh.material.opacity = Math.max(0, 0.5 * (1 - progress));
+            });
+
+            if (progress >= 1) {
                 clearInterval(impactInterval);
-                if (ring.parent) {
-                    ring.parent.remove(ring);
+                if (blastGroup.parent) {
+                    blastGroup.parent.remove(blastGroup);
                 }
             }
         }, 40);

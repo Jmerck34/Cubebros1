@@ -171,7 +171,7 @@ export class Paladin extends Hero {
                 if (typeof enemy.takeDamage === 'function') {
                     enemy.takeDamage(10, this);
                 }
-                if (enemy.type !== 'player') {
+                if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
                 }
                 this.registerCrushingHit(enemy);
@@ -389,7 +389,7 @@ export class Paladin extends Hero {
                         if (typeof enemy.takeDamage === 'function') {
                             enemy.takeDamage(5, this);
                         }
-                        if (enemy.type !== 'player') {
+                        if (enemy.type === 'player') {
                             this.addUltimateCharge(this.ultimateChargePerKill);
                         }
                         if (typeof enemy.setCripple === 'function') {
@@ -444,6 +444,9 @@ export class Paladin extends Hero {
     }
 
     pullTarget(target) {
+        if (target && target.isBridge) {
+            return;
+        }
         const startX = target.position.x;
         const startY = target.position.y;
         const endX = this.position.x + (startX >= this.position.x ? 1.1 : -1.1);

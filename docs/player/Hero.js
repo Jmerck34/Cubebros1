@@ -210,9 +210,6 @@ export class Hero extends Player {
                     enemy.takeDamage();
                     this.velocity.y = JUMP_VELOCITY * 0.5;
 
-                    // Add ultimate charge
-                    this.addUltimateCharge(this.ultimateChargePerKill);
-
                     console.log('Stomped enemy!');
                 } else {
                     // Side collision - player takes contact damage + knockback
@@ -316,6 +313,16 @@ export class Hero extends Player {
         }
         if (this.level && Array.isArray(this.level.explodingBarrels)) {
             this.level.explodingBarrels.forEach((barrel) => addTarget(barrel));
+        }
+        if (this.level && Array.isArray(this.level.bridges)) {
+            this.level.bridges.forEach((bridge) => addTarget(bridge));
+        }
+        if (this.level && Array.isArray(this.level.platforms)) {
+            this.level.platforms.forEach((platform) => {
+                if (platform && platform.isBridge) {
+                    addTarget(platform);
+                }
+            });
         }
         for (const opponent of this.opponents || []) {
             addTarget(opponent);

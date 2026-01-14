@@ -12,7 +12,7 @@ export class ExplodingBarrel extends PhysicsBody {
         maxHealth = 60,
         respawnDelay = 6,
         damageOverTime = 20,
-        detonateDelay = 0.5,
+        detonateDelay = 1,
         onExplode = null
     } = {}) {
         super({ collisionShape, movable: true, mapKey, maxHealth, respawnDelay, scene, position });
@@ -26,9 +26,12 @@ export class ExplodingBarrel extends PhysicsBody {
 
     takeDamage(amount = 1) {
         if (this.isDestroyed) return;
-        super.takeDamage(amount);
-        if (!this.isIgnited && !this.isDestroyed) {
+        const damage = Math.max(0, amount);
+        if (damage <= 0) return;
+        this.currentHealth = Math.max(0, this.currentHealth - damage);
+        if (!this.isIgnited) {
             this.isIgnited = true;
+            this.detonationTimer = 0;
         }
     }
 
@@ -43,11 +46,10 @@ export class ExplodingBarrel extends PhysicsBody {
         super.update(deltaTime);
         if (this.isDestroyed) return;
 
-        if (this.isIgnited && this.damageOverTime > 0) {
-            this.takeDamage(this.damageOverTime * deltaTime);
-        }
-
-        if (this.currentHealth <= 0 && !this.isDestroyed) {
+        if (this.isIgnited) {
+            if (this.damageOverTime > 0) {
+                this.currentHealth = Math.max(0, this.currentHealth - this.damageOverTime * deltaTime);
+            }
             if (this.detonateDelay > 0) {
                 this.detonationTimer += deltaTime;
                 if (this.detonationTimer >= this.detonateDelay) {
