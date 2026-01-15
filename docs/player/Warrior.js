@@ -12,8 +12,8 @@ export class Warrior extends Hero {
     constructor(scene, startX = 0, startY = 0) {
         super(scene, startX, startY);
 
-        // Change body color to blue (warrior theme)
-        this.setBodyColor(0x2f6cb0);
+        // Darker red base for samurai style
+        this.setBodyColor(0x7b1b1b);
 
         // Add sword and shield
         this.createEquipment(scene);
@@ -64,78 +64,59 @@ export class Warrior extends Hero {
      * @param {THREE.Scene} scene - The scene
      */
     createEquipment(scene) {
-        // Create SWORD - Composite blade + handle + crossguard
+        // Create KATANA - Slim blade + wrapped handle + small guard
         this.swordGroup = new THREE.Group();
 
-        // Handle (brown leather) - at origin, this is what the warrior grips
-        const handleGeometry = new THREE.BoxGeometry(0.12, 0.4, 0.08);
-        const handleMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+        // Handle (dark wrap)
+        const handleGeometry = new THREE.BoxGeometry(0.1, 0.55, 0.08);
+        const handleMaterial = new THREE.MeshBasicMaterial({ color: 0x2a1a10 });
         const handle = new THREE.Mesh(handleGeometry, handleMaterial);
-        handle.position.set(0, 0, 0);
+        handle.position.set(0, -0.05, 0);
         this.swordGroup.add(handle);
 
-        // Pommel (gold) - below handle
-        const pommelGeometry = new THREE.BoxGeometry(0.15, 0.15, 0.1);
-        const pommelMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+        // Pommel (dark metal)
+        const pommelGeometry = new THREE.BoxGeometry(0.12, 0.12, 0.1);
+        const pommelMaterial = new THREE.MeshBasicMaterial({ color: 0x3c2b22 });
         const pommel = new THREE.Mesh(pommelGeometry, pommelMaterial);
-        pommel.position.set(0, -0.25, 0);
+        pommel.position.set(0, -0.38, 0);
         this.swordGroup.add(pommel);
 
-        // Crossguard (gold) - above handle
-        const crossguardGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.08);
-        const crossguardMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-        const crossguard = new THREE.Mesh(crossguardGeometry, crossguardMaterial);
-        crossguard.position.set(0, 0.25, 0);
-        this.swordGroup.add(crossguard);
+        // Guard (tsuba)
+        const guardGeometry = new THREE.BoxGeometry(0.32, 0.08, 0.08);
+        const guardMaterial = new THREE.MeshBasicMaterial({ color: 0x3b2a1f });
+        const guard = new THREE.Mesh(guardGeometry, guardMaterial);
+        guard.position.set(0, 0.28, 0);
+        this.swordGroup.add(guard);
 
-        // Blade (silver/steel color, long and thin) - extends upward from crossguard
-        const bladeGeometry = new THREE.BoxGeometry(0.15, 1.2, 0.05);
-        const bladeMaterial = new THREE.MeshBasicMaterial({ color: 0xe8e8e8 });
+        // Blade (slim katana, slight curve)
+        const bladeGeometry = new THREE.BoxGeometry(0.1, 1.5, 0.05);
+        const bladeMaterial = new THREE.MeshBasicMaterial({ color: 0xe2e2e2 });
         const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
-        blade.position.set(0, 0.85, 0); // Blade extends upward
+        blade.position.set(0, 0.95, 0);
+        blade.rotation.z = 0.04;
         this.swordGroup.add(blade);
 
-        // Blade edge highlight (brighter for steel effect)
-        const edgeGeometry = new THREE.BoxGeometry(0.08, 1.2, 0.06);
+        // Blade edge highlight
+        const edgeGeometry = new THREE.BoxGeometry(0.05, 1.5, 0.06);
         const edgeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
         const edge = new THREE.Mesh(edgeGeometry, edgeMaterial);
-        edge.position.set(0, 0.85, 0);
+        edge.position.set(0.04, 0.95, 0);
+        edge.rotation.z = 0.04;
         this.swordGroup.add(edge);
 
-        // Position sword on right side at hip level, rotated clockwise
-        this.swordGroup.position.set(0.5, -0.2, 0.1);
-        this.swordGroup.rotation.z = -0.87; // ~50 degrees clockwise (blade points forward-down)
+        // Position katana on right side, angled downward
+        this.swordGroup.position.set(0.55, -0.25, 0.1);
+        this.swordGroup.rotation.z = -1.05;
         this.mesh.add(this.swordGroup);
         this.sword = this.swordGroup; // Keep reference
-        this.swordBase = { x: 0.5, y: -0.2, z: 0.1, rotZ: -0.87 };
+        this.swordBase = { x: 0.55, y: -0.25, z: 0.1, rotZ: -1.05 };
 
-        // Create SHIELD - Rounded medieval shield
+        // Create SHIELD placeholder (samurai drops the shield)
         this.shieldGroup = new THREE.Group();
-
-        // Main shield body (silver/steel with blue accent)
-        const shieldGeometry = new THREE.BoxGeometry(0.5, 0.7, 0.08);
-        const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x4169e1 }); // Royal blue
-        const shieldBody = new THREE.Mesh(shieldGeometry, shieldMaterial);
-        this.shieldGroup.add(shieldBody);
-
-        // Shield border (silver)
-        const borderGeometry = new THREE.BoxGeometry(0.55, 0.75, 0.06);
-        const borderMaterial = new THREE.MeshBasicMaterial({ color: 0xc0c0c0 });
-        const border = new THREE.Mesh(borderGeometry, borderMaterial);
-        border.position.z = -0.01;
-        this.shieldGroup.add(border);
-
-        // Shield boss (center gold bump)
-        const bossGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.1);
-        const bossMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-        const boss = new THREE.Mesh(bossGeometry, bossMaterial);
-        boss.position.z = 0.05;
-        this.shieldGroup.add(boss);
-
-        // Position shield on left side
+        this.shieldGroup.visible = false;
         this.shieldGroup.position.set(-0.6, 0, 0.1);
         this.mesh.add(this.shieldGroup);
-        this.shield = this.shieldGroup; // Keep reference
+        this.shield = this.shieldGroup; // Keep reference for animations
         this.shieldBase = { x: -0.6, y: 0, z: 0.1, rotZ: 0 };
     }
 
