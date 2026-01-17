@@ -25,15 +25,26 @@ export class Cyborg extends Hero {
         this.isChargingBeam = false;
         this.beamChargeTime = 0;
         this.beamAimDirection = { x: 1, y: 0 };
+        this.chargeEnergyBall = null;
+        this.chargeParticles = [];
+        this.chargeInterval = null;
+        this.fullChargeReached = false;
+        this.fullChargeHoldTime = 0;
+        this.isBeamActive = false;
         this.aimIndicator = null;
         this.aimIndicatorLine = null;
         this.aimIndicatorTip = null;
+        this.reticlePosition = null;
 
         // Bubble shield state
         this.bubbleShield = null;
 
         // Facing direction (1 = right, -1 = left)
         this.facingDirection = 1;
+        this.allowLeftStickAimFallback = false;
+        this.useCursorAim = true;
+        this.cursorSpeed = 820;
+        this.reticleLayer = 1;
 
         // Set cyborg abilities
         this.initializeAbilities();
@@ -166,20 +177,37 @@ export class Cyborg extends Hero {
      * Update - Override to handle beam charging and facing direction
      */
     update(deltaTime, input) {
+        this.updateReticlePosition();
         // Freeze movement during charging
         if (this.isChargingBeam) {
             this.updateStatusEffects(deltaTime);
+            this.updateBonusHealth(deltaTime);
             this.beamChargeTime += deltaTime;
+            if (this.beamChargeTime >= 1.25) {
+                if (!this.fullChargeReached) {
+                    this.fullChargeReached = true;
+                    this.fullChargeHoldTime = 0;
+                } else {
+                    this.fullChargeHoldTime += deltaTime;
+                    if (this.fullChargeHoldTime >= 1) {
+                        this.releaseKameHameHa(true);
+                    }
+                }
+            }
             this.updateBeamAim(input);
-            this.updateAimIndicator(this.beamAimDirection, true);
+            this.updateAimIndicator(this.reticlePosition, this.beamAimDirection, true);
+            if (!input.isUltimatePressed()) {
+                this.releaseKameHameHa();
+            }
+            this.checkShieldDepleted();
             // Don't update position or process input while charging
             return;
         }
 
         // Update facing direction based on aim or movement input
-        const aim = this.getAimDirection();
-        if (this.hasAimInput && Math.abs(aim.x) > 0.15) {
-            this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+        const reticleDir = this.getReticleDirection();
+        if (reticleDir && Math.abs(reticleDir.x) > 0.15) {
+            this.setFacingDirection(reticleDir.x >= 0 ? 1 : -1);
         } else if (input.isLeftPressed()) {
             this.setFacingDirection(-1);
         } else if (input.isRightPressed()) {
@@ -187,20 +215,46 @@ export class Cyborg extends Hero {
         }
 
         super.update(deltaTime, input);
-        const idleAim = this.hasAimInput ? this.getAimDirection() : { x: this.facingDirection, y: 0 };
-        this.updateAimIndicator(idleAim, false);
+        const idleAim = this.getReticleDirection();
+        this.updateAimIndicator(this.reticlePosition, idleAim, false);
+        this.checkShieldDepleted();
+    }
+
+    handleAbilityInput(input) {
+        if (this.controlsLocked) {
+            return;
+        }
+        if (this.isCarryingFlag && input.isFlagDropPressed()) {
+            return;
+        }
+        if (input.isAbility1Pressed() && this.abilities.q) {
+            this.useAbility('q');
+        }
+        if (input.isAbility2Pressed() && this.abilities.w) {
+            this.useAbility('w');
+        }
+        if (input.isAbility3Pressed() && this.abilities.e) {
+            if (this.isCarryingFlag && this.flagCarryBlocksAbility3) {
+                return;
+            }
+            this.useAbility('e');
+        }
+        if (input.isUltimatePressed() && !this.isChargingBeam) {
+            this.castKameHameHa();
+        }
     }
 
     createAimIndicator() {
         if (!this.scene) return;
         const group = new THREE.Group();
 
-        const glowColor = 0x63dbff;
+        const glowColor = 0xff2a2a;
         const glowMaterial = new THREE.MeshBasicMaterial({
             color: glowColor,
             transparent: true,
             opacity: 0.8,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false
         });
 
         const ringSegments = 4;
@@ -213,6 +267,7 @@ export class Cyborg extends Hero {
             const arc = new THREE.RingGeometry(ringRadiusInner, ringRadiusOuter, 24, 1, start, end - start);
             const arcMesh = new THREE.Mesh(arc, glowMaterial.clone());
             arcMesh.material.opacity = 0.65;
+            arcMesh.material.depthTest = false;
             group.add(arcMesh);
         }
 
@@ -235,28 +290,36 @@ export class Cyborg extends Hero {
             tri.position.set(pos.x, pos.y, 0);
             tri.rotation.z = pos.rot;
             tri.material.opacity = 0.9;
+            tri.material.depthTest = false;
             group.add(tri);
         });
 
         const crossMaterial = glowMaterial.clone();
         crossMaterial.opacity = 0.85;
         const cross = new THREE.Group();
+        crossMaterial.depthTest = false;
         const crossBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.02), crossMaterial);
         const crossBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.02), crossMaterial);
         cross.add(crossBar, crossBar2);
         group.add(cross);
 
-        group.visible = false;
+        group.visible = true;
+        group.renderOrder = 20;
+        const reticleLayer = this.reticleLayer || 1;
+        group.traverse((child) => {
+            if (child && child.layers) {
+                child.layers.set(reticleLayer);
+            }
+        });
         this.scene.add(group);
         this.aimIndicator = group;
         this.aimIndicatorLine = null;
         this.aimIndicatorTip = null;
     }
 
-    updateAimIndicator(direction, forceVisible) {
+    updateAimIndicator(targetPosition, direction, forceVisible) {
         if (!this.aimIndicator) return;
-        const length = Math.hypot(direction.x, direction.y);
-        if (!Number.isFinite(length) || length < 0.001) {
+        if (!targetPosition || !direction) {
             this.aimIndicator.visible = false;
             return;
         }
@@ -266,29 +329,31 @@ export class Cyborg extends Hero {
             return;
         }
 
-        const nx = direction.x / length;
-        const ny = direction.y / length;
-        const angle = Math.atan2(ny, nx);
-        const indicatorRadius = 1.6;
+        const length = Math.hypot(direction.x, direction.y);
+        if (!Number.isFinite(length) || length < 0.001) {
+            this.aimIndicator.visible = false;
+            return;
+        }
+
+        const angle = Math.atan2(direction.y, direction.x);
         const floatOffset = Math.sin(performance.now() * 0.004) * 0.08;
 
         this.aimIndicator.visible = true;
         this.aimIndicator.position.set(
-            this.position.x + nx * indicatorRadius,
-            this.position.y + ny * indicatorRadius + floatOffset,
-            0.45
+            targetPosition.x,
+            targetPosition.y + floatOffset,
+            2
         );
         this.aimIndicator.rotation.z = angle;
-        this.aimIndicator.scale.set(0.2, 0.2, 1);
+        this.aimIndicator.scale.set(0.32, 0.32, 1);
     }
 
     updateBeamAim(input) {
-        const aim = this.getAimDirection();
-        if (this.hasAimInput && (Math.abs(aim.x) > 0.05 || Math.abs(aim.y) > 0.05)) {
-            const length = Math.hypot(aim.x, aim.y) || 1;
-            this.beamAimDirection = { x: aim.x / length, y: aim.y / length };
-            if (Math.abs(aim.x) > 0.15) {
-                this.setFacingDirection(aim.x >= 0 ? 1 : -1);
+        const reticleDir = this.getReticleDirection();
+        if (reticleDir) {
+            this.beamAimDirection = { x: reticleDir.x, y: reticleDir.y };
+            if (Math.abs(reticleDir.x) > 0.15) {
+                this.setFacingDirection(reticleDir.x >= 0 ? 1 : -1);
             }
             return;
         }
@@ -299,6 +364,46 @@ export class Cyborg extends Hero {
             this.setFacingDirection(1);
         }
         this.beamAimDirection = { x: this.facingDirection, y: 0 };
+    }
+
+    updateReticlePosition() {
+        if (this.hasAimWorldPosition) {
+            const aimWorld = this.getAimWorldPosition();
+            if (!aimWorld) return;
+            if (!this.reticlePosition) {
+                this.reticlePosition = { x: aimWorld.x, y: aimWorld.y };
+            } else {
+                this.reticlePosition.x = aimWorld.x;
+                this.reticlePosition.y = aimWorld.y;
+            }
+            return;
+        }
+
+        if (!this.reticlePosition) {
+            this.reticlePosition = {
+                x: this.position.x + this.facingDirection * 2,
+                y: this.position.y
+            };
+        }
+    }
+
+    getReticleDirection() {
+        if (this.reticlePosition) {
+            const dx = this.reticlePosition.x - this.position.x;
+            const dy = this.reticlePosition.y - this.position.y;
+            const length = Math.hypot(dx, dy);
+            if (length > 0.001) {
+                return { x: dx / length, y: dy / length };
+            }
+        }
+        if (this.hasAimInput) {
+            return this.getAimDirection();
+        }
+        return { x: this.facingDirection, y: 0 };
+    }
+
+    getReticlePosition() {
+        return this.reticlePosition;
     }
 
     /**
@@ -321,47 +426,103 @@ export class Cyborg extends Hero {
         this.cyborgRig.rotation.y = -0.3;
         setTimeout(() => { this.cyborgRig.rotation.y = 0.3; }, 200);
 
+        if (!this.activeFireballs) {
+            this.activeFireballs = new Set();
+        }
+        if (this.activeFireballs.size >= 3) {
+            return;
+        }
+
         // Create fire missile group
         const fireballGroup = new THREE.Group();
+        fireballGroup.renderOrder = 12;
+        const updateFireballLayering = (mesh) => {
+            if (mesh && mesh.material) {
+                mesh.material.depthTest = false;
+            }
+        };
 
-        // Inner core (white-hot center)
+        // Inner core (blue-hot center)
         const coreGeometry = new THREE.SphereGeometry(0.15);
         const coreMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffff99, // Yellow-white hot core
+            color: 0xd9f6ff,
             transparent: true,
             opacity: 1
         });
         const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        updateFireballLayering(core);
         fireballGroup.add(core);
 
-        // Middle layer (bright orange)
+        const outlineGeometry = new THREE.SphereGeometry(0.31);
+        const outlineMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.85
+        });
+        const outline = new THREE.Mesh(outlineGeometry, outlineMaterial);
+        updateFireballLayering(outline);
+        fireballGroup.add(outline);
+
+        // Middle layer (bright blue)
         const midGeometry = new THREE.SphereGeometry(0.22);
         const midMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff6600, // Bright orange
+            color: 0x39a9ff,
             transparent: true,
             opacity: 0.8
         });
         const midLayer = new THREE.Mesh(midGeometry, midMaterial);
+        updateFireballLayering(midLayer);
         fireballGroup.add(midLayer);
 
-        // Outer layer (red-orange glow)
+        // Outer layer (deep blue glow)
         const outerGeometry = new THREE.SphereGeometry(0.28);
         const outerMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff3300, // Red-orange
+            color: 0x0a6cff,
             transparent: true,
             opacity: 0.5
         });
         const outerLayer = new THREE.Mesh(outerGeometry, outerMaterial);
+        updateFireballLayering(outerLayer);
         fireballGroup.add(outerLayer);
 
-        const aim = this.getAimDirection();
-        const useAim = this.hasAimInput;
-        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+        const ownerLayer = Number.isFinite(this.reticleLayer) ? this.reticleLayer : 1;
+        const lightOutline = new THREE.Mesh(outlineGeometry, new THREE.MeshBasicMaterial({
+            color: 0xf5fdff,
+            transparent: true,
+            opacity: 0.75
+        }));
+        updateFireballLayering(lightOutline);
+        const lightCore = new THREE.Mesh(coreGeometry, new THREE.MeshBasicMaterial({
+            color: 0xe8fbff,
+            transparent: true,
+            opacity: 0.9
+        }));
+        updateFireballLayering(lightCore);
+        const lightMid = new THREE.Mesh(midGeometry, new THREE.MeshBasicMaterial({
+            color: 0x7fd5ff,
+            transparent: true,
+            opacity: 0.7
+        }));
+        updateFireballLayering(lightMid);
+        const lightOuter = new THREE.Mesh(outerGeometry, new THREE.MeshBasicMaterial({
+            color: 0x5ab8ff,
+            transparent: true,
+            opacity: 0.45
+        }));
+        updateFireballLayering(lightOuter);
+        [lightOutline, lightCore, lightMid, lightOuter].forEach((mesh) => {
+            if (mesh.layers) {
+                mesh.layers.set(ownerLayer);
+            }
+            fireballGroup.add(mesh);
+        });
+
+        const direction = this.getReticleDirection();
 
         fireballGroup.position.set(
             this.position.x + (0.5 * direction.x),
             this.position.y + (0.5 * direction.y),
-            0.2
+            0.6
         );
         this.mesh.parent.add(fireballGroup);
 
@@ -369,10 +530,11 @@ export class Cyborg extends Hero {
         const trailParticles = [];
 
         // Fire direction based on aim
-        const speed = 12;
+        const followSpeed = 17;
+        const maxSpeed = 12;
         const fireballPos = { x: fireballGroup.position.x, y: fireballGroup.position.y };
         let origin = { x: fireballPos.x, y: fireballPos.y };
-        const velocity = { x: direction.x * speed, y: direction.y * speed };
+        const velocity = { x: direction.x * followSpeed, y: direction.y * followSpeed };
         const projectile = {
             type: 'fireball',
             mesh: fireballGroup,
@@ -392,17 +554,97 @@ export class Cyborg extends Hero {
             }
         };
         Hero.addProjectile(projectile);
+        this.activeFireballs.add(projectile);
         const cleanupProjectile = () => {
             Hero.removeProjectile(projectile);
+            this.activeFireballs.delete(projectile);
         };
         let rotationAngle = 0;
         const level = this.level || { platforms: [] };
-        const maxDistance = 12;
+        const maxDistance = Infinity;
+        let orbiting = false;
+        let orbitBlend = 0;
+        let orbitAngle = 0;
+        const orbitRadius = 1;
+        const orbitEnter = orbitRadius;
+        const orbitExit = orbitRadius * 1.4;
+        const getHomingTarget = () => {
+            const owner = projectile.owner || this;
+            if (owner && typeof owner.getReticlePosition === 'function') {
+                const target = owner.getReticlePosition();
+                if (target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
+                    return target;
+                }
+            }
+            if (owner && typeof owner.getAimWorldPosition === 'function' && owner.hasAimWorldPosition) {
+                const target = owner.getAimWorldPosition();
+                if (target && Number.isFinite(target.x) && Number.isFinite(target.y)) {
+                    return target;
+                }
+            }
+            return null;
+        };
 
         // Animate fireball
         const fireballInterval = setInterval(() => {
-            fireballPos.x += velocity.x * 0.016;
-            fireballPos.y += velocity.y * 0.016;
+            const target = getHomingTarget();
+            if (target) {
+                const dx = target.x - fireballPos.x;
+                const dy = target.y - fireballPos.y;
+                const dist = Math.hypot(dx, dy);
+                if (orbiting) {
+                    if (dist >= orbitExit) {
+                        orbiting = false;
+                    }
+                } else if (dist <= orbitEnter) {
+                    orbiting = true;
+                    orbitAngle = Math.atan2(dy, dx);
+                    origin = { x: fireballPos.x, y: fireballPos.y };
+                }
+
+                orbitBlend += (orbiting ? 1 : -1) * 0.08;
+                orbitBlend = Math.max(0, Math.min(1, orbitBlend));
+
+                if (orbitBlend > 0) {
+                    const orbitStep = orbitRadius > 0 ? (10.5 * 0.016) / orbitRadius * 0.35 : 0;
+                    orbitAngle += orbitStep;
+                    const orbitX = target.x + Math.cos(orbitAngle) * orbitRadius;
+                    const orbitY = target.y + Math.sin(orbitAngle) * orbitRadius;
+                    const toOrbitX = orbitX - fireballPos.x;
+                    const toOrbitY = orbitY - fireballPos.y;
+                    const correction = 0.12 * orbitBlend;
+                    velocity.x += toOrbitX * correction;
+                    velocity.y += toOrbitY * correction;
+
+                    const orbitSpeed = orbitStep > 0 ? (orbitStep / 0.016) * orbitRadius : 0;
+                    const tangentX = -Math.sin(orbitAngle);
+                    const tangentY = Math.cos(orbitAngle);
+                    const desiredOrbitVX = tangentX * orbitSpeed;
+                    const desiredOrbitVY = tangentY * orbitSpeed;
+                    velocity.x += (desiredOrbitVX - velocity.x) * (0.15 * orbitBlend);
+                    velocity.y += (desiredOrbitVY - velocity.y) * (0.15 * orbitBlend);
+                }
+                if (orbitBlend < 1 && dist > 0.001) {
+                    const desiredVX = (dx / dist) * followSpeed;
+                    const desiredVY = (dy / dist) * followSpeed;
+                    velocity.x += (desiredVX - velocity.x) * (0.25 * (1 - orbitBlend));
+                    velocity.y += (desiredVY - velocity.y) * (0.25 * (1 - orbitBlend));
+                }
+
+                const velMag = Math.hypot(velocity.x, velocity.y);
+                if (velMag > maxSpeed) {
+                    const scale = maxSpeed / velMag;
+                    velocity.x *= scale;
+                    velocity.y *= scale;
+                }
+                fireballPos.x += velocity.x * 0.016;
+                fireballPos.y += velocity.y * 0.016;
+            } else {
+                orbiting = false;
+                orbitBlend = Math.max(0, orbitBlend - 0.08);
+                fireballPos.x += velocity.x * 0.016;
+                fireballPos.y += velocity.y * 0.016;
+            }
             fireballGroup.position.set(fireballPos.x, fireballPos.y, 0.2);
 
             // Spin the fire missile
@@ -413,7 +655,7 @@ export class Cyborg extends Hero {
             if (Math.random() > 0.3) {
                 const trailSize = 0.1 + Math.random() * 0.15;
                 const trailGeometry = new THREE.CircleGeometry(trailSize, 8);
-                const trailColor = Math.random() > 0.5 ? 0xff6600 : 0xff3300; // Mix orange and red
+                const trailColor = Math.random() > 0.5 ? 0x3aa9ff : 0x0a6cff; // Mix light and deep blue
                 const trailMaterial = new THREE.MeshBasicMaterial({
                     color: trailColor,
                     transparent: true,
@@ -494,6 +736,8 @@ export class Cyborg extends Hero {
             if (!hit && level.platforms) {
                 for (const platform of level.platforms) {
                     if (!platform || !platform.bounds || platform.isLadder || platform.disabled) continue;
+                    const isSolid = (platform.body && platform.body.isSolid) || platform.type === 'wall';
+                    if (!isSolid) continue;
                     if (checkAABBCollision(fireballBounds, platform.bounds)) {
                         hit = true;
                         break;
@@ -515,7 +759,15 @@ export class Cyborg extends Hero {
                     }
                 });
 
-                this.createExplosion(fireballGroup.position.x, fireballGroup.position.y, 0xff4500);
+                this.createExplosion(
+                    fireballGroup.position.x,
+                    fireballGroup.position.y,
+                    0x2fa8ff,
+                    0.75,
+                    1.5,
+                    projectile.owner || this,
+                    10
+                );
             }
         }, 16);
     }
@@ -530,9 +782,7 @@ export class Cyborg extends Hero {
         this.cyborgRig.scale.set(1.3, 1.3, 1.3);
         setTimeout(() => { this.cyborgRig.scale.set(1, 1, 1); }, 300);
 
-        const aim = this.getAimDirection();
-        const useAim = this.hasAimInput;
-        const direction = useAim ? aim : { x: this.facingDirection, y: 0 };
+        const direction = this.getReticleDirection();
         const perpendicular = { x: -direction.y, y: direction.x };
         const windParticles = [];
 
@@ -694,7 +944,7 @@ export class Cyborg extends Hero {
             }
         }, 16);
 
-        const shieldDuration = 2;
+        const shieldDuration = 10;
         const bonusPercent = 0.3;
         const allyRadius = 3.5;
         this.applyShieldBurstBonus(allyRadius, bonusPercent, shieldDuration);
@@ -719,6 +969,20 @@ export class Cyborg extends Hero {
         });
     }
 
+    applyHealthBonus(percent = 0.3, durationSeconds = 2) {
+        super.applyHealthBonus(percent, durationSeconds);
+        if (this.healthBar && typeof this.healthBar.setShielded === 'function') {
+            this.healthBar.setShielded(this.hasActiveShield());
+        }
+    }
+
+    clearHealthBonus() {
+        super.clearHealthBonus();
+        if (this.healthBar && typeof this.healthBar.setShielded === 'function') {
+            this.healthBar.setShielded(this.hasActiveShield());
+        }
+    }
+
     /**
      * Apply protective bubble visual and invincibility
      */
@@ -738,6 +1002,9 @@ export class Cyborg extends Hero {
         // Set invincibility flag
         this.bubbleShield = true;
         this.bubbleShieldTime = 0;
+        if (this.healthBar && typeof this.healthBar.setShielded === 'function') {
+            this.healthBar.setShielded(true);
+        }
 
         // Pulse animation
         let pulseScale = 1;
@@ -762,7 +1029,7 @@ export class Cyborg extends Hero {
         // Remove after 2 seconds
         setTimeout(() => {
             this.removeProtectiveBubble();
-        }, 2000);
+        }, 10000);
     }
 
     /**
@@ -778,7 +1045,50 @@ export class Cyborg extends Hero {
             this.bubblePulseInterval = null;
         }
         this.bubbleShield = false;
+        if (this.healthBar && typeof this.healthBar.setShielded === 'function') {
+            this.healthBar.setShielded(this.hasActiveShield());
+        }
         console.log('Bubble shield expired');
+    }
+
+    hasActiveShield() {
+        return Boolean(this.bubbleShield || (this.bonusHealth && this.bonusHealth > 0));
+    }
+
+    checkShieldDepleted() {
+        if (!this.bubbleShield) return;
+        if (Number.isFinite(this.currentHealth) && this.currentHealth <= this.baseMaxHealth) {
+            this.clearHealthBonus();
+            this.removeProtectiveBubble();
+            if (this.currentHealth <= 0 && this.isAlive) {
+                super.die();
+            }
+        }
+    }
+
+    setFrozen(durationSeconds = 1.2) {
+        if (this.hasActiveShield()) return;
+        super.setFrozen(durationSeconds);
+    }
+
+    setStunned(durationSeconds = 0.6) {
+        if (this.hasActiveShield()) return;
+        super.setStunned(durationSeconds);
+    }
+
+    setSlowed(durationSeconds = 1.2, multiplier = 0.7) {
+        if (this.hasActiveShield()) return;
+        super.setSlowed(durationSeconds, multiplier);
+    }
+
+    applyFear(sourceX, durationSeconds = 0.7) {
+        if (this.hasActiveShield()) return;
+        super.applyFear(sourceX, durationSeconds);
+    }
+
+    setCripple(durationSeconds = 1.5) {
+        if (this.hasActiveShield()) return;
+        super.setCripple(durationSeconds);
     }
 
     /**
@@ -801,23 +1111,31 @@ export class Cyborg extends Hero {
             return;
         }
 
+        if (this.isChargingBeam) return;
+
         console.log('âš¡ KAME HAME HA!!! âš¡');
 
-        const aim = this.getAimDirection();
-        this.beamAimDirection = this.hasAimInput
-            ? { x: aim.x, y: aim.y }
-            : { x: this.facingDirection, y: 0 };
+        const reticleDir = this.getReticleDirection();
+        this.beamAimDirection = { x: reticleDir.x, y: reticleDir.y };
 
         // Start charging (freezes character)
         this.isChargingBeam = true;
         this.beamChargeTime = 0;
+        this.startChargeEffects();
+    }
 
-        // Charge for 0.8 seconds then fire
-        setTimeout(() => {
-            this.fireKameHameHa();
-        }, 800);
+    startChargeEffects() {
+        if (!this.mesh || !this.mesh.parent) return;
+        if (this.chargeEnergyBall && this.chargeEnergyBall.parent) {
+            this.chargeEnergyBall.parent.remove(this.chargeEnergyBall);
+        }
+        this.chargeParticles.forEach((particle) => {
+            if (particle.mesh && particle.mesh.parent) {
+                particle.mesh.parent.remove(particle.mesh);
+            }
+        });
+        this.chargeParticles = [];
 
-        // Create energy ball group with multiple layers
         const energyBall = new THREE.Group();
 
         // Inner core (bright white)
@@ -867,6 +1185,7 @@ export class Cyborg extends Hero {
             0.2
         );
         this.mesh.parent.add(energyBall);
+        this.chargeEnergyBall = energyBall;
 
         // Growing energy particles around the ball
         const chargeParticles = [];
@@ -898,11 +1217,14 @@ export class Cyborg extends Hero {
 
         // Animate growing energy ball
         let growthTime = 0;
+        if (this.chargeInterval) {
+            clearInterval(this.chargeInterval);
+        }
         const growthInterval = setInterval(() => {
             growthTime += 0.016;
 
             // Grow from 0.2 to 1.0 scale over 0.8 seconds
-            const growthScale = 0.2 + (growthTime / 0.8) * 0.8;
+            const growthScale = 0.2 + Math.min(growthTime / 0.8, 1) * 0.8;
             energyBall.scale.set(growthScale, growthScale, growthScale);
 
             // Update energy ball position to follow cyborg
@@ -919,40 +1241,79 @@ export class Cyborg extends Hero {
             });
 
             if (growthTime >= 0.8) {
-                clearInterval(growthInterval);
+                growthTime = 0.8;
             }
         }, 16);
 
-        // Clean up charging effects
-        setTimeout(() => {
-            clearInterval(growthInterval);
-            this.mesh.parent.remove(energyBall);
-            chargeParticles.forEach(p => {
-                if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
-            });
-        }, 800);
+        this.chargeInterval = growthInterval;
+        this.chargeParticles = chargeParticles;
+    }
+
+    releaseKameHameHa(forceFull = false) {
+        if (!this.isChargingBeam) return;
+        const chargeTime = forceFull ? 1.25 : this.beamChargeTime;
+        let beamWidth = 0.5;
+        if (chargeTime <= 0.5) {
+            beamWidth = 0.5 + (chargeTime / 0.5) * 0.5;
+        } else if (chargeTime <= 1.25) {
+            beamWidth = 1 + ((chargeTime - 0.5) / 0.75) * 1;
+        } else {
+            beamWidth = 2;
+        }
+
+        let activeDuration = 1;
+        let tickDamage = 10;
+        if (chargeTime >= 1.25) {
+            activeDuration = 2;
+            tickDamage = 20;
+        } else if (chargeTime >= 0.5) {
+            activeDuration = 1.5;
+            tickDamage = 15;
+        }
+
+        this.isChargingBeam = false;
+        this.fullChargeReached = false;
+        this.fullChargeHoldTime = 0;
+        this.fireKameHameHa(beamWidth, activeDuration, tickDamage);
+        this.cleanupChargeEffects();
+        this.ultimateCharge = 0;
+    }
+
+    cleanupChargeEffects() {
+        if (this.chargeInterval) {
+            clearInterval(this.chargeInterval);
+            this.chargeInterval = null;
+        }
+        if (this.chargeEnergyBall && this.chargeEnergyBall.parent) {
+            this.chargeEnergyBall.parent.remove(this.chargeEnergyBall);
+        }
+        this.chargeEnergyBall = null;
+        this.chargeParticles.forEach((particle) => {
+            if (particle.mesh && particle.mesh.parent) {
+                particle.mesh.parent.remove(particle.mesh);
+            }
+        });
+        this.chargeParticles = [];
     }
 
     /**
      * Fire the charged beam
      */
-    fireKameHameHa() {
+    fireKameHameHa(beamWidth = 1, activeDuration = 1, tickDamage = 10) {
         this.isChargingBeam = false;
 
         const direction = this.beamAimDirection || { x: this.facingDirection, y: 0 };
         const dir = { x: direction.x, y: direction.y };
         let perpendicular = { x: -dir.y, y: dir.x };
         let angle = Math.atan2(dir.y, dir.x);
-        const damage = 60;
         const beamLength = 20;
-        const beamSpeed = 22;
-        const maxTravel = 20;
+        const beamDuration = activeDuration;
 
         // Create beam group with multiple layers
         const beamGroup = new THREE.Group();
 
         // Inner core (bright white)
-        const coreGeometry = new THREE.BoxGeometry(beamLength, 0.4, 0.2);
+        const coreGeometry = new THREE.BoxGeometry(beamLength, beamWidth * 0.4, 0.2);
         const coreMaterial = new THREE.MeshBasicMaterial({
             color: 0xffffff,
             transparent: true,
@@ -962,7 +1323,7 @@ export class Cyborg extends Hero {
         beamGroup.add(core);
 
         // Middle layer (bright cyan)
-        const midGeometry = new THREE.BoxGeometry(beamLength, 0.7, 0.2);
+        const midGeometry = new THREE.BoxGeometry(beamLength, beamWidth * 0.7, 0.2);
         const midMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ffff,
             transparent: true,
@@ -972,7 +1333,7 @@ export class Cyborg extends Hero {
         beamGroup.add(midLayer);
 
         // Outer layer (cyan glow)
-        const outerGeometry = new THREE.BoxGeometry(beamLength, 1.0, 0.2);
+        const outerGeometry = new THREE.BoxGeometry(beamLength, beamWidth * 1.0, 0.2);
         const outerMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ccff,
             transparent: true,
@@ -982,7 +1343,7 @@ export class Cyborg extends Hero {
         beamGroup.add(outerLayer);
 
         // Outer glow (very light cyan)
-        const glowGeometry = new THREE.BoxGeometry(beamLength, 1.4, 0.2);
+        const glowGeometry = new THREE.BoxGeometry(beamLength, beamWidth * 1.4, 0.2);
         const glowMaterial = new THREE.MeshBasicMaterial({
             color: 0x88ffff,
             transparent: true,
@@ -992,13 +1353,19 @@ export class Cyborg extends Hero {
         beamGroup.add(glow);
 
         const halfLength = beamLength * 0.5;
+        const muzzleOffset = 0.7;
         const beamPos = {
-            x: this.position.x + dir.x * halfLength,
-            y: this.position.y + dir.y * halfLength
+            x: this.position.x + dir.x * (muzzleOffset + beamLength),
+            y: this.position.y + dir.y * (muzzleOffset + beamLength)
         };
         beamGroup.position.set(beamPos.x, beamPos.y, 0.2);
         beamGroup.rotation.z = angle;
+        beamGroup.children.forEach((child) => {
+            child.position.x -= halfLength;
+        });
         this.mesh.parent.add(beamGroup);
+        this.isBeamActive = true;
+        this.forceControlsLocked = true;
 
         // Create energy particles flowing along the beam
         const beamParticles = [];
@@ -1013,10 +1380,10 @@ export class Cyborg extends Hero {
             const particle = new THREE.Mesh(particleGeometry, particleMaterial);
 
             const offsetX = (Math.random() - 0.5) * beamLength;
-            const offsetY = (Math.random() - 0.5) * 1.2;
+            const offsetY = (Math.random() - 0.5) * beamWidth * 1.2;
             particle.position.set(
-                beamPos.x + dir.x * offsetX + perpendicular.x * offsetY,
-                beamPos.y + dir.y * offsetX + perpendicular.y * offsetY,
+                beamPos.x + dir.x * (offsetX - halfLength) + perpendicular.x * offsetY,
+                beamPos.y + dir.y * (offsetX - halfLength) + perpendicular.y * offsetY,
                 0.15
             );
             this.mesh.parent.add(particle);
@@ -1030,8 +1397,9 @@ export class Cyborg extends Hero {
             });
         }
 
-        let hitEnemies = new Set();
-        let traveled = 0;
+        let elapsed = 0;
+        let tickTimer = 0;
+        const tickInterval = 0.2;
         const projectile = {
             type: 'beam',
             mesh: beamGroup,
@@ -1051,8 +1419,6 @@ export class Cyborg extends Hero {
                 perpendicular = { x: -dir.y, y: dir.x };
                 angle = Math.atan2(dir.y, dir.x);
                 beamGroup.rotation.z = angle;
-                traveled = 0;
-                hitEnemies = new Set();
             }
         };
         Hero.addProjectile(projectile);
@@ -1060,31 +1426,68 @@ export class Cyborg extends Hero {
             Hero.removeProjectile(projectile);
         };
 
-        // Animate flowing particles + move beam
+        const distanceToSegment = (px, py, ax, ay, bx, by) => {
+            const abx = bx - ax;
+            const aby = by - ay;
+            const apx = px - ax;
+            const apy = py - ay;
+            const denom = abx * abx + aby * aby;
+            if (denom <= 0.0001) {
+                return Math.hypot(px - ax, py - ay);
+            }
+            let t = (apx * abx + apy * aby) / denom;
+            t = Math.max(0, Math.min(1, t));
+            const cx = ax + abx * t;
+            const cy = ay + aby * t;
+            return Math.hypot(px - cx, py - cy);
+        };
+
+        // Animate flowing particles (beam follows the cyborg during the active duration)
         const particleInterval = setInterval(() => {
-            const step = beamSpeed * 0.016;
-            traveled += step;
-            beamPos.x += dir.x * step;
-            beamPos.y += dir.y * step;
+            elapsed += 0.016;
+            tickTimer += 0.016;
+
+            const owner = projectile.owner || this;
+            if (!owner || !owner.isAlive) {
+                clearInterval(particleInterval);
+                cleanupProjectile();
+                this.mesh.parent.remove(beamGroup);
+                this.isBeamActive = false;
+                this.forceControlsLocked = false;
+                beamParticles.forEach(p => {
+                    if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
+                });
+                return;
+            }
+
+            const liveDir = owner.getReticleDirection ? owner.getReticleDirection() : dir;
+            dir.x = liveDir.x;
+            dir.y = liveDir.y;
+            perpendicular = { x: -dir.y, y: dir.x };
+            angle = Math.atan2(dir.y, dir.x);
+            beamGroup.rotation.z = angle;
+            beamPos.x = owner.position.x + dir.x * (muzzleOffset + beamLength);
+            beamPos.y = owner.position.y + dir.y * (muzzleOffset + beamLength);
             beamGroup.position.set(beamPos.x, beamPos.y, 0.2);
 
             beamParticles.forEach(p => {
                 p.life += 0.016;
                 p.offsetX += p.speed * 0.016;
 
-                p.mesh.position.x = beamPos.x + dir.x * p.offsetX + perpendicular.x * p.offsetY;
-                p.mesh.position.y = beamPos.y + dir.y * p.offsetX + perpendicular.y * p.offsetY;
+                p.mesh.position.x = beamPos.x + dir.x * (p.offsetX - halfLength) + perpendicular.x * p.offsetY;
+                p.mesh.position.y = beamPos.y + dir.y * (p.offsetX - halfLength) + perpendicular.y * p.offsetY;
 
                 // Fade out particles as they travel
                 p.mesh.material.opacity = Math.max(0, 0.7 - p.life);
             });
 
-            const owner = projectile.owner || this;
             if (owner && typeof owner.isPositionBlockedByProtectionDome === 'function' &&
                 owner.isPositionBlockedByProtectionDome(beamPos)) {
                 clearInterval(particleInterval);
                 cleanupProjectile();
                 this.mesh.parent.remove(beamGroup);
+                this.isBeamActive = false;
+                this.forceControlsLocked = false;
                 beamParticles.forEach(p => {
                     if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
                 });
@@ -1093,53 +1496,51 @@ export class Cyborg extends Hero {
 
             // Beam damage area
             const halfLength = beamLength * 0.5;
-            const startX = beamPos.x - dir.x * halfLength;
-            const startY = beamPos.y - dir.y * halfLength;
-            const endX = beamPos.x + dir.x * halfLength;
-            const endY = beamPos.y + dir.y * halfLength;
-            const thickness = 0.7;
-            const beamBounds = {
-                left: Math.min(startX, endX) - thickness,
-                right: Math.max(startX, endX) + thickness,
-                top: Math.max(startY, endY) + thickness,
-                bottom: Math.min(startY, endY) - thickness
-            };
+            const startX = beamPos.x - dir.x * beamLength;
+            const startY = beamPos.y - dir.y * beamLength;
+            const endX = beamPos.x;
+            const endY = beamPos.y;
+            const thickness = beamWidth * 0.5;
 
-            // Damage enemies in beam (once per enemy)
-            for (const enemy of owner && typeof owner.getDamageTargets === 'function' ? owner.getDamageTargets() : []) {
-                if (!enemy.isAlive || hitEnemies.has(enemy)) continue;
-                const enemyBounds = enemy.getBounds();
-                if (checkAABBCollision(beamBounds, enemyBounds)) {
-                    const adjustedDamage = this.abilities.r && typeof this.abilities.r.getAdjustedDamage === 'function'
-                        ? this.abilities.r.getAdjustedDamage(damage)
-                        : damage;
-                    enemy.takeDamage(Math.max(1, Math.round(adjustedDamage)), owner);
-                    hitEnemies.add(enemy);
-                    if (enemy.type === 'player' && typeof owner.addUltimateCharge === 'function') {
-                        owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
+            // Damage enemies in beam on ticks
+            if (tickTimer >= tickInterval) {
+                tickTimer = 0;
+                for (const enemy of owner && typeof owner.getDamageTargets === 'function' ? owner.getDamageTargets() : []) {
+                    if (!enemy.isAlive) continue;
+                    const enemyBounds = enemy.getBounds();
+                    const centerX = (enemyBounds.left + enemyBounds.right) * 0.5;
+                    const centerY = (enemyBounds.top + enemyBounds.bottom) * 0.5;
+                    const halfW = Math.max(0.1, (enemyBounds.right - enemyBounds.left) * 0.5);
+                    const halfH = Math.max(0.1, (enemyBounds.top - enemyBounds.bottom) * 0.5);
+                    const radius = Math.max(halfW, halfH);
+                    const distance = distanceToSegment(centerX, centerY, startX, startY, endX, endY);
+                    if (distance <= (thickness + radius)) {
+                        enemy.takeDamage(tickDamage, owner);
+                        if (enemy.type === 'player' && typeof owner.addUltimateCharge === 'function') {
+                            owner.addUltimateCharge(owner.ultimateChargePerKill || 0);
+                        }
                     }
-                    console.log(`KAME HAME HA hit for ${damage} damage!`);
                 }
             }
 
-            if (traveled >= maxTravel) {
+            if (elapsed >= beamDuration) {
                 clearInterval(particleInterval);
                 cleanupProjectile();
                 this.mesh.parent.remove(beamGroup);
+                this.isBeamActive = false;
+                this.forceControlsLocked = false;
                 beamParticles.forEach(p => {
                     if (p.mesh.parent) this.mesh.parent.remove(p.mesh);
                 });
             }
         }, 16);
-        // Consume ultimate charge
-        this.ultimateCharge = 0;
     }
 
     /**
      * Create explosion effect
      */
-    createExplosion(x, y, color) {
-        const explosionGeometry = new THREE.CircleGeometry(0.5, 16);
+    createExplosion(x, y, color, visualRadius = 0.5, damageRadius = visualRadius, owner = null, damage = 0) {
+        const explosionGeometry = new THREE.CircleGeometry(visualRadius, 16);
         const explosionMaterial = new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
@@ -1148,6 +1549,32 @@ export class Cyborg extends Hero {
         const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
         explosion.position.set(x, y, 0.3);
         this.mesh.parent.add(explosion);
+
+        if (owner && damage > 0 && typeof owner.getDamageTargets === 'function') {
+            for (const enemy of owner.getDamageTargets()) {
+                if (!enemy || !enemy.isAlive) continue;
+                let hit = false;
+                if (typeof enemy.getBounds === 'function') {
+                    const bounds = enemy.getBounds();
+                    if (bounds) {
+                        const closestX = Math.max(bounds.left, Math.min(x, bounds.right));
+                        const closestY = Math.max(bounds.bottom, Math.min(y, bounds.top));
+                        const dx = x - closestX;
+                        const dy = y - closestY;
+                        hit = (dx * dx + dy * dy) <= (damageRadius * damageRadius);
+                    }
+                } else if (enemy.position) {
+                    const dx = enemy.position.x - x;
+                    const dy = enemy.position.y - y;
+                    hit = (dx * dx + dy * dy) <= (damageRadius * damageRadius);
+                }
+                if (hit) {
+                    if (typeof enemy.takeDamage === 'function') {
+                        enemy.takeDamage(damage, owner);
+                    }
+                }
+            }
+        }
 
         let scale = 1;
         let opacity = 0.8;

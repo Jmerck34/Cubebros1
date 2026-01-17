@@ -1,14 +1,14 @@
-# Warrior Polish & Improvements
+# Samurai Polish & Improvements
 
 ## ⚔️ Overview
-The Warrior class has been enhanced with facing direction system and visual polish to make combat feel more responsive and immersive.
+The Samurai class has been enhanced with facing direction system and visual polish to make combat feel more responsive and immersive.
 
 ---
 
 ## 🎯 Key Improvements
 
 ### 1. **Facing Direction System**
-The warrior now always faces the direction they're moving:
+The samari now always faces the direction they're moving:
 
 ```javascript
 // Facing direction tracking
@@ -117,7 +117,7 @@ Facing Left (direction = -1):
 ## 🎮 Gameplay Impact
 
 ### Before Polish:
-- Warrior always slashed right
+- Samurai always slashed right
 - Confusing when facing left
 - Dash had no visual feedback
 - Disconnect between visuals and mechanics
@@ -168,7 +168,7 @@ All directional abilities now multiply by `this.facingDirection`:
 - No additional draw calls
 
 **Memory:** Negligible
-- One number per warrior
+- One number per samari
 - Trail objects cleaned up automatically
 
 ---
@@ -191,16 +191,16 @@ Possible additions:
 
 ```javascript
 // Player faces right by default
-warrior.facingDirection === 1;
+samari.facingDirection === 1;
 
 // Move left - character flips
 input.isLeftPressed(); // facingDirection becomes -1
 
 // Use slash - attacks left
-warrior.swordSlashAttack(); // Slash goes left
+samari.swordSlashAttack(); // Slash goes left
 
 // Dash - goes left
-warrior.dashForward(); // Dash goes left with trail
+samari.dashForward(); // Dash goes left with trail
 
 // Move right - character flips back
 input.isRightPressed(); // facingDirection becomes 1
@@ -225,4 +225,4 @@ input.isRightPressed(); // facingDirection becomes 1
 
 ---
 
-Enjoy the polished Warrior combat! ⚔️✨
+Enjoy the polished Samurai combat! ⚔️✨

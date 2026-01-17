@@ -5,7 +5,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { GameLoop } from './core/gameLoop.js';
 import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
-import { getAimDirection } from './utils/aim.js';
+import { getAimDirection, getAimWorldPosition, getMouseScreenPosition, screenToWorld, worldToScreen } from './utils/aim.js';
 import { updateDamageNumbers } from './utils/damageNumbers.js';
 import { PlayerStateOverlay } from './ui/PlayerStateOverlay.js';
 import { Warrior } from './player/Warrior.js';
@@ -95,6 +95,8 @@ level.addEnemy(goomba3);
 
 // Create warrior hero
 const player = new Warrior(scene, 0, 0);
+player.playerIndex = 0;
+player.reticleLayer = 1;
 const playerStateOverlay = new PlayerStateOverlay(() => player);
 
 // Connect player to enemy list for ability damage detection
@@ -105,6 +107,7 @@ const uiManager = new UIManager(player);
 
 // Setup camera follow
 const cameraFollow = new CameraFollow(camera, player);
+camera.layers.enable(player.reticleLayer);
 if (level.cameraConfig) {
     const cfg = level.cameraConfig;
     cameraFollow.setSmoothing(Number.isFinite(cfg.smoothing) ? cfg.smoothing : 0.1);
@@ -144,15 +147,79 @@ const gameLoop = new GameLoop(
     (deltaTime) => {
         input.update();
         const size = renderer.getSize(new THREE.Vector2());
-        const aim = getAimDirection({
-            input,
-            camera,
-            renderer,
-            viewport: { x: 0, y: 0, width: size.x, height: size.y },
-            origin: player.position
-        });
-        if (typeof player.setAimDirection === 'function') {
-            player.setAimDirection(aim);
+        const viewport = { x: 0, y: 0, width: size.x, height: size.y };
+        if (player.useCursorAim) {
+            let cursor = player.aimScreenPosition;
+            if (!cursor) {
+                cursor = { x: viewport.width * 0.5, y: viewport.height * 0.5 };
+            }
+            const mousePos = getMouseScreenPosition({ input, renderer, viewport });
+            if (mousePos) {
+                cursor.x = mousePos.x;
+                cursor.y = mousePos.y;
+            } else if (typeof input.getAimStick === 'function') {
+                const stick = input.getAimStick(player.allowLeftStickAimFallback !== false);
+                if (stick) {
+                    const speed = player.cursorSpeed || 800;
+                    cursor.x += stick.x * speed * deltaTime;
+                    cursor.y += stick.y * speed * deltaTime;
+                }
+            }
+            cursor.x = Math.max(0, Math.min(viewport.width, cursor.x));
+            cursor.y = Math.max(0, Math.min(viewport.height, cursor.y));
+            player.aimScreenPosition = cursor;
+            let aimWorld = screenToWorld({ camera, renderer, viewport, screenX: cursor.x, screenY: cursor.y });
+            if (aimWorld) {
+                const margin = 1;
+                const worldLeft = camera.left + camera.position.x + margin;
+                const worldRight = camera.right + camera.position.x - margin;
+                const worldTop = camera.top + camera.position.y - margin;
+                const worldBottom = camera.bottom + camera.position.y + margin;
+                aimWorld.x = Math.max(worldLeft, Math.min(worldRight, aimWorld.x));
+                aimWorld.y = Math.max(worldBottom, Math.min(worldTop, aimWorld.y));
+                const clampedScreen = worldToScreen({
+                    camera,
+                    renderer,
+                    viewport,
+                    worldX: aimWorld.x,
+                    worldY: aimWorld.y
+                });
+                if (clampedScreen) {
+                    cursor.x = clampedScreen.x;
+                    cursor.y = clampedScreen.y;
+                }
+            }
+            if (typeof player.setAimWorldPosition === 'function') {
+                player.setAimWorldPosition(aimWorld);
+            }
+            if (aimWorld && typeof player.setAimDirection === 'function') {
+                const dx = aimWorld.x - player.position.x;
+                const dy = aimWorld.y - player.position.y;
+                const length = Math.hypot(dx, dy);
+                player.setAimDirection(length > 0.001 ? { x: dx / length, y: dy / length } : null);
+            }
+        } else {
+            const aim = getAimDirection({
+                input,
+                camera,
+                renderer,
+                viewport,
+                origin: player.position,
+                allowLeftStickFallback: player.allowLeftStickAimFallback !== false
+            });
+            if (typeof player.setAimDirection === 'function') {
+                player.setAimDirection(aim);
+            }
+            const aimWorld = getAimWorldPosition({
+                input,
+                camera,
+                renderer,
+                viewport,
+                allowLeftStickFallback: player.allowLeftStickAimFallback !== false
+            });
+            if (typeof player.setAimWorldPosition === 'function') {
+                player.setAimWorldPosition(aimWorld);
+            }
         }
 
         // Update player

@@ -19,6 +19,7 @@ export class Paladin extends Hero {
         this.facingDirection = 1;
         this.maceHitTracker = new Map();
         this.activeProtectionDome = null;
+        this.maceBasicCounter = 0;
 
         this.initializeAbilities();
     }
@@ -91,7 +92,7 @@ export class Paladin extends Hero {
      * Initialize Paladin abilities
      */
     initializeAbilities() {
-        const crushingMace = new Ability('Crushing Mace', 1, false, 2);
+        const crushingMace = new Ability('Crushing Mace', 0.5, false, 2);
         crushingMace.use = (hero) => {
             if (!Ability.prototype.use.call(crushingMace, hero)) return false;
             hero.crushingMaceAttack();
@@ -141,6 +142,11 @@ export class Paladin extends Hero {
      * A1 - Crushing Mace
      */
     crushingMaceAttack() {
+        this.maceBasicCounter += 1;
+        if (this.maceBasicCounter % 3 === 0) {
+            this.throwBoomerangMace();
+            return;
+        }
         const originalRot = this.maceBase.rotZ;
         this.mace.rotation.z = -1.2;
         setTimeout(() => {
@@ -151,6 +157,91 @@ export class Paladin extends Hero {
         setTimeout(() => {
             this.mace.rotation.z = originalRot;
         }, 320);
+    }
+
+    throwBoomerangMace() {
+        if (!this.mesh || !this.mesh.parent) return;
+        const direction = this.facingDirection || 1;
+        const projectile = new THREE.Group();
+
+        const handleGeometry = new THREE.BoxGeometry(0.14, 0.9, 0.1);
+        const handleMaterial = new THREE.MeshBasicMaterial({ color: 0x6b4a2b });
+        const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+        handle.position.set(0, -0.05, 0);
+        projectile.add(handle);
+
+        const headGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.26);
+        const headMaterial = new THREE.MeshBasicMaterial({ color: 0xbfc7cf });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        head.position.set(0, 0.5, 0);
+        projectile.add(head);
+
+        projectile.scale.set(1.1, 1.1, 1.1);
+        projectile.position.set(this.position.x + 0.6 * direction, this.position.y + 0.2, 0.2);
+        projectile.rotation.z = Math.PI / 2 * direction;
+        this.mesh.parent.add(projectile);
+
+        const speed = 10;
+        const maxRange = 6;
+        const hitTargets = new Set();
+        const startPos = { x: projectile.position.x, y: projectile.position.y };
+        let returning = false;
+        let traveled = 0;
+
+        const interval = setInterval(() => {
+            const step = speed * 0.016;
+            if (!returning) {
+                projectile.position.x += step * direction;
+                traveled += step;
+                if (traveled >= maxRange) {
+                    returning = true;
+                }
+            } else {
+                const toHeroX = this.position.x - projectile.position.x;
+                const toHeroY = this.position.y + 0.2 - projectile.position.y;
+                const dist = Math.hypot(toHeroX, toHeroY);
+                if (dist <= 0.6) {
+                    clearInterval(interval);
+                    if (projectile.parent) {
+                        projectile.parent.remove(projectile);
+                    }
+                    return;
+                }
+                const dirX = toHeroX / (dist || 1);
+                const dirY = toHeroY / (dist || 1);
+                projectile.position.x += dirX * step;
+                projectile.position.y += dirY * step;
+            }
+
+            projectile.rotation.z += 0.35 * direction;
+
+            const bounds = {
+                left: projectile.position.x - 0.35,
+                right: projectile.position.x + 0.35,
+                top: projectile.position.y + 0.4,
+                bottom: projectile.position.y - 0.4
+            };
+
+            for (const enemy of this.getDamageTargets()) {
+                if (!enemy.isAlive || hitTargets.has(enemy)) continue;
+                const enemyBounds = enemy.getBounds();
+                if (checkAABBCollision(bounds, enemyBounds)) {
+                    this.applyAbilityDamage(this.abilities.q, enemy, 2);
+                    if (typeof enemy.takeDamage === 'function') {
+                        enemy.takeDamage(10, this);
+                    }
+                    if (enemy.type === 'player') {
+                        this.addUltimateCharge(this.ultimateChargePerKill);
+                    }
+                    this.registerCrushingHit(enemy);
+                    hitTargets.add(enemy);
+                }
+            }
+
+            if (!returning && Math.hypot(projectile.position.x - startPos.x, projectile.position.y - startPos.y) > maxRange * 1.3) {
+                returning = true;
+            }
+        }, 16);
     }
 
     applyMaceDamage() {
@@ -216,6 +307,52 @@ export class Paladin extends Hero {
         }, 40);
     }
 
+    createSpinWindArc(startAngle, endAngle, radius = 1.2) {
+        if (!this.mesh || !this.mesh.parent) return;
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(radius * 0.78, radius, 32),
+            new THREE.MeshBasicMaterial({ color: 0xcfe9ff, transparent: true, opacity: 0.5 })
+        );
+        ring.rotation.x = Math.PI / 2;
+        ring.position.set(this.position.x, this.position.y + 0.2, 0.18);
+        this.mesh.parent.add(ring);
+
+        let opacity = 0.5;
+        let spin = 0;
+        const interval = setInterval(() => {
+            spin += 0.35;
+            ring.rotation.z += 0.12;
+            ring.position.set(this.position.x, this.position.y + 0.2, 0.18);
+            opacity -= 0.08;
+            ring.material.opacity = Math.max(0, opacity);
+            if (opacity <= 0) {
+                clearInterval(interval);
+                this.mesh.parent.remove(ring);
+            }
+        }, 40);
+    }
+
+    createSlamWind(x, y) {
+        if (!this.mesh || !this.mesh.parent) return;
+        const streak = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, 1.2, 0.05),
+            new THREE.MeshBasicMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.55 })
+        );
+        streak.position.set(x, y + 0.6, 0.18);
+        this.mesh.parent.add(streak);
+
+        let opacity = 0.55;
+        const interval = setInterval(() => {
+            opacity -= 0.12;
+            streak.material.opacity = Math.max(0, opacity);
+            streak.position.y -= 0.08;
+            if (opacity <= 0) {
+                clearInterval(interval);
+                this.mesh.parent.remove(streak);
+            }
+        }, 40);
+    }
+
     /**
      * A2 - Sphere of Protection
      */
@@ -229,26 +366,28 @@ export class Paladin extends Hero {
 
         const domeGroup = new THREE.Group();
         const domeFill = new THREE.Mesh(
-            new THREE.CircleGeometry(radius, 32),
+            new THREE.CircleGeometry(radius, 32, -Math.PI / 2, Math.PI),
             new THREE.MeshBasicMaterial({
                 color: 0x8ad1ff,
                 transparent: true,
-                opacity: 0.12
+                opacity: 0.12,
+                side: THREE.DoubleSide
             })
         );
         const domeRing = new THREE.Mesh(
-            new THREE.RingGeometry(radius * 0.92, radius, 32),
+            new THREE.RingGeometry(radius * 0.92, radius, 32, 1, -Math.PI / 2, Math.PI),
             new THREE.MeshBasicMaterial({
                 color: 0xbbe8ff,
                 transparent: true,
-                opacity: 0.5
+                opacity: 0.5,
+                side: THREE.DoubleSide
             })
         );
         domeGroup.add(domeFill, domeRing);
         domeGroup.position.set(0, 0.1, 0.12);
         this.mesh.add(domeGroup);
 
-        const domeData = { owner: this, radius, mesh: domeGroup };
+        const domeData = { owner: this, radius, mesh: domeGroup, halfCircle: true };
         Player.addProtectionDome(domeData);
         this.activeProtectionDome = domeData;
 

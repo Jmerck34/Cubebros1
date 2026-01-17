@@ -1314,6 +1314,29 @@
             box-shadow: 0 0 10px #00ff00;
         }
 
+        .ability-dots {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            pointer-events: none;
+        }
+
+        .ability-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .ability-dot.active {
+            background: #ffd166;
+            box-shadow: 0 0 6px rgba(255, 209, 102, 0.8);
+        }
+
         .ability-slot.ultimate {
             width: 80px;
             height: 80px;
@@ -1664,13 +1687,13 @@
         </div>
 
         <div class="hero-grid" id="hero-grid-single">
-            <!-- Warrior -->
+            <!-- Samurai -->
             <div class="hero-card warrior" id="select-warrior" data-hero="warrior">
-                <h2>⚔️ WARRIOR</h2>
-                <div class="hero-desc">Melee Tank - Sword & Shield</div>
+                <h2>⚔️ SAMURAI</h2>
+                <div class="hero-desc">Katana Duelist - Dark Red</div>
                 <div class="abilities">
                     <div class="ability"><strong>Q/Click:</strong> Sword Slash (crescent arc)</div>
-                    <div class="ability"><strong>Right Click:</strong> Shield Bash (knockback)</div>
+                    <div class="ability"><strong>Right Click:</strong> Guard Bash (knockback)</div>
                     <div class="ability"><strong>E:</strong> Dash (mobility)</div>
                     <div class="ability"><strong>R:</strong> Whirlwind (spin attack)</div>
                 </div>
@@ -1840,6 +1863,11 @@
     <!-- Ability UI -->
     <div id="ability-ui" class="ability-ui">
         <div class="ability-slot" id="ability-q">
+            <div class="ability-dots" id="ability-q-dots">
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+            </div>
             <div class="charge-meter" id="charge-meter-q">
                 <div class="charge-meter-fill" id="charge-meter-fill-q"></div>
             </div>
@@ -1875,6 +1903,11 @@
     <div id="ability-ui-p2" class="ability-ui">
         <div class="ability-ui-label">P2</div>
         <div class="ability-slot" id="ability-q-p2">
+            <div class="ability-dots" id="ability-q-dots-p2">
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+            </div>
             <div class="charge-meter" id="charge-meter-q-p2">
                 <div class="charge-meter-fill" id="charge-meter-fill-q-p2"></div>
             </div>
@@ -1910,6 +1943,11 @@
     <div id="ability-ui-p3" class="ability-ui">
         <div class="ability-ui-label">P3</div>
         <div class="ability-slot" id="ability-q-p3">
+            <div class="ability-dots" id="ability-q-dots-p3">
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+            </div>
             <div class="charge-meter" id="charge-meter-q-p3">
                 <div class="charge-meter-fill" id="charge-meter-fill-q-p3"></div>
             </div>
@@ -1945,6 +1983,11 @@
     <div id="ability-ui-p4" class="ability-ui">
         <div class="ability-ui-label">P4</div>
         <div class="ability-slot" id="ability-q-p4">
+            <div class="ability-dots" id="ability-q-dots-p4">
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+            </div>
             <div class="charge-meter" id="charge-meter-q-p4">
                 <div class="charge-meter-fill" id="charge-meter-fill-q-p4"></div>
             </div>

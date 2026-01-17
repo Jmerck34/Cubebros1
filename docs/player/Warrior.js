@@ -5,7 +5,7 @@ import { checkAABBCollision } from '../utils/collision.js';
 import { JUMP_VELOCITY } from '../core/constants.js';
 
 /**
- * Warrior Hero - Melee fighter with sword and shield
+ * Samurai Hero - Melee fighter with katana
  * @class Warrior
  */
 export class Warrior extends Hero {
@@ -18,6 +18,7 @@ export class Warrior extends Hero {
         // Add sword and shield
         this.createEquipment(scene);
         this.addWarriorCrest();
+        this.createSamuraiHelmet();
 
         // Enemy reference (set by main.js)
         this.enemies = [];
@@ -148,6 +149,52 @@ export class Warrior extends Hero {
         crestGroup.add(crossHorizontal);
 
         this.mesh.add(crestGroup);
+    }
+
+    /**
+     * Add a simple samurai-style helmet.
+     */
+    createSamuraiHelmet() {
+        const helmetGroup = new THREE.Group();
+
+        const helmetBase = new THREE.Mesh(
+            new THREE.ConeGeometry(0.6, 0.36, 4),
+            new THREE.MeshBasicMaterial({ color: 0x2a1a15 })
+        );
+        helmetBase.rotation.y = Math.PI / 4;
+        helmetBase.position.set(0, 0.64, 0);
+        helmetGroup.add(helmetBase);
+
+        const brim = new THREE.Mesh(
+            new THREE.BoxGeometry(1.05, 0.08, 0.7),
+            new THREE.MeshBasicMaterial({ color: 0x1d120f })
+        );
+        brim.position.set(0, 0.45, 0);
+        helmetGroup.add(brim);
+
+        const frontCrest = new THREE.Mesh(
+            new THREE.BoxGeometry(0.16, 0.26, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0xd6b56a })
+        );
+        frontCrest.position.set(0, 0.65, 0.33);
+        helmetGroup.add(frontCrest);
+
+        const sideFlapLeft = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 0.26, 0.04),
+            new THREE.MeshBasicMaterial({ color: 0x2b1b16 })
+        );
+        sideFlapLeft.position.set(-0.48, 0.5, 0.12);
+        helmetGroup.add(sideFlapLeft);
+
+        const sideFlapRight = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 0.26, 0.04),
+            new THREE.MeshBasicMaterial({ color: 0x2b1b16 })
+        );
+        sideFlapRight.position.set(0.48, 0.5, 0.12);
+        helmetGroup.add(sideFlapRight);
+
+        this.mesh.add(helmetGroup);
+        this.helmet = helmetGroup;
     }
 
     /**

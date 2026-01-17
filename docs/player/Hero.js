@@ -47,6 +47,10 @@ export class Hero extends Player {
         // Aim direction for ranged abilities
         this.aimDirection = { x: 1, y: 0 };
         this.hasAimInput = false;
+        this.aimWorldPosition = null;
+        this.hasAimWorldPosition = false;
+        this.allowLeftStickAimFallback = true;
+        this.aimScreenPosition = null;
     }
 
     /**
@@ -272,6 +276,33 @@ export class Hero extends Player {
     }
 
     /**
+     * Set latest aim world position (for reticle-based aiming).
+     * @param {{x:number,y:number}|null} position
+     */
+    setAimWorldPosition(position) {
+        if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+            this.hasAimWorldPosition = false;
+            return;
+        }
+
+        if (!this.aimWorldPosition) {
+            this.aimWorldPosition = { x: position.x, y: position.y };
+        } else {
+            this.aimWorldPosition.x = position.x;
+            this.aimWorldPosition.y = position.y;
+        }
+        this.hasAimWorldPosition = true;
+    }
+
+    /**
+     * Get latest aim world position.
+     * @returns {{x:number,y:number}|null}
+     */
+    getAimWorldPosition() {
+        return this.aimWorldPosition;
+    }
+
+    /**
      * Check if a position is blocked by an enemy protection dome.
      * @param {{x:number,y:number}} position
      * @returns {Object|null}
@@ -285,6 +316,10 @@ export class Hero extends Player {
             if (dome.owner.team === team) continue;
             const dx = position.x - dome.owner.position.x;
             const dy = position.y - dome.owner.position.y;
+            if (dome.halfCircle) {
+                const facing = typeof dome.owner.facingDirection === 'number' ? dome.owner.facingDirection : 1;
+                if (dx * facing < 0) continue;
+            }
             if ((dx * dx + dy * dy) <= (dome.radius * dome.radius)) {
                 return dome;
             }

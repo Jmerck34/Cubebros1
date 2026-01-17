@@ -55,10 +55,10 @@ A 2D side-scrolling platformer built with Three.js, inspired by New Super Mario 
 
 ## ⚔️ Hero Classes
 
-### 1. **Warrior** (`player/Warrior.js`)
-**Color:** Blue (0x0066ff)
-**Equipment:** Sword + Shield
-**Playstyle:** Melee tank with mobility
+### 1. **Samurai** (`player/Warrior.js`)
+**Color:** Dark Red (0x7b1b1b)
+**Equipment:** Katana
+**Playstyle:** Melee bruiser with mobility
 
 **Abilities:**
 - **Q - Sword Slash** (1s cooldown)
@@ -69,11 +69,11 @@ A 2D side-scrolling platformer built with Three.js, inspired by New Super Mario 
 
 - **Right Click - Shield Bash** (4s cooldown)
   - Knockback attack
-  - Shield animation
+  - Guard strike animation
 
 - **E - Dash** (4s cooldown)
   - Fast forward dash in facing direction
-  - Leaves blue trail effect
+  - Leaves dark red trail effect
   - Distance: ~1.5 units
 
 - **R - Whirlwind Ultimate** (charge-based)
@@ -232,7 +232,7 @@ A 2D side-scrolling platformer built with Three.js, inspired by New Super Mario 
 
 ### December 24, 2024
 
-#### **Warrior Improvements:**
+#### **Samurai Improvements:**
 1. **Sword Slash Rework**
    - Fixed left-facing bug (dual slash appearance)
    - Now traces actual sword tip path using trigonometry
@@ -326,7 +326,7 @@ box1.bottom < box2.top
 
 ### Visual Effect Patterns
 
-#### **1. Circular Arc Effects** (Assassin slash, Warrior whirlwind)
+#### **1. Circular Arc Effects** (Assassin slash, Samurai whirlwind)
 ```javascript
 for (let i = 0; i < segments; i++) {
   const angle = (i / segments) * Math.PI * 2;
@@ -336,14 +336,14 @@ for (let i = 0; i < segments; i++) {
 }
 ```
 
-#### **2. Spiral Effects** (Warrior whirlwind)
+#### **2. Spiral Effects** (Samurai whirlwind)
 ```javascript
 const spiralAngle = startAngle + (t * Math.PI * rotations);
 const x = Math.cos(spiralAngle) * (t * radius);
 const y = Math.sin(spiralAngle) * (t * radius);
 ```
 
-#### **3. Sword Tip Tracing** (Warrior slash)
+#### **3. Sword Tip Tracing** (Samurai slash)
 ```javascript
 const angle = startAngle + (t * angleRange);
 const tipX = swordBaseX + Math.sin(-angle) * swordLength;
@@ -408,7 +408,7 @@ for (const platform of level.platforms) {
 │
 ├── /player
 │   ├── Hero.js                  # Base hero class
-│   ├── Warrior.js               # Warrior implementation
+│   ├── Warrior.js               # Samurai implementation
 │   ├── Assassin.js              # Assassin implementation
 │   ├── Cyborg.js                # Cyborg implementation
 │   ├── Warlock.js               # Warlock implementation
@@ -532,7 +532,7 @@ this.mesh.scale.x = this.facingDirection;
 - [ ] Critical hit on final dagger slash
 - [ ] Poison bomb explosion particle burst
 
-### Warrior
+### Samurai
 - [ ] Sword trail effect on all swings
 - [ ] Shield block ability (parry mechanic)
 - [ ] Charge attack (hold Q)
@@ -562,16 +562,16 @@ this.mesh.scale.x = this.facingDirection;
 
 | Hero | Mobility | Range | Burst | Sustain | Utility |
 |------|----------|-------|-------|---------|---------|
-| Warrior | Medium | Melee | Medium | High | Medium |
+| Samurai | Medium | Melee | Medium | High | Medium |
 | Assassin | High | Melee | Very High | Low | High |
 | Cyborg | Low | Long | Medium | Medium | Medium |
 | Warlock | Medium | Medium | Low | High | Very High |
 
 **Cooldown Comparison:**
-- Warrior Q: 1s (fastest)
+- Samurai Q: 1s (fastest)
 - Assassin Q: ~2s
 - Cyborg Q: ~2s
-- Warrior E: 4s
+- Samurai E: 4s
 - All ultimates: Charge-based (no cooldown)
 
 ---
@@ -579,10 +579,10 @@ this.mesh.scale.x = this.facingDirection;
 ## 📝 Change Log
 
 ### 2024-12-24
-- ✅ Warrior sword slash cooldown reduced to 1s
-- ✅ Warrior dash cooldown reduced to 4s
-- ✅ Warrior whirlwind visual improved with swirl effect
-- ✅ Warrior sword slash traces actual tip path
+- ✅ Samurai sword slash cooldown reduced to 1s
+- ✅ Samurai dash cooldown reduced to 4s
+- ✅ Samurai whirlwind visual improved with swirl effect
+- ✅ Samurai sword slash traces actual tip path
 - ✅ Assassin daggers repositioned to horizontal orientation
 - ✅ Assassin slash changed to circular arc pattern
 - ✅ Assassin shadow walk ground detection implemented

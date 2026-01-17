@@ -232,7 +232,7 @@ All directional abilities now:
 
 ### Animation Effects:
 New visual polish includes:
-- **Warrior:** Blue dash trail
+- **Samurai:** Dark red dash trail
 - **Assassin:** Purple teleport trail
 - **Cyborg:** Explosion particles, beam effects
 - **Warlock:** Lightning bolts, purple waves

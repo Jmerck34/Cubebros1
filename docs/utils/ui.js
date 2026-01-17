@@ -15,7 +15,8 @@ export class UIManager {
                 overlay: document.getElementById(getId('cooldown-q')),
                 text: document.getElementById(getId('cooldown-text-q')),
                 chargeWrap: document.getElementById(getId('charge-meter-q')),
-                chargeFill: document.getElementById(getId('charge-meter-fill-q'))
+                chargeFill: document.getElementById(getId('charge-meter-fill-q')),
+                dots: document.getElementById(getId('ability-q-dots'))
             },
             w: {
                 slot: document.getElementById(getId('ability-w')),
@@ -53,6 +54,7 @@ export class UIManager {
 
         // Update charge shot meter (Archer)
         this.updateChargeMeter();
+        this.updateSwingDots();
         this.updateFlagBlock();
     }
 
@@ -132,6 +134,24 @@ export class UIManager {
         const clamped = Math.max(0, Math.min(1, ratio));
         chargeFill.style.width = `${clamped * 100}%`;
         chargeWrap.style.opacity = clamped > 0 || isCharging ? '1' : '0';
+    }
+
+    updateSwingDots() {
+        const dotsWrap = this.elements.q?.dots;
+        if (!dotsWrap) return;
+        if (!this.hero || this.hero.constructor?.name !== 'Paladin') {
+            dotsWrap.style.opacity = '0';
+            return;
+        }
+
+        const count = Number.isFinite(this.hero.maceBasicCounter) ? this.hero.maceBasicCounter : 0;
+        const filled = count % 3;
+        const dots = Array.from(dotsWrap.children || []);
+        dotsWrap.style.opacity = '1';
+        dots.forEach((dot, index) => {
+            if (!dot || !dot.classList) return;
+            dot.classList.toggle('active', index < filled);
+        });
     }
 
     updateFlagBlock() {

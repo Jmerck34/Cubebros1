@@ -56,7 +56,7 @@ This control scheme is more intuitive for MOBA-style gameplay:
 
 ## ⚔️ Hero-Specific Abilities
 
-### Warrior
+### Samurai
 - **Q / Left Click:** Sword Slash (crescent arc damage)
 - **Right Click:** Shield Bash (knockback)
 - **E:** Dash Forward (mobility)

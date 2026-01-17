@@ -57,6 +57,29 @@
             box-shadow: 0 0 10px #00ff00;
         }
 
+        .ability-dots {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            pointer-events: none;
+        }
+
+        .ability-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .ability-dot.active {
+            background: #ffd166;
+            box-shadow: 0 0 6px rgba(255, 209, 102, 0.8);
+        }
+
         .ability-slot.ultimate {
             width: 80px;
             height: 80px;
@@ -216,13 +239,18 @@
     <div id="hero-info">
         <h2>🎮 Hero Selection</h2>
         <p>Edit main_all_heroes.js to choose your hero!</p>
-        <p style="margin-top: 10px;">⚔️ Warrior | 🛡️ Paladin | 🗡️ Assassin</p>
+        <p style="margin-top: 10px;">⚔️ Samurai | 🛡️ Paladin | 🗡️ Assassin</p>
         <p>🤖 Cyborg | 🏹 Archer | 💀 Warlock</p>
     </div>
 
     <!-- Ability UI -->
     <div id="ability-ui">
         <div class="ability-slot" id="ability-q">
+            <div class="ability-dots" id="ability-q-dots">
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+                <span class="ability-dot"></span>
+            </div>
             <div class="charge-meter" id="charge-meter-q">
                 <div class="charge-meter-fill" id="charge-meter-fill-q"></div>
             </div>

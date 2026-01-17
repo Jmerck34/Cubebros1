@@ -27,6 +27,9 @@ export class Archer extends Hero {
         this.isCharging = false;
         this.chargeTime = 0;
         this.maxChargeTime = 1.5;
+        this.isUltimateCharging = false;
+        this.ultimateChargeTime = 0;
+        this.pendingUltimateChargeRatio = null;
 
         // Teleport arrow flag
         this.teleportArrowQueued = false;
@@ -133,6 +136,7 @@ export class Archer extends Hero {
 
         // Handle charge shot input (A1)
         this.handleChargeShot(deltaTime, input);
+        this.handleUltimateChargeShot(deltaTime, input);
 
         // Handle potion effects
         this.updatePotionEffects(deltaTime);
@@ -160,9 +164,7 @@ export class Archer extends Hero {
             }
             this.useAbility('e');
         }
-        if (input.isUltimatePressed() && this.abilities.r) {
-            this.useUltimate();
-        }
+        // Ultimate handled by charge logic to match A1 behavior.
     }
 
     /**
@@ -205,6 +207,42 @@ export class Archer extends Hero {
 
                 this.isCharging = false;
                 this.chargeTime = 0;
+            }
+        }
+    }
+
+    /**
+     * Ultimate charge handling (match A1 charge/release feel)
+     */
+    handleUltimateChargeShot(deltaTime, input) {
+        const ability = this.abilities.r;
+        const isPressed = input.isUltimatePressed();
+        const ultimateReady = this.ultimateCharge >= this.ultimateChargeMax;
+
+        if (isPressed && ability && ability.isReady && ultimateReady && !this.isUltimateCharging && !this.isCharging) {
+            this.isUltimateCharging = true;
+            this.ultimateChargeTime = 0;
+        }
+
+        if (this.isUltimateCharging) {
+            if (isPressed) {
+                this.ultimateChargeTime = Math.min(this.ultimateChargeTime + deltaTime, this.maxChargeTime);
+                const pull = 0.08 + (this.ultimateChargeTime / this.maxChargeTime) * 0.08;
+                this.bowString.position.x = 0.05 - pull;
+                this.bowGroup.rotation.z = 0.2 + (this.ultimateChargeTime / this.maxChargeTime) * 0.2;
+            } else {
+                const chargeRatio = this.ultimateChargeTime / this.maxChargeTime;
+                this.bowString.position.x = 0.05;
+                this.bowGroup.rotation.z = 0.2;
+
+                if (ability && ability.isReady && ultimateReady) {
+                    this.pendingUltimateChargeRatio = chargeRatio;
+                    this.useUltimate();
+                    this.pendingUltimateChargeRatio = null;
+                }
+
+                this.isUltimateCharging = false;
+                this.ultimateChargeTime = 0;
             }
         }
     }
@@ -458,19 +496,22 @@ export class Archer extends Hero {
     /**
      * Activate Arrow Storm ultimate
      */
-    activateArrowStorm() {
+    activateArrowStorm(chargeRatioOverride = null) {
         if (this.arrowStormActive) {
             return false;
         }
         this.arrowStormActive = true;
         const stormDurationMs = 3000;
+        const chargeRatio = Number.isFinite(chargeRatioOverride)
+            ? chargeRatioOverride
+            : (Number.isFinite(this.pendingUltimateChargeRatio) ? this.pendingUltimateChargeRatio : 0);
         this.fireUltimateArrow((impactPoint) => {
             this.startArrowStorm(impactPoint, stormDurationMs);
-        }, stormDurationMs);
+        }, stormDurationMs, chargeRatio);
         return true;
     }
 
-    fireUltimateArrow(onImpact, stormDurationMs = 3000) {
+    fireUltimateArrow(onImpact, stormDurationMs = 3000, chargeRatio = 0) {
         const arrowGroup = new THREE.Group();
 
         const shaft = new THREE.Mesh(
@@ -515,8 +556,9 @@ export class Archer extends Hero {
         arrowGroup.rotation.z = Math.atan2(dirY, dirX);
         this.mesh.parent.add(arrowGroup);
 
-        const speed = 18;
-        const maxRange = 18;
+        const clampedCharge = Math.max(0, Math.min(1, chargeRatio));
+        const speed = 14 + clampedCharge * 10;
+        const maxRange = 14 + clampedCharge * 8;
         let traveled = 0;
 
         const level = this.level || { platforms: [] };

@@ -1132,17 +1132,11 @@ export class Player {
             return;
         }
 
-        const previousBonus = this.bonusHealth;
-        const nextBonus = Math.max(previousBonus, bonusAmount);
-        const bonusDelta = nextBonus - previousBonus;
-
-        this.bonusHealth = nextBonus;
-        this.bonusHealthTimer = Math.max(this.bonusHealthTimer, durationSeconds);
+        this.bonusHealth = bonusAmount;
+        this.bonusHealthTimer = durationSeconds;
         this.maxHealth = this.baseMaxHealth + this.bonusHealth;
-
-        if (bonusDelta > 0) {
-            this.currentHealth = Math.min(this.currentHealth + bonusDelta, this.maxHealth);
-        }
+        const baseHealth = Math.min(this.currentHealth, this.baseMaxHealth);
+        this.currentHealth = Math.min(baseHealth + this.bonusHealth, this.maxHealth);
 
         if (this.healthBar) {
             this.healthBar.setBonusHealth(this.bonusHealth);

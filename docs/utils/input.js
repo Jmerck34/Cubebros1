@@ -433,14 +433,22 @@ export class InputManager {
      * Get right stick axes for aim input.
      * @returns {{x:number,y:number}|null}
      */
-    getAimStick() {
+    getAimStick(allowLeftStickFallback = true) {
         const pad = this.gamepad;
         if (!pad || !pad.connected || !pad.axes) return null;
         const rightX = pad.axes[2] || 0;
-        const rightY = pad.axes[3] || 0;
+        let rightY = pad.axes[3] || 0;
+        if (Math.abs(rightY) < this.gamepadDeadzone && typeof pad.axes[5] === 'number') {
+            if (Math.abs(pad.axes[5]) >= this.gamepadDeadzone) {
+                rightY = pad.axes[5];
+            }
+        }
         const rightMagnitude = Math.hypot(rightX, rightY);
         if (rightMagnitude >= this.gamepadDeadzone) {
             return { x: rightX, y: rightY };
+        }
+        if (!allowLeftStickFallback) {
+            return null;
         }
         const leftX = pad.axes[0] || 0;
         const leftY = pad.axes[1] || 0;

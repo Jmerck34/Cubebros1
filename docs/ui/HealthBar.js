@@ -39,6 +39,14 @@ export class HealthBar {
         this.bonusBar.visible = false;
         this.healthBarGroup.add(this.bonusBar);
 
+        // Shield overlay (blue tint for active shields)
+        const shieldGeometry = new THREE.PlaneGeometry(1, 0.15);
+        const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x3aa9ff, transparent: true, opacity: 0.6 });
+        this.shieldOverlay = new THREE.Mesh(shieldGeometry, shieldMaterial);
+        this.shieldOverlay.position.z = 0.618;
+        this.shieldOverlay.visible = false;
+        this.healthBarGroup.add(this.shieldOverlay);
+
         // Border (black outline)
         const borderShape = new THREE.Shape();
         borderShape.moveTo(-0.52, -0.09);
@@ -68,6 +76,7 @@ export class HealthBar {
         // Animation state
         this.damageFlashTime = 0;
         this.isFlashing = false;
+        this.isShielded = false;
     }
 
     /**
@@ -150,6 +159,17 @@ export class HealthBar {
         this.bonusHealth = Math.max(0, amount);
         this.maxHealth = this.baseMaxHealth + this.bonusHealth;
         this.setHealth(this.currentHealth);
+    }
+
+    /**
+     * Toggle shield overlay visibility.
+     * @param {boolean} active
+     */
+    setShielded(active) {
+        this.isShielded = Boolean(active);
+        if (this.shieldOverlay) {
+            this.shieldOverlay.visible = this.isShielded;
+        }
     }
 
     /**

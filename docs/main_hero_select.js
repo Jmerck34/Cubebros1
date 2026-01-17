@@ -5,7 +5,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { GameLoop } from './core/gameLoop.js';
 import { InputManager } from './utils/input.js';
 import { UIManager } from './utils/ui.js';
-import { getAimDirection } from './utils/aim.js';
+import { getAimDirection, getAimWorldPosition, getMouseScreenPosition, screenToWorld, worldToScreen } from './utils/aim.js';
 import { Warrior } from './player/Warrior.js';
 import { Assassin } from './player/Assassin.js';
 import { Cyborg } from './player/Cyborg.js';
@@ -163,7 +163,7 @@ let lastGamepadRefresh = 0;
 let lastPauseStartPressed = Array(MAX_PLAYERS).fill(false);
 
 const HERO_NAMES = {
-    [Warrior.name]: '⚔️ WARRIOR',
+    [Warrior.name]: '⚔️ SAMURAI',
     [Assassin.name]: '🗡️ ASSASSIN',
     [Cyborg.name]: '🤖 CYBORG',
     [Archer.name]: '🏹 ARCHER',
@@ -973,6 +973,15 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
         const hero = new HeroClass(scene, spawn.x, spawn.y);
         hero.team = team;
         hero.spawnPoint = { x: spawn.x, y: spawn.y };
+        hero.playerIndex = i;
+        hero.reticleLayer = 1 + i;
+        if (hero.aimIndicator && typeof hero.aimIndicator.traverse === 'function') {
+            hero.aimIndicator.traverse((child) => {
+                if (child && child.layers) {
+                    child.layers.set(hero.reticleLayer);
+                }
+            });
+        }
         hero.enemies = level.enemies;
         hero.level = level;
         hero.opponents = [];
@@ -1145,16 +1154,88 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
             players.forEach((activePlayer, index) => {
                 const activeCamera = cameras[index] || camera;
                 const viewport = getViewportForIndex(index, localPlayerCount, fullWidth, fullHeight);
-                const aim = getAimDirection({
-                    input: inputs[index],
-                    camera: activeCamera,
-                    renderer,
-                    viewport,
-                    origin: activePlayer.position,
-                    useMouse: index === 0
-                });
-                if (typeof activePlayer.setAimDirection === 'function') {
-                    activePlayer.setAimDirection(aim);
+                if (activePlayer.useCursorAim) {
+                    let cursor = activePlayer.aimScreenPosition;
+                    if (!cursor) {
+                        cursor = { x: viewport.width * 0.5, y: viewport.height * 0.5 };
+                    }
+                    const mousePos = index === 0
+                        ? getMouseScreenPosition({ input: inputs[index], renderer, viewport })
+                        : null;
+                    if (mousePos) {
+                        cursor.x = mousePos.x;
+                        cursor.y = mousePos.y;
+                    } else if (typeof inputs[index].getAimStick === 'function') {
+                        const stick = inputs[index].getAimStick(activePlayer.allowLeftStickAimFallback !== false);
+                        if (stick) {
+                            const speed = activePlayer.cursorSpeed || 800;
+                            cursor.x += stick.x * speed * deltaTime;
+                            cursor.y += stick.y * speed * deltaTime;
+                        }
+                    }
+                    cursor.x = Math.max(0, Math.min(viewport.width, cursor.x));
+                    cursor.y = Math.max(0, Math.min(viewport.height, cursor.y));
+                    activePlayer.aimScreenPosition = cursor;
+                    let aimWorld = screenToWorld({
+                        camera: activeCamera,
+                        renderer,
+                        viewport,
+                        screenX: cursor.x,
+                        screenY: cursor.y
+                    });
+                    if (aimWorld) {
+                        const margin = 1;
+                        const worldLeft = activeCamera.left + activeCamera.position.x + margin;
+                        const worldRight = activeCamera.right + activeCamera.position.x - margin;
+                        const worldTop = activeCamera.top + activeCamera.position.y - margin;
+                        const worldBottom = activeCamera.bottom + activeCamera.position.y + margin;
+                        aimWorld.x = Math.max(worldLeft, Math.min(worldRight, aimWorld.x));
+                        aimWorld.y = Math.max(worldBottom, Math.min(worldTop, aimWorld.y));
+                        const clampedScreen = worldToScreen({
+                            camera: activeCamera,
+                            renderer,
+                            viewport,
+                            worldX: aimWorld.x,
+                            worldY: aimWorld.y
+                        });
+                        if (clampedScreen) {
+                            cursor.x = clampedScreen.x;
+                            cursor.y = clampedScreen.y;
+                        }
+                    }
+                    if (typeof activePlayer.setAimWorldPosition === 'function') {
+                        activePlayer.setAimWorldPosition(aimWorld);
+                    }
+                    if (aimWorld && typeof activePlayer.setAimDirection === 'function') {
+                        const dx = aimWorld.x - activePlayer.position.x;
+                        const dy = aimWorld.y - activePlayer.position.y;
+                        const length = Math.hypot(dx, dy);
+                        activePlayer.setAimDirection(length > 0.001 ? { x: dx / length, y: dy / length } : null);
+                    }
+                } else {
+                    const aim = getAimDirection({
+                        input: inputs[index],
+                        camera: activeCamera,
+                        renderer,
+                        viewport,
+                        origin: activePlayer.position,
+                        useMouse: index === 0,
+                        allowLeftStickFallback: activePlayer.allowLeftStickAimFallback !== false
+                    });
+                    if (typeof activePlayer.setAimDirection === 'function') {
+                        activePlayer.setAimDirection(aim);
+                    }
+                    const aimWorld = getAimWorldPosition({
+                        input: inputs[index],
+                        camera: activeCamera,
+                        renderer,
+                        viewport,
+                        useMouse: index === 0,
+                        allowLeftStickFallback: activePlayer.allowLeftStickAimFallback !== false
+                    });
+                    if (typeof activePlayer.setAimWorldPosition === 'function') {
+                        activePlayer.setAimWorldPosition(aimWorld);
+                    }
                 }
             });
 
@@ -1167,7 +1248,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                     activePlayer.velocity.y = 0;
                     return;
                 }
-                activePlayer.forceControlsLocked = false;
+                activePlayer.forceControlsLocked = Boolean(activePlayer.isBeamActive);
                 if (activeInput) {
                     activePlayer.update(deltaTime, activeInput);
                 }
@@ -1263,9 +1344,14 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                 for (let i = 0; i < localPlayerCount; i += 1) {
                     const viewport = getViewportForIndex(i, localPlayerCount, fullWidth, fullHeight);
                     const activeCamera = cameras[i] || camera;
+                    const activePlayer = players[i];
                     updateCameraFrustum(activeCamera, viewport.width, viewport.height);
                     renderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height);
                     renderer.setScissor(viewport.x, viewport.y, viewport.width, viewport.height);
+                    activeCamera.layers.set(0);
+                    if (activePlayer && Number.isFinite(activePlayer.reticleLayer)) {
+                        activeCamera.layers.enable(activePlayer.reticleLayer);
+                    }
                     renderer.render(scene, activeCamera);
                 }
 
@@ -1275,6 +1361,10 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                 renderer.setScissorTest(false);
                 updateCameraFrustum(camera, fullWidth, fullHeight);
                 renderer.setViewport(0, 0, fullWidth, fullHeight);
+                camera.layers.set(0);
+                if (player && Number.isFinite(player.reticleLayer)) {
+                    camera.layers.enable(player.reticleLayer);
+                }
                 renderer.render(scene, camera);
             }
         }

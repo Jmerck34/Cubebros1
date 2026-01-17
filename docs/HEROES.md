@@ -7,7 +7,7 @@ This game features 4 unique hero classes, each with distinct playstyles and abil
 Edit `main_all_heroes.js` and uncomment the hero you want to play:
 
 ```javascript
-// Option 1: Warrior (Sword & Shield)
+// Option 1: Samurai (Katana)
 const player = new Warrior(scene, 0, 0);
 
 // Option 2: Assassin (Dual Daggers)
@@ -25,11 +25,11 @@ const player = new Warrior(scene, 0, 0);
 
 ---
 
-## ⚔️ Warrior - Sword & Shield Tank
+## ⚔️ Samurai - Katana Fighter
 
-**Theme:** Melee fighter with high survivability
-**Color:** Blue
-**Weapon:** Sword and Shield
+**Theme:** Katana duelist with high survivability
+**Color:** Dark Red
+**Weapon:** Katana
 
 ### Abilities:
 - **Q / Left Click - Sword Slash** (2s cooldown)
@@ -38,7 +38,7 @@ const player = new Warrior(scene, 0, 0);
   - Deals damage in arc pattern
 
 - **W - Shield Bash** (4s cooldown)
-  - Bash forward with shield
+  - Bash forward with a guard strike
   - Damages and knocks back enemies
   - Small forward dash
 
@@ -52,7 +52,7 @@ const player = new Warrior(scene, 0, 0);
   - Large damage radius
   - 2 full rotations
 
-**Playstyle:** Tank/Bruiser - Get in close and deal sustained damage while surviving with mobility
+**Playstyle:** Bruiser/Duelist - Close-range pressure with strong mobility
 
 ---
 
@@ -204,7 +204,7 @@ const player = new Warrior(scene, 0, 0);
 
 | Hero | Difficulty | Range | Damage | Survivability | Mobility |
 |------|-----------|-------|---------|---------------|----------|
-| Warrior | Easy | Melee | Medium | High | Medium |
+| Samurai | Easy | Melee | Medium | High | Medium |
 | Assassin | Hard | Melee | Very High | Medium | High |
 | Cyborg | Medium | Ranged | High | Medium | Low |
 | Warlock | Medium | Medium | Medium | Low | High |
@@ -214,7 +214,7 @@ const player = new Warrior(scene, 0, 0);
 
 ## Tips
 
-### Warrior
+### Samurai
 - Use Shield Bash to create distance then Dash to engage
 - Whirlwind is best when surrounded
 - Very forgiving for beginners
@@ -246,7 +246,7 @@ const player = new Warrior(scene, 0, 0);
 
 ## Files
 
-- `player/Warrior.js` - Warrior class implementation
+- `player/Warrior.js` - Samurai (Warrior) class implementation
 - `player/Assassin.js` - Assassin class implementation
 - `player/Cyborg.js` - Cyborg class implementation
 - `player/Warlock.js` - Warlock class implementation

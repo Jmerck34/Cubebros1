@@ -9,7 +9,7 @@ Brief descriptions of every exported class in `threejs-platformer/docs`.
 - `Player` - Base controllable character with physics, health, and collisions.
 - `Hero` - Player subclass that adds abilities and hero-specific state.
 - `Ability` - Cooldown + usage wrapper for hero abilities.
-- `Warrior` - Melee-focused hero.
+- `Warrior` - Samurai (melee-focused hero).
 - `Assassin` - Fast, burst-damage hero.
 - `Archer` - Ranged, projectile hero.
 - `Warlock` - Magic/control hero.
