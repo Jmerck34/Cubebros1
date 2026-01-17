@@ -143,25 +143,32 @@ export class Paladin extends Hero {
      */
     crushingMaceAttack() {
         this.maceBasicCounter += 1;
+        const direction = this.getSmoothAimDirection();
+        if (Math.abs(direction.x) > 0.1) {
+            this.setFacingDirection(direction.x >= 0 ? 1 : -1);
+        }
         if (this.maceBasicCounter % 3 === 0) {
-            this.throwBoomerangMace();
+            this.throwBoomerangMace(direction);
             return;
         }
         const originalRot = this.maceBase.rotZ;
         this.mace.rotation.z = -1.2;
         setTimeout(() => {
             this.mace.rotation.z = 0.6;
-            this.createMaceSmashEffect();
-            this.applyMaceDamage();
+            this.createMaceSmashEffect(direction);
+            this.applyMaceDamage(direction);
         }, 140);
         setTimeout(() => {
             this.mace.rotation.z = originalRot;
         }, 320);
     }
 
-    throwBoomerangMace() {
+    throwBoomerangMace(direction) {
         if (!this.mesh || !this.mesh.parent) return;
-        const direction = this.facingDirection || 1;
+        const aim = direction || this.getSmoothAimDirection();
+        const dirX = Number.isFinite(aim.x) ? aim.x : (this.facingDirection || 1);
+        const dirY = Number.isFinite(aim.y) ? aim.y : 0;
+        const spinDir = Math.sign(dirX || this.facingDirection || 1) || 1;
         const projectile = new THREE.Group();
 
         const handleGeometry = new THREE.BoxGeometry(0.14, 0.9, 0.1);
@@ -177,13 +184,13 @@ export class Paladin extends Hero {
         projectile.add(head);
 
         projectile.scale.set(1.1, 1.1, 1.1);
-        projectile.position.set(this.position.x + 0.6 * direction, this.position.y + 0.2, 0.2);
-        projectile.rotation.z = Math.PI / 2 * direction;
+        projectile.position.set(this.position.x + 0.6 * dirX, this.position.y + 0.6 * dirY + 0.15, 0.2);
+        projectile.rotation.z = Math.PI / 2 * spinDir;
         this.mesh.parent.add(projectile);
 
         const speed = 10;
         const maxRange = 6;
-        const hitTargets = new Set();
+        const hitTargets = new Map();
         const startPos = { x: projectile.position.x, y: projectile.position.y };
         let returning = false;
         let traveled = 0;
@@ -191,7 +198,8 @@ export class Paladin extends Hero {
         const interval = setInterval(() => {
             const step = speed * 0.016;
             if (!returning) {
-                projectile.position.x += step * direction;
+                projectile.position.x += step * dirX;
+                projectile.position.y += step * dirY;
                 traveled += step;
                 if (traveled >= maxRange) {
                     returning = true;
@@ -213,7 +221,7 @@ export class Paladin extends Hero {
                 projectile.position.y += dirY * step;
             }
 
-            projectile.rotation.z += 0.35 * direction;
+            projectile.rotation.z += 0.35 * spinDir;
 
             const bounds = {
                 left: projectile.position.x - 0.35,
@@ -223,18 +231,25 @@ export class Paladin extends Hero {
             };
 
             for (const enemy of this.getDamageTargets()) {
-                if (!enemy.isAlive || hitTargets.has(enemy)) continue;
+                if (!enemy.isAlive) continue;
+                const hitState = hitTargets.get(enemy) || { outbound: false, inbound: false };
+                if (!returning && hitState.outbound) continue;
+                if (returning && hitState.inbound) continue;
                 const enemyBounds = enemy.getBounds();
                 if (checkAABBCollision(bounds, enemyBounds)) {
-                    this.applyAbilityDamage(this.abilities.q, enemy, 2);
                     if (typeof enemy.takeDamage === 'function') {
-                        enemy.takeDamage(10, this);
+                        enemy.takeDamage(20, this);
                     }
                     if (enemy.type === 'player') {
                         this.addUltimateCharge(this.ultimateChargePerKill);
                     }
                     this.registerCrushingHit(enemy);
-                    hitTargets.add(enemy);
+                    if (!returning) {
+                        hitState.outbound = true;
+                    } else {
+                        hitState.inbound = true;
+                    }
+                    hitTargets.set(enemy, hitState);
                 }
             }
 
@@ -244,23 +259,32 @@ export class Paladin extends Hero {
         }, 16);
     }
 
-    applyMaceDamage() {
+    applyMaceDamage(direction) {
+        const aim = direction || this.getSmoothAimDirection();
+        let dirX = Number.isFinite(aim.x) ? aim.x : (this.facingDirection || 1);
+        let dirY = Number.isFinite(aim.y) ? aim.y : 0;
+        const length = Math.hypot(dirX, dirY) || 1;
+        dirX /= length;
+        dirY /= length;
         const range = 2.4;
         const height = 1.4;
+        const centerX = this.position.x + dirX * range * 0.7;
+        const centerY = this.position.y + dirY * range * 0.5;
+        const halfW = 1.1 + Math.abs(dirX) * 0.6;
+        const halfH = 0.9 + Math.abs(dirY) * 0.6;
         const bounds = {
-            left: this.position.x + (this.facingDirection > 0 ? 0.1 : -range),
-            right: this.position.x + (this.facingDirection > 0 ? range : -0.1),
-            top: this.position.y + height * 0.6,
-            bottom: this.position.y - height * 0.6
+            left: centerX - halfW,
+            right: centerX + halfW,
+            top: centerY + halfH,
+            bottom: centerY - halfH
         };
 
         for (const enemy of this.getDamageTargets()) {
             if (!enemy.isAlive) continue;
             const enemyBounds = enemy.getBounds();
             if (checkAABBCollision(bounds, enemyBounds)) {
-                this.applyAbilityDamage(this.abilities.q, enemy, 2);
                 if (typeof enemy.takeDamage === 'function') {
-                    enemy.takeDamage(10, this);
+                    enemy.takeDamage(20, this);
                 }
                 if (enemy.type === 'player') {
                     this.addUltimateCharge(this.ultimateChargePerKill);
@@ -280,17 +304,132 @@ export class Paladin extends Hero {
         existing.last = now;
         if (existing.count >= 2 && typeof enemy.setCripple === 'function') {
             enemy.setCripple(1.8);
+            this.createSmiteLightning(enemy);
             existing.count = 0;
         }
         this.maceHitTracker.set(enemy, existing);
     }
 
-    createMaceSmashEffect() {
+    createSmiteLightning(enemy) {
+        if (!this.mesh || !this.mesh.parent || !enemy) return;
+        const originX = enemy.position?.x ?? this.position.x;
+        const originY = enemy.position?.y ?? this.position.y;
+        const height = 4.6;
+        const topY = originY + height;
+        const segments = 6;
+        const points = [];
+        for (let i = 0; i <= segments; i++) {
+            const t = i / segments;
+            const jitter = (Math.random() - 0.5) * 0.35;
+            points.push(new THREE.Vector3(originX + jitter, topY - height * t, 0.45));
+        }
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const boltGeometry = new THREE.TubeGeometry(curve, 20, 0.065, 6, false);
+        const boltMaterial = new THREE.MeshBasicMaterial({
+            color: 0xfff6c4,
+            transparent: true,
+            opacity: 0.98
+        });
+        const bolt = new THREE.Mesh(boltGeometry, boltMaterial);
+        bolt.renderOrder = 12;
+
+        const glowGeometry = new THREE.TubeGeometry(curve, 20, 0.12, 6, false);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffe39b,
+            transparent: true,
+            opacity: 0.55
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        glow.renderOrder = 11;
+
+        const taperGeometry = (geometry, centerX, centerZ) => {
+            geometry.computeBoundingBox();
+            const maxY = geometry.boundingBox.max.y;
+            const minY = geometry.boundingBox.min.y;
+            const range = Math.max(0.0001, maxY - minY);
+            const pos = geometry.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                const x = pos.getX(i);
+                const y = pos.getY(i);
+                const z = pos.getZ(i);
+                const t = (maxY - y) / range;
+                const scale = Math.max(0, Math.min(1, t));
+                const nextX = centerX + (x - centerX) * scale;
+                const nextZ = centerZ + (z - centerZ) * scale;
+                pos.setX(i, nextX);
+                pos.setZ(i, nextZ);
+            }
+            pos.needsUpdate = true;
+        };
+
+        taperGeometry(boltGeometry, originX, 0.45);
+        taperGeometry(glowGeometry, originX, 0.45);
+
+        const flash = new THREE.Mesh(
+            new THREE.CircleGeometry(0.42, 18),
+            new THREE.MeshBasicMaterial({ color: 0xfff2d6, transparent: true, opacity: 0.45 })
+        );
+        flash.position.set(originX, originY + 0.1, 0.46);
+        flash.renderOrder = 13;
+
+        const bottomConeGeometry = new THREE.ConeGeometry(0.32, 0.6, 14);
+        const bottomConeMaterial = new THREE.MeshBasicMaterial({
+            color: 0xfff0b8,
+            transparent: true,
+            opacity: 0.75
+        });
+        const bottomCone = new THREE.Mesh(bottomConeGeometry, bottomConeMaterial);
+        bottomCone.rotation.x = Math.PI;
+        bottomCone.position.set(originX, originY + 0.3, 0.45);
+        bottomCone.renderOrder = 12;
+
+        const halo = new THREE.Mesh(
+            new THREE.RingGeometry(0.42, 0.68, 20),
+            new THREE.MeshBasicMaterial({
+                color: 0xffe6b3,
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            })
+        );
+        halo.position.set(originX, originY + 0.12, 0.44);
+        halo.renderOrder = 12;
+
+        const group = new THREE.Group();
+        group.add(glow, bolt, bottomCone, halo, flash);
+        this.mesh.parent.add(group);
+
+        let elapsed = 0;
+        const interval = setInterval(() => {
+            elapsed += 0.016;
+            const fade = Math.max(0, 1 - elapsed * 4.5);
+            boltMaterial.opacity = 0.98 * fade;
+            glowMaterial.opacity = 0.55 * fade;
+            flash.material.opacity = 0.45 * fade;
+            halo.material.opacity = 0.4 * fade;
+            bottomConeMaterial.opacity = 0.75 * fade;
+            if (fade <= 0.02) {
+                clearInterval(interval);
+                if (group.parent) {
+                    group.parent.remove(group);
+                }
+            }
+        }, 16);
+    }
+
+    createMaceSmashEffect(direction) {
+        const aim = direction || this.getSmoothAimDirection();
+        let dirX = Number.isFinite(aim.x) ? aim.x : (this.facingDirection || 1);
+        let dirY = Number.isFinite(aim.y) ? aim.y : 0;
+        const length = Math.hypot(dirX, dirY) || 1;
+        dirX /= length;
+        dirY /= length;
         const impact = new THREE.Mesh(
             new THREE.RingGeometry(0.2, 0.8, 16),
             new THREE.MeshBasicMaterial({ color: 0xe6f2ff, transparent: true, opacity: 0.6 })
         );
-        impact.position.set(this.position.x + this.facingDirection * 1.1, this.position.y - 0.05, 0.2);
+        impact.position.set(this.position.x + dirX * 1.1, this.position.y + dirY * 0.7, 0.2);
         this.mesh.parent.add(impact);
 
         let scale = 1;
@@ -330,6 +469,12 @@ export class Paladin extends Hero {
                 this.mesh.parent.remove(ring);
             }
         }, 40);
+    }
+
+    getSmoothAimDirection() {
+        const aimDir = this.hasAimInput ? this.getAimDirection() : { x: this.facingDirection || 1, y: 0 };
+        const aimLength = Math.hypot(aimDir.x, aimDir.y) || 1;
+        return { x: aimDir.x / aimLength, y: aimDir.y / aimLength };
     }
 
     createSlamWind(x, y) {

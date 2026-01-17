@@ -153,7 +153,7 @@
         }
 
         body.menu-split-active #menu-split-border {
-            display: block;
+            display: none;
         }
 
         #ladder-hint {
@@ -464,11 +464,13 @@
         }
 
         #team-menu.split {
-            flex-direction: row;
-            justify-content: space-evenly;
-            gap: 40px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-rows: 1fr;
+            align-items: center;
+            justify-items: center;
+            gap: 0;
             text-align: center;
-            flex-wrap: wrap;
         }
 
         #mode-menu,
@@ -592,6 +594,12 @@
             align-items: center;
             gap: 12px;
             min-width: 240px;
+        }
+
+        #team-menu.split .team-menu-panel {
+            width: 100%;
+            min-width: 0;
+            max-width: 520px;
         }
 
         .team-menu-panel h2 {

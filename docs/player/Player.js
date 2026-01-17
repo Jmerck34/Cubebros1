@@ -5,6 +5,7 @@ import { checkAABBCollision } from '../utils/collision.js';
 import { HealthBar } from '../ui/HealthBar.js';
 import { spawnDamageNumber } from '../utils/damageNumbers.js';
 import { normalizeVisibilityLayer, visibilityLayerToZ, VISIBILITY_LAYERS } from '../utils/visibility.js';
+import { Shield } from './Shield.js';
 
 function createTextSprite(text, options = {}) {
     const canvas = document.createElement('canvas');
@@ -159,9 +160,12 @@ export class Player {
         this.baseMaxHealth = 100;
         this.bonusHealth = 0;
         this.bonusHealthTimer = 0;
+        this.shieldStatus = new Shield();
+        this.lastShieldAmount = 0;
         this.maxHealth = this.baseMaxHealth + this.bonusHealth;
         this.currentHealth = this.maxHealth;
         this.healthBar = new HealthBar(scene, this, this.baseMaxHealth);
+        this.healthBar.setShield(0);
 
         if (!Player.instances) {
             Player.instances = new Set();
@@ -419,6 +423,7 @@ export class Player {
      */
     setFrozen(durationSeconds = 1.2) {
         if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
         this.frozenTimer = Math.max(this.frozenTimer, durationSeconds);
     }
 
@@ -428,6 +433,7 @@ export class Player {
      */
     setStunned(durationSeconds = 0.6) {
         if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
         this.stunTimer = Math.max(this.stunTimer, durationSeconds);
         if (!this.stunEffect) {
             this.createStunEffect();
@@ -510,6 +516,7 @@ export class Player {
      */
     setSlowed(durationSeconds = 1.2, multiplier = 0.7) {
         if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
         this.slowTimer = Math.max(this.slowTimer, durationSeconds);
         this.slowMultiplier = Math.min(this.slowMultiplier, multiplier);
     }
@@ -618,6 +625,7 @@ export class Player {
      */
     applyFear(sourceX, durationSeconds = 0.7) {
         if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
         this.fearTimer = Math.max(this.fearTimer, durationSeconds);
         this.fearDirection = this.position.x >= sourceX ? 1 : -1;
     }
@@ -628,6 +636,7 @@ export class Player {
      */
     applyMindControl(durationSeconds = 2.5) {
         if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
         this.mindControlTimer = Math.max(this.mindControlTimer, durationSeconds);
     }
 
@@ -637,6 +646,7 @@ export class Player {
      */
     setCripple(durationSeconds = 1.5) {
         if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
         this.crippleTimer = Math.max(this.crippleTimer, durationSeconds);
     }
 
@@ -673,6 +683,30 @@ export class Player {
         this.poisonEffect = null;
 
         this.setEffectColor(this.baseColor);
+    }
+
+    /**
+     * Clear crowd control effects only (freeze/stun/slow/fear/mind control/cripple).
+     */
+    clearCrowdControl() {
+        this.frozenTimer = 0;
+        this.stunTimer = 0;
+        this.fearTimer = 0;
+        this.mindControlTimer = 0;
+        this.slowTimer = 0;
+        this.slowMultiplier = 1;
+        this.crippleTimer = 0;
+        this.jumpDisabled = false;
+        this.controlsLocked = false;
+        this.controlsInverted = false;
+        this.fearDirection = 0;
+        this.isFrozen = false;
+        this.isStunned = false;
+
+        if (this.stunEffect && this.stunEffect.parent) {
+            this.stunEffect.parent.remove(this.stunEffect);
+        }
+        this.stunEffect = null;
     }
 
     /**
@@ -783,6 +817,7 @@ export class Player {
 
         this.updateStatusEffects(deltaTime);
         this.updateBonusHealth(deltaTime);
+        this.updateShield(deltaTime);
 
         if (!Number.isFinite(this.currentHealth)) {
             this.currentHealth = 0;
@@ -1093,8 +1128,35 @@ export class Player {
             this.currentHealth = this.maxHealth;
         }
 
-        this.currentHealth = Math.max(0, this.currentHealth - damage);
-        this.healthBar.takeDamage(damage);
+        let remainingDamage = damage;
+        if (this.shieldStatus && this.shieldStatus.isActive) {
+            const beforeShield = this.shieldStatus.amount;
+            remainingDamage = this.shieldStatus.absorb(remainingDamage);
+            if (this.healthBar && beforeShield !== this.shieldStatus.amount) {
+                this.healthBar.setShield(this.shieldStatus.amount);
+            }
+            if (beforeShield > 0 && this.shieldStatus.amount === 0) {
+                this.spawnShieldBreakEffect();
+            }
+        }
+
+        if (this.bonusHealth > 0) {
+            const shieldDamage = Math.min(this.bonusHealth, remainingDamage);
+            this.bonusHealth = Math.max(0, this.bonusHealth - shieldDamage);
+            remainingDamage -= shieldDamage;
+            const baseHealth = Math.min(this.currentHealth, this.baseMaxHealth);
+            this.currentHealth = Math.min(baseHealth + this.bonusHealth, this.baseMaxHealth + this.bonusHealth);
+            if (this.healthBar) {
+                this.healthBar.setBonusHealth(this.bonusHealth);
+            }
+        }
+
+        if (remainingDamage > 0) {
+            this.currentHealth = Math.max(0, this.currentHealth - remainingDamage);
+        }
+        if (this.healthBar) {
+            this.healthBar.setHealth(this.currentHealth);
+        }
 
         if (this.currentHealth <= 0) {
             this.lastDeathWasPit = false;
@@ -1119,6 +1181,39 @@ export class Player {
     heal(amount) {
         this.currentHealth = Math.min(this.currentHealth + amount, this.maxHealth);
         this.healthBar.heal(amount);
+    }
+
+    /**
+     * Apply a shield amount that absorbs damage before health.
+     * @param {number} amount
+     * @param {number} durationSeconds
+     */
+    addShield(amount, durationSeconds = 0) {
+        if (!this.shieldStatus) return;
+        const nextAmount = Math.max(0, Math.round(amount));
+        if (nextAmount <= 0) return;
+        const applied = Math.max(this.shieldStatus.amount, nextAmount);
+        this.shieldStatus.set(applied, durationSeconds);
+        this.clearCrowdControl();
+        if (this.healthBar) {
+            this.healthBar.setShield(this.shieldStatus.amount);
+        }
+    }
+
+    /**
+     * Update shield timer.
+     * @param {number} deltaTime
+     */
+    updateShield(deltaTime) {
+        if (!this.shieldStatus) return;
+        const before = this.shieldStatus.amount;
+        this.shieldStatus.update(deltaTime);
+        if (before !== this.shieldStatus.amount && this.healthBar) {
+            this.healthBar.setShield(this.shieldStatus.amount);
+        }
+        if (before > 0 && this.shieldStatus.amount === 0) {
+            this.spawnShieldBreakEffect();
+        }
     }
 
     /**
@@ -1206,9 +1301,13 @@ export class Player {
         this.isAlive = false;
         this.respawnTimer = this.respawnDelay;
         this.clearHealthBonus();
+        if (this.shieldStatus) {
+            this.shieldStatus.set(0, 0);
+        }
         this.clearStatusEffects();
         this.currentHealth = 0;
         this.healthBar.setHealth(0);
+        this.healthBar.setShield(0);
         this.healthBar.hide();
         this.mesh.visible = false;
         this.position.x = this.spawnPoint.x;
@@ -1227,8 +1326,12 @@ export class Player {
     respawn() {
         this.isAlive = true;
         this.clearHealthBonus();
+        if (this.shieldStatus) {
+            this.shieldStatus.set(0, 0);
+        }
         this.currentHealth = this.maxHealth;
         this.healthBar.setHealth(this.maxHealth);
+        this.healthBar.setShield(0);
         this.healthBar.show();
         this.mesh.visible = true;
         this.landSoundReady = false;
@@ -1335,6 +1438,80 @@ export class Player {
      */
     getHealth() {
         return this.currentHealth;
+    }
+
+    /**
+     * Check if the player has any active shields.
+     * @returns {boolean}
+     */
+    hasActiveShield() {
+        return Boolean(this.shieldStatus && this.shieldStatus.isActive);
+    }
+
+    spawnShieldBreakEffect() {
+        if (!this.scene) return;
+        const group = new THREE.Group();
+        group.position.set(this.position.x, this.position.y, 0.55);
+        this.scene.add(group);
+
+        const ringGeometry = new THREE.RingGeometry(0.55, 0.72, 24);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0x6fd8ff,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide,
+            depthTest: false
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.renderOrder = 15;
+        group.add(ring);
+
+        const shards = [];
+        const shardCount = 10;
+        for (let i = 0; i < shardCount; i++) {
+            const shardGeometry = new THREE.PlaneGeometry(0.08, 0.02);
+            const shardMaterial = new THREE.MeshBasicMaterial({
+                color: 0x8fe6ff,
+                transparent: true,
+                opacity: 0.9,
+                depthTest: false
+            });
+            const shard = new THREE.Mesh(shardGeometry, shardMaterial);
+            const angle = (i / shardCount) * Math.PI * 2 + Math.random() * 0.4;
+            shard.position.set(Math.cos(angle) * 0.15, Math.sin(angle) * 0.15, 0.02);
+            shard.rotation.z = angle;
+            shard.renderOrder = 16;
+            group.add(shard);
+            shards.push({
+                mesh: shard,
+                velocity: {
+                    x: Math.cos(angle) * (1.2 + Math.random() * 0.6),
+                    y: Math.sin(angle) * (1.2 + Math.random() * 0.6)
+                }
+            });
+        }
+
+        let elapsed = 0;
+        const interval = setInterval(() => {
+            elapsed += 0.016;
+            const scale = 1 + elapsed * 2.2;
+            ring.scale.set(scale, scale, 1);
+            ring.material.opacity = Math.max(0, 0.9 - elapsed * 2.2);
+
+            shards.forEach((shard) => {
+                shard.mesh.position.x += shard.velocity.x * 0.016;
+                shard.mesh.position.y += shard.velocity.y * 0.016;
+                shard.mesh.rotation.z += 0.2;
+                shard.mesh.material.opacity = Math.max(0, 0.9 - elapsed * 2.4);
+            });
+
+            if (elapsed >= 0.45) {
+                clearInterval(interval);
+                if (group.parent) {
+                    group.parent.remove(group);
+                }
+            }
+        }, 16);
     }
 
     /**

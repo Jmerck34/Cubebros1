@@ -1248,7 +1248,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                     activePlayer.velocity.y = 0;
                     return;
                 }
-                activePlayer.forceControlsLocked = Boolean(activePlayer.isBeamActive);
+                activePlayer.forceControlsLocked = false;
                 if (activeInput) {
                     activePlayer.update(deltaTime, activeInput);
                 }
@@ -1415,7 +1415,7 @@ function showTeamMenu() {
     syncTeamMenuForMode();
     if (teamMenu) {
         teamMenu.style.display = 'flex';
-        teamMenu.classList.toggle('split', localMultiplayerEnabled);
+        teamMenu.classList.toggle('split', localPlayerCount >= 2);
     }
     if (heroMenu) {
         heroMenu.style.display = 'none';

@@ -10,8 +10,10 @@ export class HealthBar {
         this.player = player;
         this.baseMaxHealth = maxHealth;
         this.bonusHealth = 0;
+        this.shieldAmount = 0;
         this.maxHealth = this.baseMaxHealth + this.bonusHealth;
         this.currentHealth = maxHealth;
+        this.shieldGap = 0.08;
 
         // Create health bar container group
         this.healthBarGroup = new THREE.Group();
@@ -39,13 +41,34 @@ export class HealthBar {
         this.bonusBar.visible = false;
         this.healthBarGroup.add(this.bonusBar);
 
-        // Shield overlay (blue tint for active shields)
+        // Shield bar (separate bar to the right when shields are active)
+        const shieldBorderGeometry = new THREE.PlaneGeometry(1.06, 0.19);
+        const shieldBorderMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        this.shieldBorder = new THREE.Mesh(shieldBorderGeometry, shieldBorderMaterial);
+        this.shieldBorder.position.z = 0.614;
+        this.shieldBorder.scale.x = 0;
+        this.shieldBorder.visible = false;
+        this.healthBarGroup.add(this.shieldBorder);
+
         const shieldGeometry = new THREE.PlaneGeometry(1, 0.15);
-        const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x3aa9ff, transparent: true, opacity: 0.6 });
-        this.shieldOverlay = new THREE.Mesh(shieldGeometry, shieldMaterial);
-        this.shieldOverlay.position.z = 0.618;
-        this.shieldOverlay.visible = false;
-        this.healthBarGroup.add(this.shieldOverlay);
+        const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x4fe4ff });
+        this.shieldBar = new THREE.Mesh(shieldGeometry, shieldMaterial);
+        this.shieldBar.position.z = 0.616;
+        this.shieldBar.scale.x = 0;
+        this.shieldBar.visible = false;
+        this.healthBarGroup.add(this.shieldBar);
+
+        const shieldGlowGeometry = new THREE.PlaneGeometry(1.08, 0.2);
+        const shieldGlowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x6fd8ff,
+            transparent: true,
+            opacity: 0.35
+        });
+        this.shieldGlow = new THREE.Mesh(shieldGlowGeometry, shieldGlowMaterial);
+        this.shieldGlow.position.z = 0.613;
+        this.shieldGlow.scale.x = 0;
+        this.shieldGlow.visible = false;
+        this.healthBarGroup.add(this.shieldGlow);
 
         // Border (black outline)
         const borderShape = new THREE.Shape();
@@ -76,7 +99,6 @@ export class HealthBar {
         // Animation state
         this.damageFlashTime = 0;
         this.isFlashing = false;
-        this.isShielded = false;
     }
 
     /**
@@ -103,7 +125,8 @@ export class HealthBar {
 
         // Update health bar width
         const baseMax = Math.max(1, this.baseMaxHealth);
-        const baseHealth = Math.min(this.currentHealth, this.baseMaxHealth);
+        const shieldHealth = Math.max(0, this.bonusHealth);
+        const baseHealth = Math.max(0, Math.min(this.currentHealth - shieldHealth, this.baseMaxHealth));
         const healthPercentage = baseHealth / baseMax;
         this.foreground.scale.x = healthPercentage;
 
@@ -120,8 +143,7 @@ export class HealthBar {
             this.foreground.material.color.set(0xff6600); // Orange-red
         }
 
-        const bonusRemaining = Math.max(0, this.currentHealth - this.baseMaxHealth);
-        const bonusPercent = bonusRemaining / baseMax;
+        const bonusPercent = shieldHealth / baseMax;
         if (bonusPercent > 0) {
             const shieldWidth = Math.min(bonusPercent, 1);
             const baseEnd = -0.5 + healthPercentage;
@@ -134,6 +156,8 @@ export class HealthBar {
             this.bonusBar.scale.x = 0;
             this.bonusBar.visible = false;
         }
+
+        this.updateShieldBar();
 
         // Trigger damage flash if health decreased
         if (health < previousHealth) {
@@ -162,13 +186,36 @@ export class HealthBar {
     }
 
     /**
-     * Toggle shield overlay visibility.
-     * @param {boolean} active
+     * Set current shield amount.
+     * @param {number} amount
      */
-    setShielded(active) {
-        this.isShielded = Boolean(active);
-        if (this.shieldOverlay) {
-            this.shieldOverlay.visible = this.isShielded;
+    setShield(amount) {
+        this.shieldAmount = Math.max(0, amount);
+        this.updateShieldBar();
+    }
+
+    updateShieldBar() {
+        if (!this.shieldBar || !this.shieldGlow || !this.shieldBorder) return;
+        const baseMax = Math.max(1, this.baseMaxHealth);
+        const shieldPercent = Math.min(1, this.shieldAmount / baseMax);
+        if (shieldPercent > 0) {
+            const shieldWidth = shieldPercent;
+            this.shieldBorder.scale.x = shieldWidth;
+            this.shieldBorder.position.x = 0.5 + this.shieldGap + shieldWidth / 2;
+            this.shieldBorder.visible = true;
+            this.shieldBar.scale.x = shieldWidth;
+            this.shieldBar.position.x = 0.5 + this.shieldGap + shieldWidth / 2;
+            this.shieldBar.visible = true;
+            this.shieldGlow.scale.x = shieldWidth;
+            this.shieldGlow.position.x = this.shieldBar.position.x;
+            this.shieldGlow.visible = true;
+        } else {
+            this.shieldBorder.scale.x = 0;
+            this.shieldBorder.visible = false;
+            this.shieldBar.scale.x = 0;
+            this.shieldBar.visible = false;
+            this.shieldGlow.scale.x = 0;
+            this.shieldGlow.visible = false;
         }
     }
 
