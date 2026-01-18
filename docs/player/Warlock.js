@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { Hero } from './Hero.js';
 import { Ability } from './Ability.js';
+import { PLAYER_SPEED } from '../core/constants.js';
 import { checkAABBCollision } from '../utils/collision.js';
 
 /**
@@ -171,25 +172,44 @@ export class Warlock extends Hero {
             }
             // Custom update without gravity
             this.velocity.x = 0;
+            this.velocity.y = 0;
+            const hoverSpeed = PLAYER_SPEED * 1.1;
             let leftPressed = input.isLeftPressed();
             let rightPressed = input.isRightPressed();
+            let upPressed = input.isJumpPressed() || input.isUpPressed();
+            let downPressed = input.isDownPressed();
             if (this.controlsInverted) {
                 const swap = leftPressed;
                 leftPressed = rightPressed;
                 rightPressed = swap;
+                const swapY = upPressed;
+                upPressed = downPressed;
+                downPressed = swapY;
             }
             if (this.fearTimer > 0 && this.fearDirection) {
-                this.velocity.x = 5 * this.fearDirection;
+                this.velocity.x = hoverSpeed * this.fearDirection;
             } else {
                 if (leftPressed) {
-                    this.velocity.x = -5; // Slower while hovering
+                    this.velocity.x = -hoverSpeed;
                 }
                 if (rightPressed) {
-                    this.velocity.x = 5;
+                    this.velocity.x = hoverSpeed;
                 }
+            }
+            if (upPressed) {
+                this.velocity.y = hoverSpeed;
+            }
+            if (downPressed) {
+                this.velocity.y = -hoverSpeed;
+            }
+
+            if (this.velocity.x !== 0 && this.velocity.y !== 0) {
+                this.velocity.x *= 0.707;
+                this.velocity.y *= 0.707;
             }
 
             this.position.x += this.velocity.x * deltaTime;
+            this.position.y += this.velocity.y * deltaTime;
 
             // Update hover cloud position
             if (this.hoverCloud) {
@@ -581,10 +601,10 @@ export class Warlock extends Hero {
             });
         }, 50);
 
-        // Hover for 5 seconds
+        // Hover for 3 seconds
         this.hoverTimeout = setTimeout(() => {
             this.deactivateHover();
-        }, 5000);
+        }, 3000);
     }
 
     /**

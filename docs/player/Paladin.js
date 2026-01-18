@@ -302,7 +302,7 @@ export class Paladin extends Hero {
         }
         existing.count += 1;
         existing.last = now;
-        if (existing.count >= 2 && typeof enemy.setCripple === 'function') {
+        if (existing.count >= 3 && typeof enemy.setCripple === 'function') {
             enemy.setCripple(1.8);
             this.createSmiteLightning(enemy);
             existing.count = 0;
@@ -511,7 +511,7 @@ export class Paladin extends Hero {
 
         const domeGroup = new THREE.Group();
         const domeFill = new THREE.Mesh(
-            new THREE.CircleGeometry(radius, 32, -Math.PI / 2, Math.PI),
+            new THREE.CircleGeometry(radius, 32),
             new THREE.MeshBasicMaterial({
                 color: 0x8ad1ff,
                 transparent: true,
@@ -520,7 +520,7 @@ export class Paladin extends Hero {
             })
         );
         const domeRing = new THREE.Mesh(
-            new THREE.RingGeometry(radius * 0.92, radius, 32, 1, -Math.PI / 2, Math.PI),
+            new THREE.RingGeometry(radius * 0.92, radius, 32),
             new THREE.MeshBasicMaterial({
                 color: 0xbbe8ff,
                 transparent: true,
@@ -532,7 +532,7 @@ export class Paladin extends Hero {
         domeGroup.position.set(0, 0.1, 0.12);
         this.mesh.add(domeGroup);
 
-        const domeData = { owner: this, radius, mesh: domeGroup, halfCircle: true };
+        const domeData = { owner: this, radius, mesh: domeGroup, halfCircle: false, blockEdgeOnly: true, edgeThickness: 0.6 };
         Player.addProtectionDome(domeData);
         this.activeProtectionDome = domeData;
 

@@ -12,6 +12,7 @@ import { Cyborg } from './player/Cyborg.js';
 import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
 import { Paladin } from './player/Paladin.js';
+import { Gunner } from './player/Gunner.js';
 import { Level } from './world/Level.js?v=20260109';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
@@ -168,7 +169,8 @@ const HERO_NAMES = {
     [Cyborg.name]: '🤖 CYBORG',
     [Archer.name]: '🏹 ARCHER',
     [Warlock.name]: '💀 WARLOCK',
-    [Paladin.name]: '🛡️ PALADIN'
+    [Paladin.name]: '🛡️ PALADIN',
+    [Gunner.name]: '🔫 GUNNER'
 };
 
 const HERO_CLASS_MAP = {
@@ -177,7 +179,8 @@ const HERO_CLASS_MAP = {
     cyborg: Cyborg,
     archer: Archer,
     warlock: Warlock,
-    paladin: Paladin
+    paladin: Paladin,
+    gunner: Gunner
 };
 
 const HERO_KEY_BY_CLASS = new Map(Object.entries(HERO_CLASS_MAP).map(([key, value]) => [value, key]));
@@ -3295,6 +3298,10 @@ window.addEventListener('load', () => {
 
     document.getElementById('select-paladin').addEventListener('click', () => {
         handleHeroSelect(Paladin);
+    });
+
+    document.getElementById('select-gunner').addEventListener('click', () => {
+        handleHeroSelect(Gunner);
     });
 
     startMenuRender();

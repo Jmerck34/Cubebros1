@@ -113,6 +113,8 @@ export class PauseMenu {
             border-radius: 20px;
             padding: 40px;
             min-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             text-align: center;
         `;
@@ -315,8 +317,15 @@ export class PauseMenu {
                 }
                 if (confirm && !this.lastPadState.confirm && this.bindFocus) {
                     const rows = this.getBindRows(this.bindFocus.section);
-                    const button = rows?.[this.bindFocus.row]?.[this.bindFocus.col];
-                    if (button) button.click();
+                    let button = rows?.[this.bindFocus.row]?.[this.bindFocus.col];
+                    if (!button && this.bindFocus.section === 'gamepad' &&
+                        this.leftStickAimToggle && this.bindFocus.row === this.gamepadBindRows.length) {
+                        button = this.leftStickAimToggle;
+                    }
+                    if (button) {
+                        button.click();
+                        this.scrollElementIntoView(button);
+                    }
                 }
                 if (back && !this.lastPadState.back) {
                     if (activeBindSection === 'key' && this.keybindSection) {
@@ -342,7 +351,10 @@ export class PauseMenu {
 
         if (confirm && !this.lastPadState.confirm) {
             const target = this.menuButtons[this.menuFocusIndex];
-            if (target) target.click();
+            if (target) {
+                target.click();
+                this.scrollElementIntoView(target);
+            }
         }
 
         if (back && !this.lastPadState.back) {
@@ -395,6 +407,7 @@ export class PauseMenu {
             if (index === this.menuFocusIndex) {
                 button.style.outline = '3px solid #ffd166';
                 button.style.outlineOffset = '2px';
+                this.scrollElementIntoView(button);
             } else {
                 button.style.outline = 'none';
                 button.style.outlineOffset = '0';
@@ -598,6 +611,38 @@ export class PauseMenu {
             this.gamepadBindRows.push([bindButton, altButton, clearButton]);
         });
 
+        const aimToggleRow = document.createElement('div');
+        aimToggleRow.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin: 18px 0 0 0;
+        `;
+
+        const aimToggleLabel = document.createElement('div');
+        aimToggleLabel.textContent = 'Left Stick Aim';
+        aimToggleLabel.style.cssText = `
+            color: #ccc;
+            font-size: 16px;
+            min-width: 120px;
+            font-family: Arial, sans-serif;
+        `;
+        aimToggleRow.appendChild(aimToggleLabel);
+
+        this.leftStickAimToggle = this.createSmallButton('On', () => {
+            if (!this.input || typeof this.input.getAllowLeftStickAimFallback !== 'function') return;
+            const next = !this.input.getAllowLeftStickAimFallback();
+            if (typeof this.input.setAllowLeftStickAimFallback === 'function') {
+                this.input.setAllowLeftStickAimFallback(next);
+            }
+            this.updateLeftStickAimToggleLabel();
+        });
+        this.leftStickAimToggle.setAttribute('aria-pressed', 'true');
+        aimToggleRow.appendChild(this.leftStickAimToggle);
+        aimToggleRow.appendChild(document.createElement('div'));
+        container.appendChild(aimToggleRow);
+
         return container;
     }
 
@@ -794,6 +839,16 @@ export class PauseMenu {
             const code = bindings[slot] || 'Unbound';
             button.textContent = this.formatGamepadBinding(code);
         }
+        this.updateLeftStickAimToggleLabel();
+    }
+
+    updateLeftStickAimToggleLabel() {
+        if (!this.leftStickAimToggle || !this.input || typeof this.input.getAllowLeftStickAimFallback !== 'function') {
+            return;
+        }
+        const enabled = this.input.getAllowLeftStickAimFallback();
+        this.leftStickAimToggle.textContent = enabled ? 'On' : 'Off';
+        this.leftStickAimToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
     }
 
     /**
@@ -877,7 +932,15 @@ export class PauseMenu {
         let nextRow = this.bindFocus.row + deltaRow;
         let nextCol = this.bindFocus.col + deltaCol;
         if (nextRow < 0) nextRow = rows.length - 1;
-        if (nextRow >= rows.length) nextRow = 0;
+        const maxRow = rows.length - 1;
+        const includeToggle = this.bindFocus.section === 'gamepad' && this.leftStickAimToggle;
+        const totalRows = includeToggle ? rows.length + 1 : rows.length;
+        if (nextRow >= totalRows) nextRow = 0;
+        if (includeToggle && nextRow === rows.length) {
+            this.bindFocus = { section: this.bindFocus.section, row: nextRow, col: 0 };
+            this.updateBindFocus();
+            return;
+        }
         const maxCol = rows[nextRow].length - 1;
         if (nextCol < 0) nextCol = maxCol;
         if (nextCol > maxCol) nextCol = 0;
@@ -892,6 +955,7 @@ export class PauseMenu {
                     if (isActive && this.bindFocus && this.bindFocus.row === rowIndex && this.bindFocus.col === colIndex) {
                         button.style.outline = '3px solid #ffd166';
                         button.style.outlineOffset = '2px';
+                        this.scrollElementIntoView(button);
                     } else {
                         button.style.outline = 'none';
                         button.style.outlineOffset = '0';
@@ -902,6 +966,31 @@ export class PauseMenu {
 
         apply(this.keybindRows, this.bindFocus?.section === 'key');
         apply(this.gamepadBindRows, this.bindFocus?.section === 'gamepad');
+        if (this.bindFocus?.section === 'gamepad' && this.leftStickAimToggle) {
+            const isToggleActive = this.bindFocus.row === this.gamepadBindRows.length && this.bindFocus.col === 0;
+            if (isToggleActive) {
+                this.leftStickAimToggle.style.outline = '3px solid #ffd166';
+                this.leftStickAimToggle.style.outlineOffset = '2px';
+                this.leftStickAimToggle.focus();
+                this.scrollElementIntoView(this.leftStickAimToggle);
+            } else {
+                this.leftStickAimToggle.style.outline = 'none';
+                this.leftStickAimToggle.style.outlineOffset = '0';
+            }
+        }
+    }
+
+    scrollElementIntoView(element) {
+        if (!element || !this.menuContainer) return;
+        const containerRect = this.menuContainer.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const topOverflow = elementRect.top - containerRect.top;
+        const bottomOverflow = elementRect.bottom - containerRect.bottom;
+        if (topOverflow < 0) {
+            this.menuContainer.scrollTop += topOverflow - 12;
+        } else if (bottomOverflow > 0) {
+            this.menuContainer.scrollTop += bottomOverflow + 12;
+        }
     }
 
     updateViewportLayout() {

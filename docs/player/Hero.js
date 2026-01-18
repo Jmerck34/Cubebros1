@@ -47,6 +47,8 @@ export class Hero extends Player {
         // Aim direction for ranged abilities
         this.aimDirection = { x: 1, y: 0 };
         this.hasAimInput = false;
+        this.persistAimDirectionOnNull = false;
+        this.aimSmoothing = 0.18;
         this.aimWorldPosition = null;
         this.hasAimWorldPosition = false;
         this.allowLeftStickAimFallback = true;
@@ -245,6 +247,9 @@ export class Hero extends Player {
      * @param {{x:number,y:number}|null} direction
      */
     setAimDirection(direction) {
+        if (!direction && this.persistAimDirectionOnNull) {
+            return;
+        }
         if (!direction || !Number.isFinite(direction.x) || !Number.isFinite(direction.y)) {
             this.hasAimInput = false;
             const fallbackX = typeof this.facingDirection === 'number' ? this.facingDirection : 1;
@@ -262,8 +267,19 @@ export class Hero extends Player {
             return;
         }
 
-        this.aimDirection.x = direction.x / length;
-        this.aimDirection.y = direction.y / length;
+        const targetX = direction.x / length;
+        const targetY = direction.y / length;
+        const smoothing = Number.isFinite(this.aimSmoothing) ? this.aimSmoothing : 0;
+        if (smoothing > 0) {
+            const nextX = this.aimDirection.x + (targetX - this.aimDirection.x) * smoothing;
+            const nextY = this.aimDirection.y + (targetY - this.aimDirection.y) * smoothing;
+            const nextLen = Math.hypot(nextX, nextY) || 1;
+            this.aimDirection.x = nextX / nextLen;
+            this.aimDirection.y = nextY / nextLen;
+        } else {
+            this.aimDirection.x = targetX;
+            this.aimDirection.y = targetY;
+        }
         this.hasAimInput = true;
     }
 
@@ -314,6 +330,13 @@ export class Hero extends Player {
         for (const dome of domes) {
             if (!dome || !dome.owner || !dome.owner.team) continue;
             if (dome.owner.team === team) continue;
+            if (dome.blockEdgeOnly) {
+                const dxEdge = position.x - dome.owner.position.x;
+                const dyEdge = position.y - dome.owner.position.y;
+                const distEdge = Math.hypot(dxEdge, dyEdge);
+                if (distEdge > dome.radius + (dome.edgeThickness || 0.2)) continue;
+                if (distEdge < dome.radius - (dome.edgeThickness || 0.2)) continue;
+            }
             const dx = position.x - dome.owner.position.x;
             const dy = position.y - dome.owner.position.y;
             if (dome.halfCircle) {

@@ -31,6 +31,7 @@ export class Warrior extends Hero {
         this.deflectDuration = 0.5;
         this.deflectRadius = 2.4;
         this.deflectIndicator = null;
+        this.deflectSwingCooldownUntil = 0;
         this.isSpinningUltimate = false;
         this.swordComboStep = 0;
         this.swordComboTimers = [];
@@ -625,6 +626,7 @@ export class Warrior extends Hero {
                 const dist = Math.hypot(dx, dy);
                 if (dist <= this.deflectRadius) {
                     projectile.deflect(this);
+                    this.playDeflectSwordSwing();
                 }
             } else {
                 const dx = projectile.mesh.position.x - this.position.x;
@@ -632,9 +634,28 @@ export class Warrior extends Hero {
                 const dist = Math.hypot(dx, dy);
                 if (dist <= this.deflectRadius) {
                     projectile.deflect(this);
+                    this.playDeflectSwordSwing();
                 }
             }
         }
+    }
+
+    playDeflectSwordSwing() {
+        const now = performance.now();
+        if (now < this.deflectSwingCooldownUntil) return;
+        this.deflectSwingCooldownUntil = now + 160;
+        const originalX = this.swordBase.x;
+        const originalY = this.swordBase.y;
+        const originalRot = this.swordBase.rotZ;
+        const dir = this.facingDirection || 1;
+        const swingX = originalX + 0.12 * dir;
+        const swingY = originalY + 0.12;
+        const swingRot = originalRot + 0.9 * dir;
+        this.animateSwordTo(swingX, swingY, swingRot, 1.05, 90);
+        setTimeout(() => {
+            this.animateSwordTo(originalX, originalY, originalRot, 1, 120);
+        }, 120);
+        this.playSwordSwingSound();
     }
 
     /**
@@ -657,6 +678,7 @@ export class Warrior extends Hero {
         if (Math.abs(dirX) > 0.05) {
             this.facingDirection = dirX >= 0 ? 1 : -1;
         }
+        this.playDashSwordSwing();
         const endX = startX + dirX * dashDistance;
         const endY = startY + dirY * dashDistance;
 
@@ -715,6 +737,21 @@ export class Warrior extends Hero {
 
         // Create dash trail effect
         this.createDashTrail();
+    }
+
+    playDashSwordSwing() {
+        const originalX = this.swordBase.x;
+        const originalY = this.swordBase.y;
+        const originalRot = this.swordBase.rotZ;
+        const dir = this.facingDirection || 1;
+        const swingX = originalX + 0.2 * dir;
+        const swingY = originalY + 0.18;
+        const swingRot = originalRot + 1.2 * dir;
+        this.animateSwordTo(swingX, swingY, swingRot, 1.08, 100);
+        setTimeout(() => {
+            this.animateSwordTo(originalX, originalY, originalRot, 1, 140);
+        }, 140);
+        this.playSwordSwingSound();
     }
 
     /**

@@ -138,6 +138,8 @@ export class Player {
         this.bleedFlashTimer = 0;
         this.bleedDrops = [];
         this.bleedDropTimer = 0;
+        this.entangleTimer = 0;
+        this.entangleEffect = null;
         this.fearTimer = 0;
         this.fearDirection = 0;
         this.mindControlTimer = 0;
@@ -363,6 +365,9 @@ export class Player {
         } else {
             this.updateBleedEffect(deltaTime, false);
         }
+        if (this.entangleTimer > 0) {
+            this.entangleTimer = Math.max(0, this.entangleTimer - deltaTime);
+        }
         if (this.bleedFlashTimer > 0) {
             this.bleedFlashTimer = Math.max(0, this.bleedFlashTimer - deltaTime);
         }
@@ -399,21 +404,35 @@ export class Player {
             this.poisonEffect = null;
         }
 
-        this.controlsLocked = this.stunTimer > 0 || this.frozenTimer > 0;
+        if (this.entangleTimer > 0) {
+            if (!this.entangleEffect) {
+                this.createEntangleEffect();
+            }
+            this.updateEntangleEffect();
+        } else if (this.entangleEffect) {
+            if (this.entangleEffect.parent) {
+                this.entangleEffect.parent.remove(this.entangleEffect);
+            }
+            this.entangleEffect = null;
+        }
+
+        this.controlsLocked = this.stunTimer > 0 || this.frozenTimer > 0 || this.entangleTimer > 0;
         this.controlsInverted = this.mindControlTimer > 0;
         this.jumpDisabled = this.crippleTimer > 0;
 
         const tint = this.bleedFlashTimer > 0
             ? 0xff6666
-            : (this.frozenTimer > 0
-                ? 0x88ddff
-                : (this.stunTimer > 0
-                    ? 0xffdd55
-                    : (this.crippleTimer > 0
-                        ? 0x8a939a
-                        : (this.fearTimer > 0
-                            ? 0xff6666
-                            : (this.mindControlTimer > 0 ? 0x9400d3 : this.baseColor)))));
+            : (this.entangleTimer > 0
+                ? 0x6fdc6a
+                : (this.frozenTimer > 0
+                    ? 0x88ddff
+                    : (this.stunTimer > 0
+                        ? 0xffdd55
+                        : (this.crippleTimer > 0
+                            ? 0x8a939a
+                            : (this.fearTimer > 0
+                                ? 0xff6666
+                                : (this.mindControlTimer > 0 ? 0x9400d3 : this.baseColor))))));
         this.setEffectColor(tint);
     }
 
@@ -651,6 +670,16 @@ export class Player {
     }
 
     /**
+     * Apply entangle (root) effect.
+     * @param {number} durationSeconds
+     */
+    setEntangled(durationSeconds = 1.0) {
+        if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
+        this.entangleTimer = Math.max(this.entangleTimer, durationSeconds);
+    }
+
+    /**
      * Clear all status effects.
      */
     clearStatusEffects() {
@@ -664,6 +693,7 @@ export class Player {
         this.slowTimer = 0;
         this.slowMultiplier = 1;
         this.crippleTimer = 0;
+        this.entangleTimer = 0;
         this.jumpDisabled = false;
         this.controlsLocked = false;
         this.controlsInverted = false;
@@ -682,6 +712,11 @@ export class Player {
         }
         this.poisonEffect = null;
 
+        if (this.entangleEffect && this.entangleEffect.parent) {
+            this.entangleEffect.parent.remove(this.entangleEffect);
+        }
+        this.entangleEffect = null;
+
         this.setEffectColor(this.baseColor);
     }
 
@@ -696,6 +731,7 @@ export class Player {
         this.slowTimer = 0;
         this.slowMultiplier = 1;
         this.crippleTimer = 0;
+        this.entangleTimer = 0;
         this.jumpDisabled = false;
         this.controlsLocked = false;
         this.controlsInverted = false;
@@ -707,6 +743,48 @@ export class Player {
             this.stunEffect.parent.remove(this.stunEffect);
         }
         this.stunEffect = null;
+
+        if (this.entangleEffect && this.entangleEffect.parent) {
+            this.entangleEffect.parent.remove(this.entangleEffect);
+        }
+        this.entangleEffect = null;
+    }
+
+    createEntangleEffect() {
+        const group = new THREE.Group();
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.45, 0.6, 20),
+            new THREE.MeshBasicMaterial({
+                color: 0x0f2f18,
+                transparent: true,
+                opacity: 0.12,
+                side: THREE.DoubleSide
+            })
+        );
+        ring.rotation.x = Math.PI / 2;
+        group.add(ring);
+
+        const vineCount = 8;
+        for (let i = 0; i < vineCount; i += 1) {
+            const vine = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.4, 0.02),
+                new THREE.MeshBasicMaterial({ color: 0x24532a, transparent: true, opacity: 0.7 })
+            );
+            const angle = (i / vineCount) * Math.PI * 2;
+            vine.position.set(Math.cos(angle) * 0.35, 0.15, Math.sin(angle) * 0.35);
+            vine.rotation.y = angle;
+            group.add(vine);
+        }
+
+        group.position.set(this.position.x, this.position.y - 0.45, 0.2);
+        this.scene.add(group);
+        this.entangleEffect = group;
+    }
+
+    updateEntangleEffect() {
+        if (!this.entangleEffect) return;
+        this.entangleEffect.position.set(this.position.x, this.position.y - 0.45, 0.2);
+        this.entangleEffect.rotation.y += 0.05;
     }
 
     /**

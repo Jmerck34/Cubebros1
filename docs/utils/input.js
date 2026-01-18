@@ -63,6 +63,7 @@ export class InputManager {
             DPadRight: 'Button15'
         };
         this.gamepadEnabled = options.gamepadEnabled !== false;
+        this.allowLeftStickAimFallback = options.allowLeftStickAimFallback !== false;
         this.gamepadDeadzone = typeof options.gamepadDeadzone === 'number' ? options.gamepadDeadzone : 0.25;
         this.gamepadIndex = Number.isInteger(options.gamepadIndex) ? options.gamepadIndex : null;
         this.gamepadIndexLocked = options.gamepadIndex !== undefined && options.gamepadIndex !== null;
@@ -275,6 +276,38 @@ export class InputManager {
     }
 
     /**
+     * Check if up key is pressed
+     * @returns {boolean}
+     */
+    isUpPressed() {
+        const codes = this.bindings.up || [];
+        for (const code of codes) {
+            if (!code.startsWith('Mouse') && this.isKeyDown(code)) {
+                return true;
+            }
+        }
+
+        if (!this.gamepad || !this.gamepad.connected) {
+            return false;
+        }
+
+        if (this.isGamepadPressed('DPadUp')) {
+            return true;
+        }
+
+        const axisX = this.gamepad.axes && this.gamepad.axes[0] ? this.gamepad.axes[0] : 0;
+        const axisY = this.gamepad.axes && this.gamepad.axes[1] ? this.gamepad.axes[1] : 0;
+        const magnitude = Math.hypot(axisX, axisY);
+        if (magnitude < this.gamepadDeadzone) {
+            return false;
+        }
+        if (axisY >= -this.gamepadDeadzone) {
+            return false;
+        }
+        return Math.abs(axisX) <= Math.abs(axisY);
+    }
+
+    /**
      * Check if down key was just pressed this frame
      * @returns {boolean}
      */
@@ -450,11 +483,30 @@ export class InputManager {
         if (!allowLeftStickFallback) {
             return null;
         }
+        if (!this.allowLeftStickAimFallback) {
+            return null;
+        }
         const leftX = pad.axes[0] || 0;
         const leftY = pad.axes[1] || 0;
         const leftMagnitude = Math.hypot(leftX, leftY);
         if (leftMagnitude < this.gamepadDeadzone) return null;
         return { x: leftX, y: leftY };
+    }
+
+    /**
+     * Toggle left-stick aim fallback.
+     * @param {boolean} enabled
+     */
+    setAllowLeftStickAimFallback(enabled) {
+        this.allowLeftStickAimFallback = Boolean(enabled);
+    }
+
+    /**
+     * Check left-stick aim fallback state.
+     * @returns {boolean}
+     */
+    getAllowLeftStickAimFallback() {
+        return this.allowLeftStickAimFallback !== false;
     }
 
     /**

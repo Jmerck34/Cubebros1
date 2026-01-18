@@ -366,6 +366,14 @@ export class Cyborg extends Hero {
     }
 
     updateReticlePosition() {
+        if (this.fearTimer > 0 && this.fearDirection) {
+            if (!this.reticlePosition) {
+                this.reticlePosition = { x: this.position.x, y: this.position.y };
+            }
+            this.reticlePosition.x = this.position.x + this.fearDirection * 2;
+            this.reticlePosition.y = this.position.y;
+            return;
+        }
         if (this.hasAimWorldPosition) {
             const aimWorld = this.getAimWorldPosition();
             if (!aimWorld) return;
@@ -387,6 +395,9 @@ export class Cyborg extends Hero {
     }
 
     getReticleDirection() {
+        if (this.fearTimer > 0 && this.fearDirection) {
+            return { x: this.fearDirection, y: 0 };
+        }
         if (this.reticlePosition) {
             const dx = this.reticlePosition.x - this.position.x;
             const dy = this.reticlePosition.y - this.position.y;
