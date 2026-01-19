@@ -26,6 +26,8 @@ export class Gunner extends Hero {
         this.c4Instance = null;
         this.c4DetonateTimeout = null;
         this.c4Interval = null;
+        this.c4CanDetonate = false;
+        this.c4AwaitRelease = false;
 
         this.isMinigunActive = false;
         this.minigunTimer = 0;
@@ -33,11 +35,13 @@ export class Gunner extends Hero {
         this.minigunDuration = 3;
         this.minigunShotInterval = 0.1;
         this.isShotgunAnimating = false;
+        this.c4BlinkInterval = null;
 
         this.initializeAbilities();
     }
 
     createEquipment(scene) {
+        this.addGunnerArmor();
         this.pistolGroup = new THREE.Group();
         this.pistolGroup.renderOrder = 12;
 
@@ -100,12 +104,105 @@ export class Gunner extends Hero {
             right: this.rightPistol.position.clone()
         };
 
+        this.gatlingGroup = this.createGatlingGun();
+        this.gatlingGroup.visible = false;
+        this.gatlingGroup.scale.set(1.4, 1.4, 1.4);
+        this.mesh.add(this.gatlingGroup);
+
         this.shotgunGroup = this.createShotgun();
         this.shotgunGroup.visible = false;
+        this.shotgunGroup.scale.set(1.6, 1.6, 1.6);
         this.mesh.add(this.shotgunGroup);
 
         this.mesh.add(this.pistolGroup);
         this.updateGunDepthFlip();
+    }
+
+    addGunnerArmor() {
+        if (!this.mesh) return;
+
+        const bandana = new THREE.Group();
+        const band = new THREE.Mesh(
+            new THREE.BoxGeometry(1.0, 0.12, 0.68),
+            new THREE.MeshBasicMaterial({ color: 0xb32020 })
+        );
+        band.renderOrder = 12;
+        band.material.depthTest = false;
+        band.material.depthWrite = false;
+        band.position.set(0, 0.44, 0);
+        bandana.add(band);
+        const knot = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.08, 0.08),
+            new THREE.MeshBasicMaterial({ color: 0x8f1b1b })
+        );
+        knot.renderOrder = 12;
+        knot.material.depthTest = false;
+        knot.material.depthWrite = false;
+        knot.position.set(0.32, 0.44, -0.2);
+        bandana.add(knot);
+        const tailA = new THREE.Mesh(
+            new THREE.BoxGeometry(0.08, 0.16, 0.04),
+            new THREE.MeshBasicMaterial({ color: 0x9e2020 })
+        );
+        tailA.renderOrder = 12;
+        tailA.material.depthTest = false;
+        tailA.material.depthWrite = false;
+        tailA.position.set(0.36, 0.35, -0.26);
+        tailA.rotation.z = -0.4;
+        bandana.add(tailA);
+        const tailB = new THREE.Mesh(
+            new THREE.BoxGeometry(0.06, 0.14, 0.04),
+            new THREE.MeshBasicMaterial({ color: 0x9e2020 })
+        );
+        tailB.renderOrder = 12;
+        tailB.material.depthTest = false;
+        tailB.material.depthWrite = false;
+        tailB.position.set(0.28, 0.32, -0.3);
+        tailB.rotation.z = 0.35;
+        bandana.add(tailB);
+        bandana.position.set(0, 0, 0.4);
+        this.mesh.add(bandana);
+
+        const ammoBelt = new THREE.Group();
+        const linkMaterial = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+        const roundMaterial = new THREE.MeshBasicMaterial({ color: 0xd4a54a });
+        for (let i = 0; i < 7; i += 1) {
+            const link = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.08), linkMaterial);
+            const round = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.04), roundMaterial);
+            const offset = i * 0.12;
+            link.position.set(-0.34 + offset, 0.27 - offset * 0.4, 0.45 - offset * 0.2);
+            round.position.set(-0.34 + offset, 0.27 - offset * 0.4, 0.5 - offset * 0.2);
+            link.renderOrder = 12;
+            round.renderOrder = 12;
+            link.material.depthTest = false;
+            link.material.depthWrite = false;
+            round.material.depthTest = false;
+            round.material.depthWrite = false;
+            ammoBelt.add(link);
+            ammoBelt.add(round);
+        }
+        ammoBelt.position.set(0, 0, 0.5);
+        this.mesh.add(ammoBelt);
+
+        const grenadeBelt = new THREE.Group();
+        const grenadeMaterial = new THREE.MeshBasicMaterial({ color: 0x3a4a2a });
+        const pinMaterial = new THREE.MeshBasicMaterial({ color: 0xd4d4d4 });
+        for (let i = 0; i < 3; i += 1) {
+            const grenade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.12), grenadeMaterial);
+            grenade.position.set(-0.18 + i * 0.18, -0.32, 0.2);
+            grenadeBelt.add(grenade);
+            const pin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), pinMaterial);
+            pin.position.set(-0.18 + i * 0.18, -0.24, 0.22);
+            grenade.renderOrder = 12;
+            pin.renderOrder = 12;
+            grenade.material.depthTest = false;
+            grenade.material.depthWrite = false;
+            pin.material.depthTest = false;
+            pin.material.depthWrite = false;
+            grenadeBelt.add(pin);
+        }
+        grenadeBelt.position.set(0, 0, 0.35);
+        this.mesh.add(grenadeBelt);
     }
 
     createMuzzleFlash() {
@@ -146,36 +243,143 @@ export class Gunner extends Hero {
         return flashGroup;
     }
 
+    createGatlingGun() {
+        const gatling = new THREE.Group();
+        gatling.renderOrder = 12;
+
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(0.36, 0.14, 0.12),
+            new THREE.MeshBasicMaterial({ color: 0x1b1c1f })
+        );
+        base.position.set(-0.02, -0.02, 0);
+        gatling.add(base);
+
+        const drum = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.12, 0.12, 0.12, 14),
+            new THREE.MeshBasicMaterial({ color: 0x2a2b2f })
+        );
+        drum.rotation.z = Math.PI / 2;
+        drum.position.set(-0.18, 0.02, 0);
+        gatling.add(drum);
+
+        const handle = new THREE.Mesh(
+            new THREE.BoxGeometry(0.16, 0.05, 0.08),
+            new THREE.MeshBasicMaterial({ color: 0x0d0d0e })
+        );
+        handle.position.set(0.14, 0.12, 0);
+        gatling.add(handle);
+
+        const barrelCluster = new THREE.Group();
+        const barrelMaterial = new THREE.MeshBasicMaterial({ color: 0x2a2b2e });
+        const barrelGeometry = new THREE.BoxGeometry(0.46, 0.04, 0.04);
+        const barrelCount = 6;
+        const radius = 0.05;
+        for (let i = 0; i < barrelCount; i += 1) {
+            const angle = (Math.PI * 2 * i) / barrelCount;
+            const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+            barrel.position.set(0.29, Math.cos(angle) * radius, Math.sin(angle) * radius);
+            barrelCluster.add(barrel);
+        }
+        barrelCluster.position.set(0.2, 0.02, 0);
+        gatling.add(barrelCluster);
+        gatling.userData.barrelCluster = barrelCluster;
+        gatling.userData.spinPhase = 0;
+
+        const muzzle = this.createMuzzleFlash();
+        muzzle.position.set(0.66, 0.02, 0.02);
+        muzzle.visible = false;
+        gatling.userData.muzzleFlash = muzzle;
+        gatling.add(muzzle);
+
+        const heatGlow = new THREE.Mesh(
+            new THREE.RingGeometry(0.02, 0.05, 18, 1, 0, Math.PI),
+            new THREE.MeshBasicMaterial({
+                color: 0xff4d1f,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false
+            })
+        );
+        heatGlow.rotation.z = Math.PI / 2;
+        heatGlow.position.set(0.66, 0.02, 0.01);
+        heatGlow.visible = true;
+        gatling.userData.heatGlow = heatGlow;
+        gatling.add(heatGlow);
+
+        gatling.position.set(0.2, -0.06, 1.05);
+        return gatling;
+    }
+
     createShotgun() {
         const shotgun = new THREE.Group();
-        const stock = new THREE.Mesh(
-            new THREE.BoxGeometry(0.24, 0.12, 0.1),
+        shotgun.renderOrder = 12;
+        const gripBack = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 0.08, 0.1),
             new THREE.MeshBasicMaterial({ color: 0x3a2b1e })
         );
-        stock.position.set(-0.12, -0.02, 0);
-        shotgun.add(stock);
+        gripBack.position.set(-0.18, 0.02, 0);
+        gripBack.rotation.z = -0.3;
+        shotgun.add(gripBack);
+
+        const gripSlope = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, 0.06, 0.1),
+            new THREE.MeshBasicMaterial({ color: 0x3a2b1e })
+        );
+        gripSlope.position.set(-0.26, 0.05, 0);
+        gripSlope.rotation.z = -0.55;
+        shotgun.add(gripSlope);
 
         const body = new THREE.Mesh(
-            new THREE.BoxGeometry(0.42, 0.12, 0.1),
+            new THREE.BoxGeometry(0.5, 0.12, 0.1),
             new THREE.MeshBasicMaterial({ color: 0x151617 })
         );
-        body.position.set(0.05, 0, 0);
+        body.renderOrder = 12;
+        body.position.set(0.12, 0, 0);
         shotgun.add(body);
 
-        const barrel = new THREE.Mesh(
-            new THREE.BoxGeometry(0.3, 0.06, 0.06),
-            new THREE.MeshBasicMaterial({ color: 0x1f2022 })
+        const barrelGeometry = new THREE.BoxGeometry(0.34, 0.05, 0.05);
+        const barrelMaterial = new THREE.MeshBasicMaterial({ color: 0x1f2022 });
+        const topBarrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        topBarrel.renderOrder = 12;
+        topBarrel.position.set(0.4, 0.0, 0);
+        shotgun.add(topBarrel);
+
+        const bottomBarrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        bottomBarrel.renderOrder = 12;
+        bottomBarrel.position.set(0.4, -0.06, 0);
+        shotgun.add(bottomBarrel);
+
+        const pump = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 0.08, 0.1),
+            new THREE.MeshBasicMaterial({ color: 0x3a2b1e })
         );
-        barrel.position.set(0.34, -0.02, 0);
-        shotgun.add(barrel);
+        pump.position.set(0.26, -0.04, 0);
+        shotgun.add(pump);
+
+        const grip = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 0.24, 0.1),
+            new THREE.MeshBasicMaterial({ color: 0x2a1f16 })
+        );
+        grip.position.set(-0.16, -0.14, 0);
+        grip.rotation.z = -0.55;
+        shotgun.add(grip);
+
+        const triggerGuard = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 0.06, 0.1),
+            new THREE.MeshBasicMaterial({ color: 0x141416 })
+        );
+        triggerGuard.position.set(-0.06, -0.1, 0);
+        shotgun.add(triggerGuard);
 
         const muzzleFlash = this.createMuzzleFlash();
-        muzzleFlash.position.set(0.48, -0.01, 0.02);
+        muzzleFlash.position.set(0.54, -0.03, 0.02);
         muzzleFlash.visible = false;
         shotgun.userData.muzzleFlash = muzzleFlash;
         shotgun.add(muzzleFlash);
 
-        shotgun.position.set(0.12, -0.06, 0.5);
+        shotgun.position.set(0.28, -0.06, 0.75);
         return shotgun;
     }
 
@@ -211,13 +415,26 @@ export class Gunner extends Hero {
 
         if (this.leftPistol && this.rightPistol) {
             const aimAngle = Math.atan2(aim.y, aim.x);
-            const rotation = this.hasAimInput ? aimAngle : 0;
+            const facingRight = this.facingDirection >= 0;
+            const rotation = this.hasAimInput
+                ? (facingRight ? aimAngle : Math.atan2(aim.y, -aim.x))
+                : 0;
             this.leftPistol.rotation.z = rotation;
             this.rightPistol.rotation.z = rotation;
         }
+        if (this.gatlingGroup) {
+            const aimAngle = Math.atan2(aim.y, aim.x);
+            const facingRight = this.facingDirection >= 0;
+            this.gatlingGroup.rotation.z = this.hasAimInput
+                ? (facingRight ? aimAngle : Math.atan2(aim.y, -aim.x))
+                : 0;
+        }
         if (this.shotgunGroup) {
             const aimAngle = Math.atan2(aim.y, aim.x);
-            this.shotgunGroup.rotation.z = this.hasAimInput ? aimAngle : 0;
+            const facingRight = this.facingDirection >= 0;
+            this.shotgunGroup.rotation.z = this.hasAimInput
+                ? (facingRight ? aimAngle : Math.atan2(aim.y, -aim.x))
+                : 0;
         }
 
         super.update(deltaTime, input);
@@ -235,6 +452,24 @@ export class Gunner extends Hero {
         }
 
         if (this.isMinigunActive) {
+            if (this.gatlingGroup) {
+                this.gatlingGroup.visible = true;
+                if (this.pistolGroup) {
+                    this.pistolGroup.visible = false;
+                }
+                if (this.gatlingGroup.userData && this.gatlingGroup.userData.barrelCluster) {
+                    const cluster = this.gatlingGroup.userData.barrelCluster;
+                    cluster.rotation.y = 0;
+                    cluster.rotation.z = 0;
+                    cluster.rotation.x += deltaTime * 12;
+                }
+                if (this.gatlingGroup.userData && this.gatlingGroup.userData.heatGlow) {
+                    const glow = this.gatlingGroup.userData.heatGlow;
+                    const heat = 1 - (this.minigunTimer / this.minigunDuration);
+                    glow.material.opacity = 0.2 + heat * 0.5;
+                    glow.scale.set(1 + heat * 0.6, 1 + heat * 0.6, 1);
+                }
+            }
             this.minigunTimer = Math.max(0, this.minigunTimer - deltaTime);
             this.minigunShotTimer += deltaTime;
             while (this.minigunShotTimer >= this.minigunShotInterval) {
@@ -243,7 +478,23 @@ export class Gunner extends Hero {
             }
             if (this.minigunTimer === 0) {
                 this.isMinigunActive = false;
+                if (this.gatlingGroup) {
+                    this.gatlingGroup.visible = false;
+                    if (this.gatlingGroup.userData && this.gatlingGroup.userData.heatGlow) {
+                        const glow = this.gatlingGroup.userData.heatGlow;
+                        glow.material.opacity = 0.2;
+                        glow.scale.set(1, 1, 1);
+                    }
+                }
+                if (this.pistolGroup) {
+                    this.pistolGroup.visible = true;
+                }
             }
+        }
+
+        if (this.c4Instance && this.c4AwaitRelease && !input.isAbility3Pressed()) {
+            this.c4AwaitRelease = false;
+            this.c4CanDetonate = true;
         }
     }
 
@@ -258,6 +509,7 @@ export class Gunner extends Hero {
     fireDoubleShot(ability) {
         if (!ability || !ability.isReady) return false;
         if (this.isReloading) return false;
+        if (this.isShotgunAnimating) return false;
         if (this.doubleShotAmmo <= 0) {
             this.startReload(ability);
             return false;
@@ -343,30 +595,47 @@ export class Gunner extends Hero {
 
     playShotgunFire() {
         if (!this.shotgunGroup || !this.pistolGroup) return;
+        if (this.isShotgunAnimating) return;
+        this.isShotgunAnimating = true;
         this.pistolGroup.visible = false;
         this.shotgunGroup.visible = true;
 
         const muzzle = this.shotgunGroup.userData ? this.shotgunGroup.userData.muzzleFlash : null;
-        if (muzzle) {
-            muzzle.visible = true;
-            muzzle.scale.set(1.2, 1.2, 1);
-        }
+        const firingPos = this.shotgunGroup.position.clone();
+        const windupPos = firingPos.clone().add(new THREE.Vector3(-0.08, -0.12, 0));
+        const firingRot = this.shotgunGroup.rotation.z;
+        const windupRot = firingRot - 1.1;
+        this.shotgunGroup.position.copy(windupPos);
+        this.shotgunGroup.rotation.z = windupRot;
 
-        const kickStart = this.shotgunGroup.position.x;
-        this.shotgunGroup.position.x = kickStart - 0.06;
-
-        setTimeout(() => {
-            this.shotgunGroup.position.x = kickStart;
-            if (muzzle) {
-                muzzle.visible = false;
-                muzzle.scale.set(1, 1, 1);
+        const duration = 500;
+        const startTime = performance.now();
+        const interval = setInterval(() => {
+            const now = performance.now();
+            const t = Math.min(1, (now - startTime) / duration);
+            const eased = t * t * (3 - 2 * t);
+            this.shotgunGroup.position.lerpVectors(windupPos, firingPos, eased);
+            this.shotgunGroup.rotation.z = windupRot + (firingRot - windupRot) * eased;
+            if (t >= 1) {
+                clearInterval(interval);
+                if (muzzle) {
+                    muzzle.visible = true;
+                    muzzle.scale.set(1.25, 1.25, 1);
+                }
+                this.shotgunGroup.position.x = firingPos.x - 0.16;
+                this.fireScatterShotProjectile();
+                setTimeout(() => {
+                    this.shotgunGroup.position.copy(firingPos);
+                    if (muzzle) {
+                        muzzle.visible = false;
+                        muzzle.scale.set(1, 1, 1);
+                    }
+                    this.shotgunGroup.visible = false;
+                    this.pistolGroup.visible = true;
+                    this.isShotgunAnimating = false;
+                }, 120);
             }
-        }, 120);
-
-        setTimeout(() => {
-            this.shotgunGroup.visible = false;
-            this.pistolGroup.visible = true;
-        }, 260);
+        }, 16);
     }
 
     updateGunDepthFlip() {
@@ -391,11 +660,14 @@ export class Gunner extends Hero {
 
     fireScatterShot() {
         this.playShotgunFire();
+    }
+
+    fireScatterShotProjectile() {
         const aim = this.getAimDirection();
         const direction = this.hasAimInput ? aim : { x: this.facingDirection, y: 0 };
         const baseAngle = Math.atan2(direction.y, direction.x);
-        const spread = Math.PI / 5;
-        const pellets = 8;
+        const spread = Math.PI / 3;
+        const pellets = 10;
         for (let i = 0; i < pellets; i += 1) {
             const offset = (Math.random() - 0.5) * spread;
             const angle = baseAngle + offset;
@@ -414,10 +686,27 @@ export class Gunner extends Hero {
                 trail: true
             });
         }
+
+        if (this.velocity) {
+            const mag = Math.hypot(direction.x, direction.y) || 1;
+            const recoilDir = {
+                x: direction.x / mag,
+                y: direction.y / mag
+            };
+            const recoilDistance = 1.2;
+            this.position.x -= recoilDir.x * recoilDistance;
+            this.position.y -= recoilDir.y * (recoilDistance * 0.4);
+            this.velocity.x -= recoilDir.x * 6;
+            this.velocity.y -= recoilDir.y * 2;
+            this.isGrounded = false;
+        }
     }
 
     handleC4Ability(ability) {
         if (this.c4Instance) {
+            if (!this.c4CanDetonate) {
+                return false;
+            }
             this.detonateC4(ability);
             return true;
         }
@@ -431,31 +720,95 @@ export class Gunner extends Hero {
     throwC4() {
         if (!this.mesh || !this.mesh.parent) return;
         const c4Group = new THREE.Group();
+        c4Group.renderOrder = 12;
         const body = new THREE.Mesh(
             new THREE.BoxGeometry(0.35, 0.2, 0.1),
-            new THREE.MeshBasicMaterial({ color: 0x444a52 })
+            new THREE.MeshBasicMaterial({ color: 0x2c2f35 })
         );
+        body.renderOrder = 12;
         c4Group.add(body);
         const strap = new THREE.Mesh(
             new THREE.BoxGeometry(0.38, 0.05, 0.12),
             new THREE.MeshBasicMaterial({ color: 0xd86a3a })
         );
+        strap.renderOrder = 12;
         strap.position.set(0, 0.08, 0.01);
         c4Group.add(strap);
-        c4Group.position.set(this.position.x, this.position.y + 0.2, 0.3);
+        const screen = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.06, 0.02),
+            new THREE.MeshBasicMaterial({ color: 0x1fe1ff })
+        );
+        screen.renderOrder = 12;
+        screen.position.set(0.08, 0.02, 0.06);
+        c4Group.add(screen);
+        const blinkLightMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff2b2b,
+            transparent: true,
+            opacity: 0.9,
+            depthTest: false,
+            depthWrite: false
+        });
+        const blinkLight = new THREE.Mesh(new THREE.CircleGeometry(0.06, 16), blinkLightMaterial);
+        blinkLight.position.set(0.16, 0.06, 0.08);
+        blinkLight.renderOrder = 12;
+        c4Group.add(blinkLight);
+        const payload = new THREE.Mesh(
+            new THREE.BoxGeometry(0.34, 0.16, 0.1),
+            new THREE.MeshBasicMaterial({ color: 0xf4c842 })
+        );
+        payload.renderOrder = 12;
+        payload.position.set(-0.04, -0.02, -0.02);
+        c4Group.add(payload);
+        const wireMaterial = new THREE.MeshBasicMaterial({ color: 0xff3b3b });
+        const wireA = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.02), wireMaterial);
+        wireA.renderOrder = 12;
+        wireA.position.set(0.12, -0.02, 0.03);
+        c4Group.add(wireA);
+        const wireB = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.02), wireMaterial);
+        wireB.renderOrder = 12;
+        wireB.position.set(0.06, -0.08, 0.03);
+        c4Group.add(wireB);
+        const wireC = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.1, 0.02), wireMaterial);
+        wireC.renderOrder = 12;
+        wireC.position.set(-0.02, -0.02, 0.03);
+        c4Group.add(wireC);
+        const wireMaterialBlue = new THREE.MeshBasicMaterial({ color: 0x3b7bff });
+        const wireD = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.02), wireMaterialBlue);
+        wireD.renderOrder = 12;
+        wireD.position.set(-0.02, 0.06, 0.03);
+        c4Group.add(wireD);
+        const chip = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.07, 0.02),
+            new THREE.MeshBasicMaterial({ color: 0x1a1a1b })
+        );
+        chip.renderOrder = 12;
+        chip.position.set(0.02, 0.06, 0.06);
+        c4Group.add(chip);
+        const chipPin = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.02, 0.01),
+            new THREE.MeshBasicMaterial({ color: 0x777777 })
+        );
+        chipPin.renderOrder = 12;
+        chipPin.position.set(0.02, 0.02, 0.065);
+        c4Group.add(chipPin);
+        c4Group.scale.set(1.4, 1.4, 1.4);
+        const forward = this.facingDirection || 1;
+        c4Group.position.set(this.position.x + forward * 0.8, this.position.y + 0.35, 0.6);
         this.mesh.parent.add(c4Group);
 
         const aim = this.getAimDirection();
         const direction = this.hasAimInput ? aim : { x: this.facingDirection, y: 0 };
-        const speed = 6;
+        const speed = 4;
         const velocity = {
             x: direction.x * speed,
-            y: direction.y * speed + 2.2
+            y: direction.y * speed + 1.2
         };
         const gravity = -12;
         const level = this.level || { platforms: [] };
 
-        this.c4Instance = { mesh: c4Group, velocity };
+        this.c4Instance = { mesh: c4Group, velocity, blinkLight };
+        this.c4CanDetonate = false;
+        this.c4AwaitRelease = true;
         if (this.c4Interval) {
             clearInterval(this.c4Interval);
         }
@@ -487,6 +840,19 @@ export class Gunner extends Hero {
             }
         }, 16);
 
+        if (this.c4BlinkInterval) {
+            clearInterval(this.c4BlinkInterval);
+        }
+        this.c4BlinkInterval = setInterval(() => {
+            if (!this.c4Instance || !this.c4Instance.blinkLight) {
+                clearInterval(this.c4BlinkInterval);
+                this.c4BlinkInterval = null;
+                return;
+            }
+            const light = this.c4Instance.blinkLight;
+            light.visible = !light.visible;
+        }, 300);
+
         if (this.c4DetonateTimeout) {
             clearTimeout(this.c4DetonateTimeout);
         }
@@ -502,6 +868,10 @@ export class Gunner extends Hero {
             clearInterval(this.c4Interval);
             this.c4Interval = null;
         }
+        if (this.c4BlinkInterval) {
+            clearInterval(this.c4BlinkInterval);
+            this.c4BlinkInterval = null;
+        }
         if (this.c4DetonateTimeout) {
             clearTimeout(this.c4DetonateTimeout);
             this.c4DetonateTimeout = null;
@@ -510,6 +880,8 @@ export class Gunner extends Hero {
             this.c4Instance.mesh.parent.remove(this.c4Instance.mesh);
         }
         this.c4Instance = null;
+        this.c4CanDetonate = false;
+        this.c4AwaitRelease = false;
 
         this.createC4BlastEffect(c4Pos);
         this.applyC4Blast(c4Pos);
@@ -523,8 +895,8 @@ export class Gunner extends Hero {
     applyC4Blast(position) {
         const radius = 3;
         const radiusSq = radius * radius;
-        const knockback = 7;
-        const selfKnockback = 11;
+        const knockback = 12;
+        const selfKnockback = 15;
         for (const target of this.getDamageTargets()) {
             if (!target || !target.isAlive || target === this) continue;
             const dx = target.position.x - position.x;
@@ -536,8 +908,11 @@ export class Gunner extends Hero {
             }
             if (target.velocity) {
                 const dist = Math.sqrt(distSq) || 1;
-                target.velocity.x += (dx / dist) * knockback;
-                target.velocity.y = Math.max(target.velocity.y, (dy / dist) * knockback);
+                const pushX = (dx / dist) * knockback;
+                const pushY = (dy / dist) * knockback;
+                target.velocity.y += pushY;
+                target.velocity.x += pushX;
+                target.ignoreGravityUntil = Date.now() + 200;
                 target.isGrounded = false;
             }
         }
@@ -547,8 +922,11 @@ export class Gunner extends Hero {
         const selfDistSq = selfDx * selfDx + selfDy * selfDy;
         if (selfDistSq <= radiusSq) {
             const dist = Math.sqrt(selfDistSq) || 1;
-            this.velocity.x += (selfDx / dist) * selfKnockback;
-            this.velocity.y = Math.max(this.velocity.y, (selfDy / dist) * selfKnockback);
+            const pushX = (selfDx / dist) * selfKnockback;
+            const pushY = (selfDy / dist) * selfKnockback;
+            this.velocity.y += pushY;
+            this.velocity.x += pushX;
+            this.ignoreGravityUntil = Date.now() + 200;
             this.isGrounded = false;
         }
     }
@@ -623,19 +1001,80 @@ export class Gunner extends Hero {
     fireMinigunBullet() {
         const aim = this.getAimDirection();
         const direction = this.hasAimInput ? aim : { x: this.facingDirection, y: 0 };
+        const baseAngle = Math.atan2(direction.y, direction.x);
+        const variation = (Math.random() * 10 - 5) * (Math.PI / 180);
+        const variedDir = {
+            x: Math.cos(baseAngle + variation),
+            y: Math.sin(baseAngle + variation)
+        };
+        const muzzlePos = this.getGatlingMuzzleWorldPosition();
+        const perp = Math.hypot(variedDir.x, variedDir.y) > 0
+            ? { x: -variedDir.y, y: variedDir.x }
+            : { x: 0, y: 1 };
+        const spreadOffset = (Math.random() - 0.5) * 0.08;
         this.spawnBullet({
             origin: {
-                x: this.position.x + direction.x * 0.6,
-                y: this.position.y + 0.1 + direction.y * 0.6
+                x: (muzzlePos ? muzzlePos.x : this.position.x + direction.x * 0.6) + perp.x * spreadOffset,
+                y: (muzzlePos ? muzzlePos.y : this.position.y + 0.1 + direction.y * 0.6) + perp.y * spreadOffset
             },
-            direction,
+            direction: variedDir,
             speed: 24,
-            range: 15,
+            range: 18,
             damage: 5,
             color: 0x3b3b3b,
             size: { x: 0.28, y: 0.08, z: 0.08 },
             trail: true
         });
+        this.playGatlingMuzzleFlash();
+        this.spawnShellCasing();
+    }
+
+    playGatlingMuzzleFlash() {
+        if (!this.gatlingGroup || !this.gatlingGroup.userData || !this.gatlingGroup.userData.muzzleFlash) {
+            return;
+        }
+        const muzzle = this.gatlingGroup.userData.muzzleFlash;
+        muzzle.visible = true;
+        muzzle.scale.set(1.15, 1.15, 1);
+        setTimeout(() => {
+            muzzle.visible = false;
+            muzzle.scale.set(1, 1, 1);
+        }, 60);
+    }
+
+    getGatlingMuzzleWorldPosition() {
+        if (!this.gatlingGroup || !this.gatlingGroup.userData || !this.gatlingGroup.userData.muzzleFlash) {
+            return null;
+        }
+        this.gatlingGroup.updateMatrixWorld(true);
+        const worldPos = new THREE.Vector3();
+        this.gatlingGroup.userData.muzzleFlash.getWorldPosition(worldPos);
+        return { x: worldPos.x, y: worldPos.y };
+    }
+
+    spawnShellCasing() {
+        if (!this.gatlingGroup || !this.mesh || !this.mesh.parent) return;
+        const casing = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 0.08, 0.08),
+            new THREE.MeshBasicMaterial({ color: 0xf1c25f })
+        );
+        casing.position.set(this.position.x - 0.08, this.position.y + 0.14, 0.6);
+        casing.rotation.z = Math.random() * Math.PI;
+        this.mesh.parent.add(casing);
+        const velocity = {
+            x: (Math.random() - 0.5) * 1.6 - (this.facingDirection || 1) * 0.3,
+            y: 1.8 + Math.random() * 0.8
+        };
+        const interval = setInterval(() => {
+            velocity.y -= 6 * 0.016;
+            casing.position.x += velocity.x * 0.016;
+            casing.position.y += velocity.y * 0.016;
+            casing.rotation.z += 0.3;
+        }, 16);
+        setTimeout(() => {
+            clearInterval(interval);
+            if (casing.parent) casing.parent.remove(casing);
+        }, 600);
     }
 
     spawnBullet({ origin, direction, speed, range, damage, color, size, trail }) {

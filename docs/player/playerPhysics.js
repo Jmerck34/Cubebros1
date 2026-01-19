@@ -9,8 +9,11 @@ export function applyGravity(player, deltaTime) {
     // Apply debug gravity multiplier if available
     const gravityMultiplier = player.debugPhysics ? player.debugPhysics.gravityMultiplier : 1.0;
 
-    // Apply gravity to vertical velocity
-    player.velocity.y += GRAVITY * gravityMultiplier * deltaTime;
+    // Apply gravity to vertical velocity unless temporarily suppressed.
+    const now = Date.now();
+    if (!player.ignoreGravityUntil || now >= player.ignoreGravityUntil) {
+        player.velocity.y += GRAVITY * gravityMultiplier * deltaTime;
+    }
 
     // Apply velocity to position
     player.position.y += player.velocity.y * deltaTime;

@@ -92,6 +92,14 @@ export class HealthBar {
         this.border.position.z = 0.62;
         this.healthBarGroup.add(this.border);
 
+        // Team indicator (colored rectangle)
+        const teamIndicatorGeometry = new THREE.PlaneGeometry(0.16, 0.15);
+        const teamIndicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        this.teamIndicator = new THREE.Mesh(teamIndicatorGeometry, teamIndicatorMaterial);
+        this.teamIndicator.position.set(-0.62, 0, 0.617);
+        this.teamIndicator.visible = false;
+        this.healthBarGroup.add(this.teamIndicator);
+
         // Position health bar above player
         this.updatePosition();
         this.scene.add(this.healthBarGroup);
@@ -250,6 +258,7 @@ export class HealthBar {
     update(deltaTime) {
         // Update position to follow player
         this.updatePosition();
+        this.updateTeamIndicator();
 
         // Handle damage flash animation
         if (this.isFlashing) {
@@ -330,5 +339,32 @@ export class HealthBar {
                 child.material.opacity = clamped;
             }
         });
+    }
+
+    updateTeamIndicator() {
+        if (!this.teamIndicator || !this.player) return;
+        const team = this.player.team;
+        if (!team) {
+            this.teamIndicator.visible = false;
+            return;
+        }
+        const color = this.getTeamColor(team);
+        this.teamIndicator.material.color.set(color);
+        this.teamIndicator.visible = true;
+    }
+
+    getTeamColor(team) {
+        switch (team) {
+            case 'blue':
+                return 0x3b82f6;
+            case 'red':
+                return 0xef4444;
+            case 'yellow':
+                return 0xfacc15;
+            case 'green':
+                return 0x22c55e;
+            default:
+                return 0xffffff;
+        }
     }
 }
