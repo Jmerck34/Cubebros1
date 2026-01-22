@@ -93,6 +93,13 @@ export class HealthBar {
         this.healthBarGroup.add(this.border);
 
         // Team indicator (colored rectangle)
+        const teamIndicatorBorderGeometry = new THREE.PlaneGeometry(0.18, 0.17);
+        const teamIndicatorBorderMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        this.teamIndicatorBorder = new THREE.Mesh(teamIndicatorBorderGeometry, teamIndicatorBorderMaterial);
+        this.teamIndicatorBorder.position.set(-0.62, 0, 0.616);
+        this.teamIndicatorBorder.visible = false;
+        this.healthBarGroup.add(this.teamIndicatorBorder);
+
         const teamIndicatorGeometry = new THREE.PlaneGeometry(0.16, 0.15);
         const teamIndicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
         this.teamIndicator = new THREE.Mesh(teamIndicatorGeometry, teamIndicatorMaterial);
@@ -342,15 +349,17 @@ export class HealthBar {
     }
 
     updateTeamIndicator() {
-        if (!this.teamIndicator || !this.player) return;
+        if (!this.teamIndicator || !this.teamIndicatorBorder || !this.player) return;
         const team = this.player.team;
         if (!team) {
             this.teamIndicator.visible = false;
+            this.teamIndicatorBorder.visible = false;
             return;
         }
         const color = this.getTeamColor(team);
         this.teamIndicator.material.color.set(color);
         this.teamIndicator.visible = true;
+        this.teamIndicatorBorder.visible = true;
     }
 
     getTeamColor(team) {

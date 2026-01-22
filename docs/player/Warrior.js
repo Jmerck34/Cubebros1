@@ -235,7 +235,7 @@ export class Warrior extends Hero {
         };
 
         // R - Whirlwind Ultimate (no cooldown, only charge requirement)
-        const whirlwind = new Ability('Whirlwind', 0, true);
+        const whirlwind = new Ability('Whirlwind', 0, true, 1);
         whirlwind.use = (hero) => {
             // Ultimates don't use cooldown, they use charge
             // So we skip the base class cooldown check
@@ -867,7 +867,7 @@ export class Warrior extends Hero {
                 top: this.position.y + whirlwindRange,
                 bottom: this.position.y - whirlwindRange
             };
-            this.damageEnemiesInArea(whirlwindBounds, this.abilities.r);
+            this.damageEnemiesInArea(whirlwindBounds, this.abilities.r, 0.8);
 
             if (spinCount >= 10) { // shorter burst
                 clearInterval(spinInterval);

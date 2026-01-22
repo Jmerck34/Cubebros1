@@ -15,6 +15,9 @@ Brief descriptions of every exported class in `threejs-platformer/docs`.
 - `Warlock` - Magic/control hero.
 - `Cyborg` - Tech-themed hero with beam/projectile abilities.
 - `Paladin` - Tank/support hero with mace and utility.
+- `Gunner` - Ranged hero with firearms and explosives.
+- `Acolyte` - Light caster with beam and support tools.
+- `Alchemist` - Purple-robed rogue with blade and flask.
 - `SlimeBase` - Base class for slime-style heroes.
 
 ## Enemies

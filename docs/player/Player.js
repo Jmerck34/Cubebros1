@@ -138,11 +138,20 @@ export class Player {
         this.bleedFlashTimer = 0;
         this.bleedDrops = [];
         this.bleedDropTimer = 0;
+        this.burningTimer = 0;
+        this.burningTickTimer = 0;
+        this.burningTickInterval = 0.5;
+        this.burningDamage = 0;
+        this.burningSource = null;
+        this.burningEffect = null;
+        this.burningFlames = [];
         this.entangleTimer = 0;
         this.entangleEffect = null;
         this.fearTimer = 0;
         this.fearDirection = 0;
         this.mindControlTimer = 0;
+        this.disorientTimer = 0;
+        this.disorientSpinSpeed = 4;
         this.slowTimer = 0;
         this.slowMultiplier = 1;
         this.crippleTimer = 0;
@@ -191,6 +200,9 @@ export class Player {
         this.visualScaleZ = 1;
         this.visualTiltZ = 0;
         this.moveSpeedMultiplier = 1;
+        this.jumpMultiplier = 1;
+        this.scaleMultiplier = 1;
+        this.baseScale = { x: 1, y: 1, z: 1 };
         this.hitboxScale = { x: 1, y: 1 };
         this.debugHitboxVisible = false;
         this.debugHitbox = null;
@@ -365,6 +377,19 @@ export class Player {
         } else {
             this.updateBleedEffect(deltaTime, false);
         }
+        if (this.burningTimer > 0) {
+            this.burningTimer = Math.max(0, this.burningTimer - deltaTime);
+            this.burningTickTimer += deltaTime;
+            while (this.burningTickTimer >= this.burningTickInterval) {
+                this.burningTickTimer -= this.burningTickInterval;
+                if (this.burningDamage > 0) {
+                    this.takeDamage(this.burningDamage, this.burningSource);
+                }
+            }
+        } else {
+            this.burningTickTimer = 0;
+            this.burningSource = null;
+        }
         if (this.entangleTimer > 0) {
             this.entangleTimer = Math.max(0, this.entangleTimer - deltaTime);
         }
@@ -376,6 +401,9 @@ export class Player {
         }
         if (this.mindControlTimer > 0) {
             this.mindControlTimer = Math.max(0, this.mindControlTimer - deltaTime);
+        }
+        if (this.disorientTimer > 0) {
+            this.disorientTimer = Math.max(0, this.disorientTimer - deltaTime);
         }
         if (this.crippleTimer > 0) {
             this.crippleTimer = Math.max(0, this.crippleTimer - deltaTime);
@@ -404,6 +432,15 @@ export class Player {
             this.poisonEffect = null;
         }
 
+        if (this.burningTimer > 0) {
+            if (!this.burningEffect) {
+                this.createBurningEffect();
+            }
+            this.updateBurningEffect(deltaTime);
+        } else if (this.burningEffect) {
+            this.clearBurningEffect();
+        }
+
         if (this.entangleTimer > 0) {
             if (!this.entangleEffect) {
                 this.createEntangleEffect();
@@ -417,7 +454,7 @@ export class Player {
         }
 
         this.controlsLocked = this.stunTimer > 0 || this.frozenTimer > 0 || this.entangleTimer > 0;
-        this.controlsInverted = this.mindControlTimer > 0;
+        this.controlsInverted = this.mindControlTimer > 0 || this.disorientTimer > 0;
         this.jumpDisabled = this.crippleTimer > 0;
 
         const tint = this.bleedFlashTimer > 0
@@ -660,6 +697,128 @@ export class Player {
     }
 
     /**
+     * Apply burning damage over time.
+     * @param {number} durationSeconds
+     * @param {number} damagePerTick
+     * @param {number} tickIntervalSeconds
+     * @param {Object|null} source
+     */
+    applyBurning(durationSeconds = 1, damagePerTick = 5, tickIntervalSeconds = 0.5, source = null) {
+        if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
+        this.burningTimer = Math.max(this.burningTimer, durationSeconds);
+        this.burningDamage = damagePerTick;
+        this.burningTickInterval = tickIntervalSeconds;
+        this.burningSource = source;
+    }
+
+    createBurningEffect() {
+        if (!this.scene) return;
+        const group = new THREE.Group();
+        const flames = [];
+        const glow = new THREE.Mesh(
+            new THREE.CircleGeometry(0.5, 20),
+            new THREE.MeshBasicMaterial({
+                color: 0xff7a1a,
+                transparent: true,
+                opacity: 0.25,
+                depthTest: false
+            })
+        );
+        glow.position.set(0, 0.05, 0.52);
+        group.add(glow);
+
+        const flameCount = 5;
+        for (let i = 0; i < flameCount; i += 1) {
+            const flameGroup = new THREE.Group();
+            const outerFlame = new THREE.Mesh(
+                new THREE.ConeGeometry(0.14, 0.42, 6),
+                new THREE.MeshBasicMaterial({
+                    color: 0xff6a1a,
+                    transparent: true,
+                    opacity: 0.75,
+                    depthTest: false
+                })
+            );
+            const innerFlame = new THREE.Mesh(
+                new THREE.ConeGeometry(0.09, 0.3, 6),
+                new THREE.MeshBasicMaterial({
+                    color: 0xffe08a,
+                    transparent: true,
+                    opacity: 0.85,
+                    depthTest: false
+                })
+            );
+            outerFlame.position.y = 0.1;
+            innerFlame.position.y = 0.12;
+            flameGroup.add(outerFlame, innerFlame);
+
+            const baseX = (i - (flameCount - 1) / 2) * 0.16;
+            const baseY = 0.08 + (i % 2) * 0.06;
+            flameGroup.position.set(baseX, baseY, 0.55);
+            flameGroup.userData = {
+                phase: Math.random() * Math.PI * 2,
+                scale: 0.75 + Math.random() * 0.25,
+                baseX,
+                baseY,
+                outerFlame,
+                innerFlame
+            };
+            group.add(flameGroup);
+            flames.push(flameGroup);
+        }
+        group.position.set(this.position.x, this.position.y - 0.1, 0.55);
+        this.scene.add(group);
+        this.burningEffect = group;
+        this.burningFlames = flames;
+    }
+
+    updateBurningEffect(deltaTime) {
+        if (!this.burningEffect) return;
+        this.burningEffect.position.set(this.position.x, this.position.y - 0.1, 0.55);
+        const time = performance.now() * 0.006;
+        const flames = this.burningFlames || [];
+        flames.forEach((flameGroup, index) => {
+            const phase = time + (flameGroup.userData?.phase || 0) + index * 0.6;
+            const baseX = flameGroup.userData?.baseX || 0;
+            const baseY = flameGroup.userData?.baseY || 0;
+            flameGroup.position.x = baseX + Math.sin(phase) * 0.05;
+            flameGroup.position.y = baseY + Math.cos(phase * 0.9) * 0.02;
+            flameGroup.rotation.z = Math.sin(phase * 0.7) * 0.08;
+            const scaleY = (flameGroup.userData?.scale || 0.8) + 0.25 * Math.sin(phase * 1.4);
+            const scaleX = 0.7 + 0.2 * Math.sin(phase * 1.1);
+            flameGroup.scale.set(scaleX, scaleY, 1);
+
+            const outerFlame = flameGroup.userData?.outerFlame;
+            const innerFlame = flameGroup.userData?.innerFlame;
+            if (outerFlame?.material) {
+                outerFlame.material.opacity = 0.45 + 0.35 * Math.abs(Math.sin(phase * 1.2));
+            }
+            if (innerFlame?.material) {
+                innerFlame.material.opacity = 0.55 + 0.3 * Math.abs(Math.cos(phase * 1.1));
+            }
+        });
+    }
+
+    clearBurningEffect() {
+        if (this.burningEffect && this.burningEffect.parent) {
+            this.burningEffect.parent.remove(this.burningEffect);
+        }
+        this.burningEffect = null;
+        this.burningFlames = [];
+    }
+
+    /**
+     * Apply disorient (invert controls + aim).
+     * @param {number} durationSeconds
+     */
+    applyDisorient(durationSeconds = 1.5) {
+        if (!this.isAlive) return;
+        if (this.hasActiveShield()) return;
+        this.disorientTimer = Math.max(this.disorientTimer, durationSeconds);
+    }
+
+    /**
      * Apply cripple (disable jumping).
      * @param {number} durationSeconds
      */
@@ -688,8 +847,13 @@ export class Player {
         this.poisonTimer = 0;
         this.bleedTimer = 0;
         this.bleedFlashTimer = 0;
+        this.burningTimer = 0;
+        this.burningTickTimer = 0;
+        this.burningSource = null;
+        this.clearBurningEffect();
         this.fearTimer = 0;
         this.mindControlTimer = 0;
+        this.disorientTimer = 0;
         this.slowTimer = 0;
         this.slowMultiplier = 1;
         this.crippleTimer = 0;
@@ -728,6 +892,7 @@ export class Player {
         this.stunTimer = 0;
         this.fearTimer = 0;
         this.mindControlTimer = 0;
+        this.disorientTimer = 0;
         this.slowTimer = 0;
         this.slowMultiplier = 1;
         this.crippleTimer = 0;
@@ -1099,10 +1264,12 @@ export class Player {
         this.mesh.position.z = this.position.z;
 
         // Preserve facing on X, animate Y/Z only
+        const scaleMultiplier = Number.isFinite(this.scaleMultiplier) ? this.scaleMultiplier : 1;
+        const baseScale = this.baseScale || { x: 1, y: 1, z: 1 };
         const facing = this.mesh.scale.x >= 0 ? 1 : -1;
-        this.mesh.scale.x = Math.abs(this.mesh.scale.x) * facing;
-        this.mesh.scale.y = this.visualScaleY;
-        this.mesh.scale.z = this.visualScaleZ;
+        this.mesh.scale.x = (baseScale.x || 1) * scaleMultiplier * facing;
+        this.mesh.scale.y = this.visualScaleY * (baseScale.y || 1) * scaleMultiplier;
+        this.mesh.scale.z = this.visualScaleZ * (baseScale.z || 1) * scaleMultiplier;
         this.mesh.rotation.z = this.visualTiltZ;
     }
 

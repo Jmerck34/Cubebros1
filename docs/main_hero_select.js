@@ -13,6 +13,8 @@ import { Warlock } from './player/Warlock.js';
 import { Archer } from './player/Archer.js';
 import { Paladin } from './player/Paladin.js';
 import { Gunner } from './player/Gunner.js';
+import { Acolyte } from './player/Acolyte.js';
+import { Alchemist } from './player/Alchemist.js';
 import { Level } from './world/Level.js?v=20260109';
 import { Environment } from './world/Environment.js';
 import { ParallaxManager } from './world/ParallaxManager.js';
@@ -148,6 +150,20 @@ let teamMenuItems = [];
 let teamFocusIndices = Array(MAX_PLAYERS).fill(-1);
 let teamLastNavTimes = Array(MAX_PLAYERS).fill(0);
 let teamSelectLocked = Array(MAX_PLAYERS).fill(false);
+let arenaSettingsToggle = null;
+let arenaSettingsPanel = null;
+let arenaTimeSelect = null;
+let arenaLivesSelect = null;
+let arenaSettingsOpen = false;
+let arenaSettingsFocusIndex = 0;
+let arenaSettingsToggleLocked = Array(MAX_PLAYERS).fill(false);
+let arenaSettingsLastNavTimes = Array(MAX_PLAYERS).fill(0);
+const ARENA_TIME_OPTIONS = [300, 600, 900];
+const ARENA_LIVES_OPTIONS = [1, 2, 3, 4, 5, Infinity];
+const arenaSettings = {
+    timeLimit: 600,
+    lives: Infinity
+};
 
 const MENU_AXIS_DEADZONE = 0.5;
 const MENU_NAV_COOLDOWN_MS = 180;
@@ -170,7 +186,9 @@ const HERO_NAMES = {
     [Archer.name]: '🏹 ARCHER',
     [Warlock.name]: '💀 WARLOCK',
     [Paladin.name]: '🛡️ PALADIN',
-    [Gunner.name]: '🔫 GUNNER'
+    [Gunner.name]: '🔫 GUNNER',
+    [Acolyte.name]: '🕯️ ACOLYTE',
+    [Alchemist.name]: '🧪 ALCHEMIST'
 };
 
 const HERO_CLASS_MAP = {
@@ -180,7 +198,9 @@ const HERO_CLASS_MAP = {
     archer: Archer,
     warlock: Warlock,
     paladin: Paladin,
-    gunner: Gunner
+    gunner: Gunner,
+    acolyte: Acolyte,
+    alchemist: Alchemist
 };
 
 const HERO_KEY_BY_CLASS = new Map(Object.entries(HERO_CLASS_MAP).map(([key, value]) => [value, key]));
@@ -428,13 +448,32 @@ function hideEndGameOverlay() {
     }
 }
 
-function handleArenaMatchEnd({ scores } = {}) {
+function handleArenaMatchEnd({ scores, winners, mode, reason } = {}) {
     if (arenaMatchEnded) return;
     arenaMatchEnded = true;
     if (gameLoop) {
         gameLoop.stop();
     }
     setArenaTimerVisible(false);
+    if (mode === 'lives') {
+        const uniqueWinners = Array.isArray(winners) ? winners : [];
+        if (endGameTitle) {
+            if (uniqueWinners.length === 1) {
+                const label = `${uniqueWinners[0][0].toUpperCase()}${uniqueWinners[0].slice(1)}`;
+                endGameTitle.textContent = `${label} Team Wins!`;
+            } else {
+                endGameTitle.textContent = 'Draw!';
+            }
+        }
+        let subtitle = 'Arena time limit reached';
+        if (reason === 'elimination') {
+            subtitle = 'Last team standing';
+        } else if (uniqueWinners.length > 1) {
+            subtitle = 'Time limit reached - survivors tied';
+        }
+        showEndGameOverlay(subtitle);
+        return;
+    }
     const snapshot = scores || teamScores || {};
     const entries = TEAM_OPTIONS.map((team) => ({
         team,
@@ -1121,7 +1160,9 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                 updateScoreboard(teamScores);
             },
             onTimerUpdate: updateArenaTimer,
-            onMatchEnd: handleArenaMatchEnd
+            onMatchEnd: handleArenaMatchEnd,
+            matchDuration: arenaSettings.timeLimit,
+            livesLimit: arenaSettings.lives
         });
     }
     gameMode.init();
@@ -1157,6 +1198,7 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
             players.forEach((activePlayer, index) => {
                 const activeCamera = cameras[index] || camera;
                 const viewport = getViewportForIndex(index, localPlayerCount, fullWidth, fullHeight);
+                const isDisoriented = activePlayer.disorientTimer > 0;
                 if (activePlayer.useCursorAim) {
                     let cursor = activePlayer.aimScreenPosition;
                     if (!cursor) {
@@ -1206,6 +1248,14 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                             cursor.y = clampedScreen.y;
                         }
                     }
+                    if (aimWorld && isDisoriented) {
+                        const dx = aimWorld.x - activePlayer.position.x;
+                        const dy = aimWorld.y - activePlayer.position.y;
+                        aimWorld = {
+                            x: activePlayer.position.x - dx,
+                            y: activePlayer.position.y - dy
+                        };
+                    }
                     if (typeof activePlayer.setAimWorldPosition === 'function') {
                         activePlayer.setAimWorldPosition(aimWorld);
                     }
@@ -1225,8 +1275,9 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                         useMouse: index === 0,
                         allowLeftStickFallback: activePlayer.allowLeftStickAimFallback !== false
                     });
+                    const adjustedAim = aim && isDisoriented ? { x: -aim.x, y: -aim.y } : aim;
                     if (typeof activePlayer.setAimDirection === 'function') {
-                        activePlayer.setAimDirection(aim);
+                        activePlayer.setAimDirection(adjustedAim);
                     }
                     const aimWorld = getAimWorldPosition({
                         input: inputs[index],
@@ -1236,8 +1287,17 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                         useMouse: index === 0,
                         allowLeftStickFallback: activePlayer.allowLeftStickAimFallback !== false
                     });
+                    let adjustedWorld = aimWorld;
+                    if (aimWorld && isDisoriented) {
+                        const dx = aimWorld.x - activePlayer.position.x;
+                        const dy = aimWorld.y - activePlayer.position.y;
+                        adjustedWorld = {
+                            x: activePlayer.position.x - dx,
+                            y: activePlayer.position.y - dy
+                        };
+                    }
                     if (typeof activePlayer.setAimWorldPosition === 'function') {
-                        activePlayer.setAimWorldPosition(aimWorld);
+                        activePlayer.setAimWorldPosition(adjustedWorld);
                     }
                 }
             });
@@ -1304,9 +1364,17 @@ async function startGame(heroClasses, teamSelectionsOrP1 = 'blue', teamP2 = 'red
                         controller.setEnabled(false);
                     }
                 });
-                cameraFollows.forEach((follow) => {
-                    if (follow) {
-                        follow.update();
+                cameraFollows.forEach((follow, index) => {
+                    if (!follow) return;
+                    follow.update();
+                    const activePlayer = players[index];
+                    const cam = follow.camera || cameras[index];
+                    if (!cam) return;
+                    if (activePlayer && activePlayer.disorientTimer > 0) {
+                        const speed = activePlayer.disorientSpinSpeed || 4;
+                        cam.rotation.z = performance.now() * speed * 0.001;
+                    } else {
+                        cam.rotation.z = 0;
                     }
                 });
             }
@@ -1420,6 +1488,8 @@ function showTeamMenu() {
         teamMenu.style.display = 'flex';
         teamMenu.classList.toggle('split', localPlayerCount >= 2);
     }
+    updateArenaSettingsVisibility();
+    syncArenaSettingsUI();
     if (heroMenu) {
         heroMenu.style.display = 'none';
     }
@@ -1452,6 +1522,7 @@ function hideTeamMenu() {
     if (teamMenu) {
         teamMenu.style.display = 'none';
     }
+    setArenaSettingsOpen(false);
     updateMenuSplitState();
 }
 
@@ -2183,6 +2254,84 @@ function updateTeamSelectionUI() {
     }
 }
 
+function setArenaSettingsOpen(open) {
+    arenaSettingsOpen = Boolean(open);
+    if (arenaSettingsPanel) {
+        arenaSettingsPanel.style.display = arenaSettingsOpen ? 'flex' : 'none';
+        arenaSettingsPanel.setAttribute('aria-hidden', arenaSettingsOpen ? 'false' : 'true');
+    }
+    if (arenaSettingsToggle) {
+        arenaSettingsToggle.classList.toggle('active', arenaSettingsOpen);
+    }
+    if (arenaSettingsOpen) {
+        syncArenaSettingsUI();
+        arenaSettingsFocusIndex = 0;
+        updateArenaSettingsFocus();
+    }
+}
+
+function toggleArenaSettingsMenu() {
+    setArenaSettingsOpen(!arenaSettingsOpen);
+    updateArenaSettingsFocus();
+}
+
+function updateArenaSettingsVisibility() {
+    const shouldShow = selectedGameMode === 'arena';
+    if (arenaSettingsToggle) {
+        arenaSettingsToggle.style.display = shouldShow ? 'flex' : 'none';
+    }
+    if (!shouldShow) {
+        setArenaSettingsOpen(false);
+    }
+}
+
+function syncArenaSettingsUI() {
+    if (arenaTimeSelect) {
+        arenaTimeSelect.value = String(arenaSettings.timeLimit);
+    }
+    if (arenaLivesSelect) {
+        arenaLivesSelect.value = Number.isFinite(arenaSettings.lives) ? String(arenaSettings.lives) : 'infinite';
+    }
+}
+
+function applyArenaSettingsFromUI() {
+    if (arenaTimeSelect) {
+        const value = Number.parseInt(arenaTimeSelect.value, 10);
+        arenaSettings.timeLimit = ARENA_TIME_OPTIONS.includes(value) ? value : 600;
+    }
+    if (arenaLivesSelect) {
+        const value = arenaLivesSelect.value;
+        arenaSettings.lives = value === 'infinite' ? Infinity : Number.parseInt(value, 10);
+        if (!Number.isFinite(arenaSettings.lives)) {
+            arenaSettings.lives = Infinity;
+        }
+    }
+}
+
+function updateArenaSettingsFocus() {
+    if (!arenaSettingsPanel) return;
+    const rows = arenaSettingsPanel.querySelectorAll('.arena-settings-row');
+    rows.forEach((row, index) => {
+        row.classList.toggle('settings-focus', index === arenaSettingsFocusIndex);
+    });
+}
+
+function cycleArenaSetting(index, direction) {
+    if (index === 0 && arenaTimeSelect) {
+        const current = Number.parseInt(arenaTimeSelect.value, 10);
+        const pos = ARENA_TIME_OPTIONS.indexOf(current);
+        const next = pos < 0 ? 0 : (pos + direction + ARENA_TIME_OPTIONS.length) % ARENA_TIME_OPTIONS.length;
+        arenaTimeSelect.value = String(ARENA_TIME_OPTIONS[next]);
+    } else if (index === 1 && arenaLivesSelect) {
+        const currentValue = arenaLivesSelect.value;
+        const current = currentValue === 'infinite' ? Infinity : Number.parseInt(currentValue, 10);
+        const pos = ARENA_LIVES_OPTIONS.findIndex((value) => value === current);
+        const next = pos < 0 ? 0 : (pos + direction + ARENA_LIVES_OPTIONS.length) % ARENA_LIVES_OPTIONS.length;
+        arenaLivesSelect.value = Number.isFinite(ARENA_LIVES_OPTIONS[next]) ? String(ARENA_LIVES_OPTIONS[next]) : 'infinite';
+    }
+    applyArenaSettingsFromUI();
+}
+
 function findMidfieldPlatform(levelInstance) {
     if (!levelInstance || !Array.isArray(levelInstance.platforms)) return null;
     const candidates = levelInstance.platforms.filter((platform) => {
@@ -2711,6 +2860,33 @@ function pollTeamMenuGamepadForPlayer(pad, playerIndex) {
     const right = (pad.buttons[15] && pad.buttons[15].pressed) || axisX > MENU_AXIS_DEADZONE;
     const up = (pad.buttons[12] && pad.buttons[12].pressed) || axisY < -MENU_AXIS_DEADZONE;
     const down = (pad.buttons[13] && pad.buttons[13].pressed) || axisY > MENU_AXIS_DEADZONE;
+    const startPressed = pad.buttons[9] && pad.buttons[9].pressed;
+    const lockIndex = playerIndex - 1;
+
+    if (selectedGameMode === 'arena') {
+        if (startPressed && !arenaSettingsToggleLocked[lockIndex]) {
+            toggleArenaSettingsMenu();
+            arenaSettingsToggleLocked[lockIndex] = true;
+        } else if (!startPressed) {
+            arenaSettingsToggleLocked[lockIndex] = false;
+        }
+    }
+
+    if (arenaSettingsOpen) {
+        if ((up || down || left || right)) {
+            const lastNav = arenaSettingsLastNavTimes[lockIndex] || 0;
+            if (now - lastNav > MENU_NAV_COOLDOWN_MS) {
+                if (up || down) {
+                    arenaSettingsFocusIndex = (arenaSettingsFocusIndex + (down ? 1 : -1) + 2) % 2;
+                    updateArenaSettingsFocus();
+                } else if (left || right) {
+                    cycleArenaSetting(arenaSettingsFocusIndex, right ? 1 : -1);
+                }
+                arenaSettingsLastNavTimes[lockIndex] = now;
+            }
+        }
+        return;
+    }
 
     const index = playerIndex - 1;
     if (left || right || up || down) {
@@ -3098,6 +3274,20 @@ window.addEventListener('load', () => {
         document.getElementById('team-green-p3'),
         document.getElementById('team-green-p4')
     ];
+    arenaSettingsToggle = document.getElementById('arena-settings-toggle');
+    arenaSettingsPanel = document.getElementById('arena-settings-panel');
+    arenaTimeSelect = document.getElementById('arena-time-select');
+    arenaLivesSelect = document.getElementById('arena-lives-select');
+    if (arenaSettingsToggle) {
+        arenaSettingsToggle.addEventListener('click', () => toggleArenaSettingsMenu());
+    }
+    if (arenaTimeSelect) {
+        arenaTimeSelect.addEventListener('change', () => applyArenaSettingsFromUI());
+    }
+    if (arenaLivesSelect) {
+        arenaLivesSelect.addEventListener('change', () => applyArenaSettingsFromUI());
+    }
+    syncArenaSettingsUI();
 
     if (heroMenuTitle) {
         heroMenuTitleDefault = heroMenuTitle.textContent;
@@ -3302,6 +3492,12 @@ window.addEventListener('load', () => {
 
     document.getElementById('select-gunner').addEventListener('click', () => {
         handleHeroSelect(Gunner);
+    });
+    document.getElementById('select-acolyte').addEventListener('click', () => {
+        handleHeroSelect(Acolyte);
+    });
+    document.getElementById('select-alchemist').addEventListener('click', () => {
+        handleHeroSelect(Alchemist);
     });
 
     startMenuRender();

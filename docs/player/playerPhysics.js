@@ -41,7 +41,9 @@ export function handleJump(player, input) {
     }
 
     // Apply debug jump force multiplier if available
-    const jumpMultiplier = player.debugPhysics ? player.debugPhysics.jumpForceMultiplier : 1.0;
+    const debugMultiplier = player.debugPhysics ? player.debugPhysics.jumpForceMultiplier : 1.0;
+    const potionMultiplier = Number.isFinite(player.jumpMultiplier) ? player.jumpMultiplier : 1.0;
+    const jumpMultiplier = debugMultiplier * potionMultiplier;
 
     // Handle jump with key press detection to prevent spam
     if (jumpPressed && !player.jumpKeyWasPressed && player.jumpsRemaining > 0) {

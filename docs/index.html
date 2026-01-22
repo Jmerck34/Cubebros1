@@ -463,6 +463,92 @@
             padding: 40px 20px;
         }
 
+        #arena-settings-toggle {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            font-size: 20px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1002;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        #arena-settings-toggle:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.9);
+        }
+
+        #arena-settings-toggle.active {
+            border-color: #f5d76b;
+            box-shadow: 0 0 14px rgba(245, 215, 107, 0.6);
+        }
+
+        #arena-settings-panel {
+            position: absolute;
+            top: 78px;
+            right: 24px;
+            width: 260px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(10, 10, 10, 0.85);
+            z-index: 1002;
+            text-align: left;
+        }
+
+        #arena-settings-panel h3 {
+            margin: 0;
+            font-size: 16px;
+            letter-spacing: 1px;
+            color: #fff2bf;
+            text-transform: uppercase;
+        }
+
+        .arena-settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .arena-settings-row label {
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .arena-settings-row select {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            padding: 6px 10px;
+            font-size: 14px;
+        }
+
+        .arena-settings-row.settings-focus {
+            outline: 2px solid rgba(245, 215, 107, 0.8);
+            border-radius: 8px;
+            padding: 4px 6px;
+        }
+
+        .arena-settings-hint {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            margin: 2px 0 0;
+        }
+
         #team-menu.split {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -839,6 +925,16 @@
         .hero-card.gunner:hover {
             border-color: #d67b2b;
             box-shadow: 0 0 30px rgba(214, 123, 43, 0.6);
+        }
+
+        .hero-card.acolyte:hover {
+            border-color: #f0f0f0;
+            box-shadow: 0 0 30px rgba(240, 240, 240, 0.6);
+        }
+
+        .hero-card.alchemist:hover {
+            border-color: #a86ee0;
+            box-shadow: 0 0 30px rgba(168, 110, 224, 0.6);
         }
 
         .hero-card.paladin:hover {
@@ -1337,6 +1433,120 @@
             pointer-events: none;
         }
 
+        .ability-bomb-preview {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 3px;
+            pointer-events: none;
+        }
+
+        .ability-bomb-icon {
+            width: 18px;
+            height: 18px;
+            position: relative;
+        }
+
+        .ability-bomb-body {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #2f2f38;
+            border: 1px solid rgba(0, 0, 0, 0.6);
+            left: 2px;
+            top: 4px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.35);
+        }
+
+        .ability-bomb-liquid {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            left: 4px;
+            top: 6px;
+        }
+
+        .ability-bomb-neck {
+            position: absolute;
+            width: 6px;
+            height: 5px;
+            background: #3a3a44;
+            left: 6px;
+            top: 1px;
+            border-radius: 3px;
+        }
+
+        .ability-bomb-cork {
+            position: absolute;
+            width: 8px;
+            height: 3px;
+            background: #5a3a1f;
+            left: 5px;
+            top: -1px;
+            border-radius: 3px;
+        }
+
+        .ability-potion-preview {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        .ability-potion-icon {
+            width: 20px;
+            height: 20px;
+            position: relative;
+        }
+
+        .ability-potion-glass {
+            position: absolute;
+            width: 20px;
+            height: 18px;
+            left: 0;
+            top: 2px;
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+            background: #2f2f38;
+            border: 1px solid rgba(0, 0, 0, 0.7);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.35);
+        }
+
+        .ability-potion-liquid {
+            position: absolute;
+            width: 14px;
+            height: 12px;
+            left: 3px;
+            top: 6px;
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .ability-potion-neck {
+            position: absolute;
+            width: 6px;
+            height: 4px;
+            background: #3a3a44;
+            left: 7px;
+            top: 0;
+            border-radius: 2px;
+        }
+
+        .ability-potion-cork {
+            position: absolute;
+            width: 8px;
+            height: 3px;
+            background: #5a3a1f;
+            left: 6px;
+            top: -2px;
+            border-radius: 2px;
+        }
+
         .ability-dot {
             width: 6px;
             height: 6px;
@@ -1348,6 +1558,16 @@
         .ability-dot.active {
             background: #ffd166;
             box-shadow: 0 0 6px rgba(255, 209, 102, 0.8);
+        }
+
+        .ability-dot.lightbolt {
+            background: rgba(255, 220, 145, 0.25);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .ability-dot.lightbolt.active {
+            background: #ffe2a6;
+            box-shadow: 0 0 6px rgba(255, 226, 166, 0.9);
         }
 
         .ability-slot.ultimate {
@@ -1772,6 +1992,30 @@
                 </div>
             </div>
 
+            <!-- Acolyte -->
+            <div class="hero-card acolyte" id="select-acolyte" data-hero="acolyte">
+                <h2>🕯️ ACOLYTE</h2>
+                <div class="hero-desc">White Robes - Wooden Staff</div>
+                <div class="abilities">
+                    <div class="ability"><strong>Q/Click:</strong> Divine Beam</div>
+                    <div class="ability"><strong>Right Click:</strong> Light Bolt</div>
+                    <div class="ability"><strong>E:</strong> Wall of Light</div>
+                    <div class="ability"><strong>R:</strong> Light Nova</div>
+                </div>
+            </div>
+
+            <!-- Alchemist -->
+            <div class="hero-card alchemist" id="select-alchemist" data-hero="alchemist">
+                <h2>🧪 ALCHEMIST</h2>
+                <div class="hero-desc">Purple Robes - Blade & Flask</div>
+                <div class="abilities">
+                    <div class="ability"><strong>Q/Click:</strong> Enchanted Blade</div>
+                    <div class="ability"><strong>Right Click:</strong> Alchemical Bomb</div>
+                    <div class="ability"><strong>E:</strong> Ability 3 (TBD)</div>
+                    <div class="ability"><strong>R:</strong> Ultimate (TBD)</div>
+                </div>
+            </div>
+
             <!-- Warlock -->
             <div class="hero-card warlock" id="select-warlock" data-hero="warlock">
                 <h2>💀 WARLOCK</h2>
@@ -1830,6 +2074,30 @@
     </div>
 
     <div id="team-menu">
+        <button id="arena-settings-toggle" type="button" aria-label="Arena settings">⚙</button>
+        <div id="arena-settings-panel" aria-hidden="true">
+            <h3>Arena Settings</h3>
+            <div class="arena-settings-row">
+                <label for="arena-time-select">Time Limit</label>
+                <select id="arena-time-select">
+                    <option value="300">5 min</option>
+                    <option value="600">10 min</option>
+                    <option value="900">15 min</option>
+                </select>
+            </div>
+            <div class="arena-settings-row">
+                <label for="arena-lives-select">Lives</label>
+                <select id="arena-lives-select">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="infinite">∞</option>
+                </select>
+            </div>
+            <p class="arena-settings-hint">Start to close • D-pad to adjust</p>
+        </div>
         <div class="team-menu-panel" id="team-menu-p1">
             <h2 id="team-menu-title-p1">PLAYER 1: PICK YOUR TEAM</h2>
             <p id="team-menu-subtitle-p1">Choose your flag to spawn at.</p>
@@ -1902,12 +2170,47 @@
             <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w">
+            <div class="ability-bomb-preview" id="ability-w-preview">
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+            </div>
+            <div class="ability-dots" id="ability-w-dots">
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+            </div>
             <div class="cooldown-overlay" id="cooldown-w"></div>
             <div class="cooldown-text" id="cooldown-text-w"></div>
             <span>2</span>
             <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e">
+            <div class="ability-potion-preview" id="ability-e-preview">
+                <div class="ability-potion-icon">
+                    <span class="ability-potion-glass"></span>
+                    <span class="ability-potion-liquid"></span>
+                    <span class="ability-potion-neck"></span>
+                    <span class="ability-potion-cork"></span>
+                </div>
+            </div>
             <div class="cooldown-overlay" id="cooldown-e"></div>
             <div class="cooldown-text" id="cooldown-text-e"></div>
             <div class="ability-block-x" id="ability-block-e">✖</div>
@@ -1942,12 +2245,47 @@
             <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w-p2">
+            <div class="ability-bomb-preview" id="ability-w-preview-p2">
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+            </div>
+            <div class="ability-dots" id="ability-w-dots-p2">
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+            </div>
             <div class="cooldown-overlay" id="cooldown-w-p2"></div>
             <div class="cooldown-text" id="cooldown-text-w-p2"></div>
             <span>2</span>
             <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e-p2">
+            <div class="ability-potion-preview" id="ability-e-preview-p2">
+                <div class="ability-potion-icon">
+                    <span class="ability-potion-glass"></span>
+                    <span class="ability-potion-liquid"></span>
+                    <span class="ability-potion-neck"></span>
+                    <span class="ability-potion-cork"></span>
+                </div>
+            </div>
             <div class="cooldown-overlay" id="cooldown-e-p2"></div>
             <div class="cooldown-text" id="cooldown-text-e-p2"></div>
             <div class="ability-block-x" id="ability-block-e-p2">✖</div>
@@ -1982,12 +2320,47 @@
             <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w-p3">
+            <div class="ability-bomb-preview" id="ability-w-preview-p3">
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+            </div>
+            <div class="ability-dots" id="ability-w-dots-p3">
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+            </div>
             <div class="cooldown-overlay" id="cooldown-w-p3"></div>
             <div class="cooldown-text" id="cooldown-text-w-p3"></div>
             <span>2</span>
             <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e-p3">
+            <div class="ability-potion-preview" id="ability-e-preview-p3">
+                <div class="ability-potion-icon">
+                    <span class="ability-potion-glass"></span>
+                    <span class="ability-potion-liquid"></span>
+                    <span class="ability-potion-neck"></span>
+                    <span class="ability-potion-cork"></span>
+                </div>
+            </div>
             <div class="cooldown-overlay" id="cooldown-e-p3"></div>
             <div class="cooldown-text" id="cooldown-text-e-p3"></div>
             <div class="ability-block-x" id="ability-block-e-p3">✖</div>
@@ -2022,12 +2395,47 @@
             <div class="ability-name">1</div>
         </div>
         <div class="ability-slot" id="ability-w-p4">
+            <div class="ability-bomb-preview" id="ability-w-preview-p4">
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+                <div class="ability-bomb-icon">
+                    <span class="ability-bomb-body"></span>
+                    <span class="ability-bomb-liquid"></span>
+                    <span class="ability-bomb-neck"></span>
+                    <span class="ability-bomb-cork"></span>
+                </div>
+            </div>
+            <div class="ability-dots" id="ability-w-dots-p4">
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+                <span class="ability-dot lightbolt"></span>
+            </div>
             <div class="cooldown-overlay" id="cooldown-w-p4"></div>
             <div class="cooldown-text" id="cooldown-text-w-p4"></div>
             <span>2</span>
             <div class="ability-name">2</div>
         </div>
         <div class="ability-slot" id="ability-e-p4">
+            <div class="ability-potion-preview" id="ability-e-preview-p4">
+                <div class="ability-potion-icon">
+                    <span class="ability-potion-glass"></span>
+                    <span class="ability-potion-liquid"></span>
+                    <span class="ability-potion-neck"></span>
+                    <span class="ability-potion-cork"></span>
+                </div>
+            </div>
             <div class="cooldown-overlay" id="cooldown-e-p4"></div>
             <div class="cooldown-text" id="cooldown-text-e-p4"></div>
             <div class="ability-block-x" id="ability-block-e-p4">✖</div>
