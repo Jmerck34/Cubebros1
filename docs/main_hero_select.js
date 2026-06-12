@@ -34,6 +34,7 @@ import { GameTestMode } from './gameModes/GameTestMode.js';
 import { hilltowerMaskConfig } from './world/maps/hilltowerMap.js';
 import { bowlMaskConfig } from './world/maps/bowlMap.js';
 import { ctfBtbMaskConfig } from './world/maps/ctfBtbMap.js';
+import { StartAnimation } from '../core/startAnimation.js';
 
 // Game state
 let gameStarted = false;
@@ -3145,6 +3146,8 @@ function pollReadyMenuGamepad() {
 window.addEventListener('load', () => {
     initScene();
     initScoreboard();
+    const startAnim = new StartAnimation(scene, camera);
+    startAnim.play();
 
     heroMenu = document.getElementById('hero-menu');
     heroMenuTitle = document.getElementById('hero-menu-title');
