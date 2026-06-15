@@ -42,6 +42,10 @@ export class UIManager {
         this.ultimateBar = document.getElementById(getId('ultimate-charge-bar'));
     }
 
+    getCssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
     /**
      * Update UI every frame
      */

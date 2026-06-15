@@ -50,32 +50,31 @@ export class PauseMenu {
     createMenuButton() {
         this.menuButton = document.createElement('button');
         this.menuButton.textContent = '⚙️';
+        this.menuButton.className = 'btn-primary menu-toggle-button';
         this.menuButton.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
             width: 60px;
             height: 60px;
-            background: rgba(0, 0, 0, 0.7);
-            border: 3px solid #ffffff;
-            border-radius: 10px;
-            color: white;
-            font-size: 32px;
+            border-radius: var(--panel-radius);
+            color: var(--c-primary-text);
             cursor: pointer;
             z-index: 1000;
-            transition: all 0.2s;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
         `;
 
         // Hover effects
         this.menuButton.addEventListener('mouseenter', () => {
-            this.menuButton.style.background = 'rgba(50, 50, 50, 0.9)';
             this.menuButton.style.transform = 'scale(1.1)';
+            this.menuButton.style.borderColor = 'var(--c-hero-glow)';
+            this.menuButton.style.boxShadow = '0 0 22px rgba(124, 92, 255, 0.42)';
         });
 
         this.menuButton.addEventListener('mouseleave', () => {
-            this.menuButton.style.background = 'rgba(0, 0, 0, 0.7)';
             this.menuButton.style.transform = 'scale(1)';
+            this.menuButton.style.borderColor = 'var(--c-hero-glow)';
+            this.menuButton.style.boxShadow = '0 0 18px rgba(124, 92, 255, 0.28)';
         });
 
         // Click to toggle menu
@@ -203,32 +202,9 @@ export class PauseMenu {
     createButton(text, onClick) {
         const button = document.createElement('button');
         button.textContent = text;
-        button.style.cssText = `
-            width: 100%;
-            padding: 15px 30px;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            border: 2px solid #ffffff;
-            border-radius: 10px;
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            font-family: Arial, sans-serif;
-        `;
+        button.classList.add(text.includes('Quit Game') ? 'btn-danger' : 'btn-primary');
 
-        // Hover effects
-        button.addEventListener('mouseenter', () => {
-            button.style.transform = 'scale(1.05)';
-            button.style.boxShadow = '0 6px 8px rgba(0, 0, 0, 0.4)';
-        });
-
-        button.addEventListener('mouseleave', () => {
-            button.style.transform = 'scale(1)';
-            button.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3)';
-        });
-
+        // Hover effects are handled by CSS classes.
         button.addEventListener('click', onClick);
 
         return button;
@@ -405,7 +381,7 @@ export class PauseMenu {
         this.menuButtons.forEach((button, index) => {
             if (!button) return;
             if (index === this.menuFocusIndex) {
-                button.style.outline = '3px solid #ffd166';
+                button.style.outline = '3px solid var(--c-warning)';
                 button.style.outlineOffset = '2px';
                 this.scrollElementIntoView(button);
             } else {
@@ -674,24 +650,25 @@ export class PauseMenu {
     createSmallButton(text, onClick) {
         const button = document.createElement('button');
         button.textContent = text;
+        button.className = 'btn-secondary small-ui-button';
         button.style.cssText = `
             padding: 6px 10px;
-            background: rgba(255, 255, 255, 0.1);
             border: 2px solid rgba(255, 255, 255, 0.4);
             border-radius: 8px;
             color: white;
             font-size: 14px;
             cursor: pointer;
-            transition: all 0.2s;
-            font-family: Arial, sans-serif;
+            transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
         `;
 
         button.addEventListener('mouseenter', () => {
             button.style.transform = 'scale(1.05)';
+            button.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.4)';
         });
 
         button.addEventListener('mouseleave', () => {
             button.style.transform = 'scale(1)';
+            button.style.boxShadow = '0 0 0';
         });
 
         button.addEventListener('click', onClick);
@@ -953,7 +930,7 @@ export class PauseMenu {
                 rowButtons.forEach((button, colIndex) => {
                     if (!button) return;
                     if (isActive && this.bindFocus && this.bindFocus.row === rowIndex && this.bindFocus.col === colIndex) {
-                        button.style.outline = '3px solid #ffd166';
+                        button.style.outline = '3px solid var(--c-warning)';
                         button.style.outlineOffset = '2px';
                         this.scrollElementIntoView(button);
                     } else {
@@ -969,7 +946,7 @@ export class PauseMenu {
         if (this.bindFocus?.section === 'gamepad' && this.leftStickAimToggle) {
             const isToggleActive = this.bindFocus.row === this.gamepadBindRows.length && this.bindFocus.col === 0;
             if (isToggleActive) {
-                this.leftStickAimToggle.style.outline = '3px solid #ffd166';
+                this.leftStickAimToggle.style.outline = '3px solid var(--c-warning)';
                 this.leftStickAimToggle.style.outlineOffset = '2px';
                 this.leftStickAimToggle.focus();
                 this.scrollElementIntoView(this.leftStickAimToggle);

@@ -20,21 +20,21 @@ export class HealthBar {
 
         // Background bar (red - shows damage)
         const bgGeometry = new THREE.PlaneGeometry(1, 0.15);
-        const bgMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const bgMaterial = new THREE.MeshBasicMaterial({ color: 0xFF5A6A });
         this.background = new THREE.Mesh(bgGeometry, bgMaterial);
         this.background.position.z = 0.6;
         this.healthBarGroup.add(this.background);
 
         // Foreground bar (green - shows current health)
         const fgGeometry = new THREE.PlaneGeometry(1, 0.15);
-        const fgMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const fgMaterial = new THREE.MeshBasicMaterial({ color: 0x41D98C });
         this.foreground = new THREE.Mesh(fgGeometry, fgMaterial);
         this.foreground.position.z = 0.61;
         this.healthBarGroup.add(this.foreground);
 
         // Bonus bar (blue - shows temporary health bonus)
         const bonusGeometry = new THREE.PlaneGeometry(1, 0.15);
-        const bonusMaterial = new THREE.MeshBasicMaterial({ color: 0x3aa9ff, transparent: true, opacity: 0.85 });
+        const bonusMaterial = new THREE.MeshBasicMaterial({ color: 0x56B6FF, transparent: true, opacity: 0.85 });
         this.bonusBar = new THREE.Mesh(bonusGeometry, bonusMaterial);
         this.bonusBar.position.z = 0.615;
         this.bonusBar.scale.x = 0;
@@ -51,7 +51,7 @@ export class HealthBar {
         this.healthBarGroup.add(this.shieldBorder);
 
         const shieldGeometry = new THREE.PlaneGeometry(1, 0.15);
-        const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x4fe4ff });
+        const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x7C5CFF });
         this.shieldBar = new THREE.Mesh(shieldGeometry, shieldMaterial);
         this.shieldBar.position.z = 0.616;
         this.shieldBar.scale.x = 0;
@@ -60,7 +60,7 @@ export class HealthBar {
 
         const shieldGlowGeometry = new THREE.PlaneGeometry(1.08, 0.2);
         const shieldGlowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x6fd8ff,
+            color: 0xA78BFA,
             transparent: true,
             opacity: 0.35
         });
@@ -151,7 +151,7 @@ export class HealthBar {
 
         // Update color based on health percentage
         if (healthPercentage > 0.6) {
-            this.foreground.material.color.set(0x00ff00); // Green
+            this.foreground.material.color.set(0x41D98C); // Green
         } else if (healthPercentage > 0.3) {
             this.foreground.material.color.set(0xffff00); // Yellow
         } else {
